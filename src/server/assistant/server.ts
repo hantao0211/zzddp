@@ -7,6 +7,7 @@ import { randomUUID, scrypt, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
 import { z } from "zod";
 import { ChatInputSchema, validateRecording } from "../../domain/assistant";
+import { chatPhotos } from "./photos";
 import { AIServiceError, type StructuredAI } from "../ai/provider";
 import { answerTutor } from "../ai/workflows";
 import { AssistantLimitError, AssistantStore, digest } from "./store";
@@ -129,8 +130,9 @@ export function createAssistantServer(options: Options) {
       active++;
       try {
         if (path === "/assistant-api/chat") {
-          const input = ChatInputSchema.safeParse(await jsonBody(request));
+          const input = ChatInputSchema.safeParse(await jsonBody(request, 1_900_000));
           if (!input.success) throw new HttpError(400, "问题太长或内容不完整，请换个短一点的问题。");
+          chatPhotos(input.data); // Validate image bytes before reserving a model call.
           options.store.reserve("chat", token);
           const result = input.data.readingMode && options.reading && viewer ? await options.reading.answer(options.ai(abort.signal), input.data, viewer) : options.learning ? await options.learning.answer(options.ai(abort.signal), input.data, digest(token), viewer) : await answerTutor(options.ai(abort.signal), { ...input.data, materials: [] });
           for (const [id, reply] of replies) if (reply.expires < Date.now()) replies.delete(id);

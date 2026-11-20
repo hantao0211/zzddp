@@ -2,6 +2,8 @@ import { GeneratedPracticeSchema, MemoRecognitionSchema, OrganizationSchema, Pra
 import type { LearningState, Subject } from "@/domain/contracts";
 import { applyHomeworkOrganization, applyMemoRecognition } from "@/domain/ai-results";
 import type { AIImage, StructuredAI } from "./provider";
+import type { ChatInput } from "../../domain/assistant";
+import { chatPhotos } from "../assistant/photos";
 
 export async function recognizeMemo(ai: StructuredAI, state: LearningState, materialId: string, images: AIImage[]) {
   const result = await ai.run("recognize_memo", MemoRecognitionSchema, { materialId }, images);
@@ -28,10 +30,12 @@ export async function preparePractice(ai: StructuredAI, input: { subject: Subjec
   return { ...draft, verification, status: "verified" as const };
 }
 
-export async function answerTutor(ai: StructuredAI, input: { question: string; materials: { id: string; text: string }[]; history?: { role: "user" | "assistant"; content: string }[] }) {
+export async function answerTutor(ai: StructuredAI, input: { question: string; materials: { id: string; text: string }[]; history?: { role: "user" | "assistant"; content: string }[] } & Pick<ChatInput, "photos" | "photoOrigin">) {
   if (!input.question.trim() || input.question.length > 2000) throw new Error("问题为空或过长。");
-  const result = await ai.run("tutor_answer", TutorAnswerSchema, input);
-  const allowed = new Set(input.materials.map((material) => material.id));
+  const photos = chatPhotos(input);
+  const sourceMaterialIds = [...input.materials.map(m => m.id), ...photos.images.map(p => p.fileId)];
+  const result = await ai.run("tutor_answer", TutorAnswerSchema, { question: input.question, history: input.history, materials: input.materials, chatPhotos: photos.metadata, sourceMaterialIds }, photos.images);
+  const allowed = new Set(sourceMaterialIds);
   if (result.sourceMaterialIds.some((id) => !allowed.has(id))) throw new Error("助手引用了当前孩子不可访问或未提供的资料。");
   return result;
 }

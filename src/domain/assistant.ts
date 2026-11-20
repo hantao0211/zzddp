@@ -3,17 +3,28 @@ import { DaySchema } from "./calendar";
 import type { ClarificationPreview, ClarificationReceipt } from "./clarifications";
 import type { LearnedMemory } from "./memory";
 
+// Three compressed photos plus the bounded dialogue fit the existing 2 MiB proxy limit.
+export const CHAT_PHOTO_LIMIT = 3;
+export const CHAT_PHOTO_BYTES = 450_000;
+export const ChatPhotoSchema = z.object({
+  id: z.string().uuid(),
+  mimeType: z.enum(["image/jpeg", "image/png", "image/webp"]),
+  base64: z.string().min(32).max(600_000).regex(/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/),
+}).strict();
+export type ChatPhoto = z.infer<typeof ChatPhotoSchema>;
 export const ChatInputSchema = z.object({
   studyDate: DaySchema.optional(),
   readingMode: z.boolean().optional(),
   readingLogId: z.string().uuid().optional(),
   reviewPhotos: z.boolean().optional(),
+  photos: z.array(ChatPhotoSchema).max(CHAT_PHOTO_LIMIT).optional(),
+  photoOrigin: z.enum(["current", "previous"]).optional(),
   question: z.string().trim().min(1).max(1200),
   history: z.array(z.object({ role: z.enum(["user", "assistant"]), content: z.string().min(1).max(3000) }).strict()).max(8).default([]),
 }).strict().refine((value) => value.history.reduce((size, item) => size + item.content.length, 0) <= 12000);
 export type ChatInput = z.infer<typeof ChatInputSchema>;
 export type PhotoReview = { requested: boolean; providedPages: number; totalAvailablePages: number; unavailablePages: number };
-export type ChatMessage = { role: "user" | "assistant"; content: string; id?: string; spokenAnswer?: string; proposal?: ClarificationPreview; receipt?: ClarificationReceipt; photoReview?: PhotoReview; memoriesSaved?: LearnedMemory[]; memoryNotices?: string[]; changeStatus?: "none" | "pending" | "confirmed" | "undone" };
+export type ChatMessage = { role: "user" | "assistant"; content: string; photos?: ChatPhoto[]; id?: string; spokenAnswer?: string; proposal?: ClarificationPreview; receipt?: ClarificationReceipt; photoReview?: PhotoReview; memoriesSaved?: LearnedMemory[]; memoryNotices?: string[]; changeStatus?: "none" | "pending" | "confirmed" | "undone" };
 
 export function validateRecording(bytes: Uint8Array) {
   if (bytes.byteLength < 44) throw new Error("录音内容不完整，请重新录制。");

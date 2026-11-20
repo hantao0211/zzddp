@@ -23,8 +23,9 @@ async function setup(failure?: { chat?: string; speech?: boolean }) {
   const directory = mkdtempSync(join(tmpdir(), "xiaobu-assistant-test-"));
   let calls = 0;
   const seen: unknown[] = [];
+  const imagesSeen: unknown[] = [];
   const server = createAssistantServer({ origin, accessHash, store: new AssistantStore(directory),
-    ai: () => ({ async run<T>(_task: AITask, schema: z.ZodType<T>, metadata: unknown): Promise<T> { calls++; seen.push(metadata); if (failure?.chat) throw new AIServiceError(failure.chat, true, "private provider response must not be exposed"); return schema.parse(reply); } }),
+    ai: () => ({ async run<T>(_task: AITask, schema: z.ZodType<T>, metadata: unknown, images?: import("../src/server/ai/provider").AIImage[]): Promise<T> { calls++; seen.push(metadata); imagesSeen.push(images); if (failure?.chat) throw new AIServiceError(failure.chat, true, "private provider response must not be exposed"); return schema.parse(reply); } }),
     speech: { async transcribe() { return "为什么月亮会有圆缺？"; }, async speak() { if (failure?.speech) throw new AIServiceError("SPEECH_HTTP_503", true, "private speech response"); return new Uint8Array([1, 2, 3]); } },
   });
   const base = await listen(server);
@@ -46,7 +47,7 @@ async function setup(failure?: { chat?: string; speech?: boolean }) {
     assert.match(cookie, /HttpOnly/); assert.match(cookie, /Secure/); assert.match(cookie, /SameSite=Strict/);
     return cookie.split(";")[0];
   };
-  return { directory, server, send, login, seen, calls: () => calls, async cleanup() { await close(server); rmSync(directory, { recursive: true, force: true }); } };
+  return { directory, server, send, login, seen, imagesSeen, calls: () => calls, async cleanup() { await close(server); rmSync(directory, { recursive: true, force: true }); } };
 }
 async function listen(server: Server) {
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -176,4 +177,25 @@ test("configurable voice budgets preserve consumption across restart and do not 
     assert.throws(() => readAssistantLimits({ ASSISTANT_DAILY_ASR_LIMIT: "Infinity" }));
     assert.throws(() => readAssistantLimits({ ASSISTANT_DAILY_ASR_LIMIT: "5001" }));
   } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
+
+test("authenticated chat accepts compressed images over the old text limit and rejects invalid files before charging", async () => {
+  const app = await setup();
+  try {
+    const cookie = await app.login();
+    // A synthetic PNG with harmless trailing padding exercises the real bounded JSON path.
+    const tiny = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a54sAAAAASUVORK5CYII=", "base64");
+    const photo = { id: "11111111-1111-4111-8111-111111111111", mimeType: "image/png", base64: Buffer.concat([tiny, Buffer.alloc(80000)]).toString("base64") };
+    assert.equal((await app.send("chat", post("", { question: "test", photos: [photo] }))).status, 401);
+    assert.equal((await app.send("chat", post(cookie, { question: "test", photos: [{ ...photo, mimeType: "image/jpeg" }] }))).status, 400);
+    assert.equal(app.calls(), 0);
+    const result = await app.send("chat", post(cookie, { question: "test", photos: [photo] }));
+    assert.equal(result.status, 200); assert.equal(app.calls(), 1);
+    assert.equal((app.imagesSeen[0] as {base64:string}[])[0].base64, photo.base64);
+    assert.ok(!JSON.stringify(app.seen).includes(photo.base64));
+    assert.ok(!readFileSync(join(app.directory, "state.json"), "utf8").includes(photo.base64));
+    assert.equal((await app.send("chat", post(cookie, { question: "test", photos: [{ ...photo, base64: "a".repeat(600004) }] }))).status, 400);
+    assert.equal(app.calls(), 1);
+  } finally { await app.cleanup(); }
 });

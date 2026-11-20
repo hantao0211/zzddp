@@ -257,3 +257,26 @@ test("latest explanation supplies the complete current meaning; old quotes stay 
     assert.equal(restored.length, 1); assert.equal(restored[0].current, true);
   } finally { f.cleanup(); }
 });
+
+
+test("new chat pictures take focus without silently sending the day's stored homework photos", async () => {
+  const f = setup();
+  try {
+    const file = f.store.files(f.uploadId)[0];
+    f.store.setPages(file.id, [{ id: `${file.id}-p1`, file_id: file.id, number: 1 }]);
+    let reads = 0;
+    const service = new HomeworkConversation(f.store, { images(pages) { reads++; return pages.map(p => ({ fileId: p.id, mimeType: "image/jpeg", base64: "synthetic" })); } });
+    const photo = { id: "11111111-1111-4111-8111-111111111111", mimeType: "image/png" as const, base64: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a54sAAAAASUVORK5CYII=" };
+    const ai: StructuredAI = { async run(_task, schema, _metadata, images) {
+      assert.equal(images![0].fileId, `chat-${photo.id}`);
+      return schema.parse({ answer: "先看新发的图片。", spokenAnswer: "先看图片。", hint: null, followUpQuestion: null, sourceMaterialIds: [`chat-${photo.id}`], clarification: null });
+    } };
+    const result = await service.answer(ai, { studyDate: date, question: "请看看这张图片", photos: [photo], history: [] }, owner);
+    assert.equal(result.photoReview.requested, false); assert.equal(reads, 0);
+    const both = await service.answer({ async run(_task, schema, _metadata, images) {
+      assert.equal(images!.length, 2);
+      return schema.parse({ answer: "对照两张图片。", spokenAnswer: "对照图片。", hint: null, followUpQuestion: null, sourceMaterialIds: [], clarification: null });
+    } }, { studyDate: date, question: "对照当天作业", photos: [photo], reviewPhotos: true, history: [] }, owner);
+    assert.equal(both.photoReview.requested, true); assert.equal(reads, 1);
+  } finally { f.cleanup(); }
+});
