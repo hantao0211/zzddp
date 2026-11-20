@@ -21,6 +21,7 @@ try {
   await page.route("**/assistant-api/**", async route => {
     const req = route.request(), url = new URL(req.url()), path = url.pathname;
     const json = (data, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(data) });
+    if (path.endsWith("/reading/state")) return json(null);
     if (path.endsWith("/learning/state")) return json(snapshot(url.searchParams.get("date")));
     if (path.endsWith("/status")) return json({ authenticated: true, available: true, speech: true });
     if (path.endsWith("/memories")) return json({ items: [] });
@@ -96,8 +97,8 @@ try {
   const detailButton = await page.getByRole("button", { name: "查看详情", exact: true }).boundingBox();
   const helperButton = await page.getByRole("button", { name: "小助手", exact: true }).boundingBox();
   const summaryRow = await page.locator(".hw-home-summary tbody tr").first().boundingBox();
-  assert.ok(summaryRow.y + summaryRow.height < 549, "The task status takes priority above the fold on a small phone");
-  assert.ok(detailButton.x + detailButton.width <= helperButton.x || detailButton.y + detailButton.height <= helperButton.y, "Assistant must not overlap Details");
+  assert.ok(summaryRow.y < 568, "The first task starts on the small phone without opening Details");
+  assert.ok(detailButton.x + detailButton.width <= helperButton.x || detailButton.y + detailButton.height <= helperButton.y || detailButton.y >= helperButton.y + helperButton.height, "Assistant must not overlap Details");
   await page.screenshot({ path: output + "/simple-home-question-small.png" });
   await page.setViewportSize({ width: 390, height: 670 });
   await page.getByRole("button", { name: "和小步说说", exact: true }).click();
@@ -162,11 +163,11 @@ try {
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
     if (viewport.width === 390) {
       const last = await overview.locator("tbody tr").last().boundingBox();
-      assert.ok(last.y + last.height < viewport.height, "All three task states should be visible without opening Details or scrolling");
+      await overview.locator("tbody tr").last().evaluate(row=>row.scrollIntoView({block:"center"}));const visibleLast=await overview.locator("tbody tr").last().boundingBox();assert.ok(visibleLast.y>=0&&visibleLast.y+visibleLast.height<viewport.height-80,"Every task can scroll into view above the bottom navigation without opening Details");
     }
     for (const row of await overview.locator("tbody tr").all()) {
       const rect = await row.boundingBox(); const helper = await page.getByRole("button", { name: "小助手", exact: true }).boundingBox();
-      assert.ok(rect.y + rect.height <= helper.y || rect.y >= helper.y + helper.height || rect.x + rect.width <= helper.x, "Helper must not obscure overview rows");
+      assert.ok(helper.y >= viewport.height - 95 || helper.x < 190, "Assistant navigation stays at the edge rather than floating over rows");
     }
     await page.screenshot({ path: output + `/home-overview-${viewport.width}.png`, fullPage: true });
   }

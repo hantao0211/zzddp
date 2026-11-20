@@ -6,6 +6,8 @@ import { shanghaiDay } from "@/domain/homework";
 import { reviewActivityLabel, needsReviewTraceUpdate } from "@/domain/review-policy";
 import { taskGradingLabel } from "@/domain/grading";
 import { GradingPanel, MistakeBook } from "./grading-panel";
+import { StudyShell } from "./study-shell";
+import { HomeCompanion } from "./study-companion";
 import { FamilyNotes } from "./family-notes";
 import { StatusIndicator } from "./status-indicator";
 import { AccountLogin, useViewer, sessionChanged } from "./account-login";
@@ -25,7 +27,7 @@ function Dialog({ title, close, children }: { title: string; close: () => void; 
 }
 function errorText(error: unknown) { return error instanceof Error ? error.message : "操作暂未完成，请稍后重试。"; }
 
-export function HomeworkApp({ onDemo, onDateChange, onAssistantTarget }: { onDemo: () => void; onDateChange?: (date: string) => void; onAssistantTarget?: (node: HTMLDivElement | null) => void }) {
+export function HomeworkApp({ onDemo, onDateChange }: { onDemo: () => void; onDateChange?: (date: string) => void }) {
   const [date, setDate] = useState(shanghaiDay);
   const { viewer, accounts } = useViewer();
   const canManage = !accounts || isParent(viewer);
@@ -68,6 +70,8 @@ export function HomeworkApp({ onDemo, onDateChange, onAssistantTarget }: { onDem
   const snapshot = savedSnapshot?.date === date ? savedSnapshot : null;
   const homeStatus = homeworkHomeStatus(snapshot);
   const summary = homeworkSummary(snapshot);
+  const alreadyCovered = !!summary?.rows.length && summary.rows.every(row=>row.photo.tone==="good"&&row.activity.tone==="good");
+  useEffect(()=>{const showHome=()=>{setDetailsOpen(false);window.scrollTo({top:0,behavior:"instant"});};window.addEventListener("xiaobu:home-home",showHome);return()=>window.removeEventListener("xiaobu:home-home",showHome);},[]);
   function showDetails(value: boolean) { setDetailsOpen(value); window.scrollTo({ top: 0, behavior: "instant" }); }
   function showGrading(view: "grading" | "mistakes") { setTab(view); showDetails(true); }
   function chooseUpload(kind: "memo" | "homework") { pickedKind.current = kind; picker.current?.click(); }
@@ -77,22 +81,21 @@ export function HomeworkApp({ onDemo, onDateChange, onAssistantTarget }: { onDem
   const filtered = snapshot?.uploads.filter((u) => subject === "全部" || u.subjects.includes(subject as "数学" | "英语" | "语文")) || [];
   const detail = snapshot?.uploads.find((u) => u.id === detailId);
   async function retryDay() { try { await homeworkPost("/retry-day", { date }); await refresh(); } catch (e) { setNotice(errorText(e)); } }
-  return <div className="hw-app">
-    <header className="hw-header"><a className="hw-brand" href="/"><span><Sprout size={25} /></span><div>小步学习<small>让每一步，都被看见</small></div></a><div className="hw-header-actions"><span className="hw-private"><ShieldCheck size={17} /> {viewer ? `${viewer.name} · ${ROLE_LABELS[viewer.role]}` : "家庭学习空间"}</span>{auth === "ready" && detailsOpen && <button className="icon-button" aria-label="退出家庭空间" onClick={async () => { try { await homeworkRequest("/assistant-api/session", { method: "DELETE" }); sessionChanged(); await refresh(); } catch (e) { setNotice(errorText(e)); } }}><LogOut size={20} /></button>}<div className="hw-assistant-slot" ref={onAssistantTarget} /></div></header>
+  return <StudyShell page="home" className="hw-app" date={date} name={viewer?.name} roleLabel={viewer?ROLE_LABELS[viewer.role]:undefined} parent={isParent(viewer)} onLogout={auth==="ready"?async()=>{try{await homeworkRequest("/assistant-api/session",{method:"DELETE"});sessionChanged();await refresh();}catch(e){setNotice(errorText(e));}}:undefined}>
     <main className="hw-main">
       {auth === "insecure" ? <section className="card hw-login"><ShieldCheck size={35} /><h1>安全打开学习空间</h1><p>真实作业上传和AI整理需要使用安全地址。</p><a className="button primary" href="https://14.103.24.55/">打开安全地址</a><p>以前在此浏览器保存的文件仍然保留。可在下方示例空间查看、下载，再到安全地址上传。</p><button className="text-button" onClick={onDemo}>查看此浏览器的旧记录</button></section> : auth === "locked" ? <section className="card hw-login"><span className="hw-login-icon"><Heart size={32} /></span><div className="eyebrow">欢迎回到小步学习</div><h1>今天，也向前一小步</h1><p>{accounts ? "使用家长或孩子的独立账号登录，与小助手共用登录状态。" : "输入家庭访问码，查看作业和学习资料。与小助手使用同一个访问码。"}</p>{accounts ? <AccountLogin legacy onSignedIn={() => void refresh()} /> : <form onSubmit={login}><label htmlFor="family-code">8位家庭访问码</label><input id="family-code" name="code" type="password" inputMode="numeric" autoComplete="off" pattern="[0-9]{8}" maxLength={8} value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))} required /><button className="button primary" disabled={busy}>{busy ? <LoaderCircle className="spin" size={18} /> : <ShieldCheck size={18} />}进入学习空间</button></form>}<p className="hw-secondary">这台设备会记住登录状态。公共设备使用后请退出。</p><a className="hw-account-entry" href="/admin/">家长登录与管理</a></section> : auth === "loading" ? <section className="card hw-login"><LoaderCircle className="spin" /><p>正在打开家庭学习空间…</p><button className="text-button" onClick={() => void refresh()}>重新连接</button></section> : <>
         {!detailsOpen ? <section className={`hw-simple-home ${summary ? "hw-home-with-summary" : ""}`} aria-label="交作业首页">
-          <div className="hw-heading hw-simple-heading"><h1>{date === shanghaiDay() ? "今天的作业" : "这一天的作业"}</h1><label className="hw-date">作业日期<input type="date" value={date} onChange={(e) => { if (e.target.value) { setDate(e.target.value); setDetailId(null); } }} /></label></div>
-          <div className="hw-upload-actions hw-primary-actions"><button onClick={() => chooseUpload("memo")}><span><ClipboardList size={32} /></span><strong>拍备忘录</strong><small>记下今天要做什么</small></button><button onClick={() => chooseUpload("homework")}><span><Camera size={32} /></span><strong>交作业</strong><small>照片、扫描件一起交</small></button></div>
+          <div className="hw-heading hw-simple-heading"><div><h1>{date === shanghaiDay() ? "今天的作业" : "这一天的作业"}</h1><p className="study-next-step">{snapshot?.pending?"照片收到啦，小步正在整理。":!snapshot?.uploads.some(u=>u.kind==="memo")?"先拍备忘录，再交完成的作业。":summary?.rows.some(r=>r.photo.tone!=="good")?"还有作业没交齐，做好后拍给小步。":homeStatus.help?"有一处还没弄清，一起问问小步。":"拍下来，剩下的交给小步。"}</p></div><label className="hw-date">作业日期<input type="date" value={date} onChange={(e) => { if (e.target.value) { setDate(e.target.value); setDetailId(null); } }} /></label></div>
+          <div className="study-home-grid"><div className="study-home-main"><div className="hw-upload-actions hw-primary-actions"><button onClick={() => chooseUpload("homework")} className="study-primary-upload"><span><Camera size={25} aria-hidden="true"/></span><div><strong>交作业</strong><small>照片、扫描件都可以</small></div></button><button onClick={() => chooseUpload("memo")}><span><ClipboardList size={25} aria-hidden="true"/></span><div><strong>拍备忘录</strong><small>记下今天要做什么</small></div></button></div>
           {summary && <section className="hw-home-summary" aria-label="作业概况">
-            <div className="hw-summary-heading"><h2>作业概况</h2>{summary.rows.length > 0 && <span>共{summary.rows.length}项</span>}</div>
+            <div className="hw-summary-heading"><h2>作业进展</h2>{summary.rows.length > 0 && <span>共{summary.rows.length}项</span>}</div>
             <div className="hw-summary-receipts"><span>备忘录：{summary.memo}</span><span>作业：{summary.homework}</span></div>
-            {summary.rows.length ? <><table><thead><tr><th scope="col">作业</th><th scope="col">照片</th><th scope="col">完成情况</th></tr></thead><tbody>{summary.rows.map(row => <tr key={row.id}><th scope="row"><small>{row.subject}</small><span>{row.title}</span></th><td className={`hw-summary-${row.photo.tone}`}><StatusIndicator kind={row.photo.text === "整理中" ? "pending" : row.photo.tone === "good" ? "received" : row.photo.text === "还缺照片" ? "partial" : "missing"}>{row.photo.text}</StatusIndicator></td><td className={`hw-summary-${row.activity.tone}`}><StatusIndicator kind={row.activity.text === "整理中" ? "pending" : row.activity.tone === "good" ? "done" : ["未做", "未做完"].includes(row.activity.text) ? "blank" : "uncertain"}>{row.activity.text}</StatusIndicator></td></tr>)}</tbody></table><p className="hw-summary-note">{snapshot?.writtenCompletionEnabled ? "完成情况与答案对错分开判断，已做完不代表已批改正确。" : "预习复习按动笔痕迹判断；其他作业的完成情况尚未判定。"}</p></> : <p className="hw-summary-empty">{summary.empty}</p>}
+            {summary.rows.length ? <><table><thead><tr><th scope="col">作业</th><th scope="col">照片</th><th scope="col">完成情况</th></tr></thead><tbody>{summary.rows.map(row => <tr key={row.id}><th scope="row"><span className="study-subject-mark" aria-hidden="true">{row.subject.slice(0,1)}</span><span className="study-task-title"><small>{row.subject}</small><span>{row.title}</span></span></th><td className={`hw-summary-${row.photo.tone}`}><StatusIndicator kind={row.photo.text === "整理中" ? "pending" : row.photo.tone === "good" ? "received" : row.photo.text === "还缺照片" ? "partial" : "missing"}>{row.photo.text}</StatusIndicator>{row.photo.text!=="整理中"&&row.photo.tone!=="good"&&<button className="study-row-upload" onClick={()=>chooseUpload("homework")} aria-label={`为${row.title}上传作业`}>去上传</button>}</td><td className={`hw-summary-${row.activity.tone}`}><StatusIndicator kind={row.activity.text === "整理中" ? "pending" : row.activity.tone === "good" ? "done" : ["未做", "未做完"].includes(row.activity.text) ? "blank" : "uncertain"}>{row.activity.text}</StatusIndicator></td></tr>)}</tbody></table><details className="study-completion-note"><summary>照片与完成情况有什么不同？</summary><p className="hw-summary-note">{snapshot?.writtenCompletionEnabled ? "完成情况与答案对错分开判断，已做完不代表已批改正确。" : "预习复习按动笔痕迹判断；其他作业的完成情况尚未判定。"}</p></details></> : <p className="hw-summary-empty">{summary.empty}</p>}
           </section>}
-          <div className={`hw-home-status ${homeStatus.help ? "hw-home-question" : ""}`} role="status">{homeStatus.help ? <button className="hw-status-question" aria-label="和小步说说" onClick={askAboutDay}><MessageCircle size={23} /><span>{homeStatus.text}<small>点这里，和小步说说</small></span></button> : <>{homeStatus.busy ? <LoaderCircle size={23} className="spin" /> : <Sparkles size={23} />}<p>{homeStatus.text}</p></>}</div>
+          {!!snapshot?.uploads.length && !(alreadyCovered&&snapshot?.grading?.enabled&&snapshot.grading.finished&&!snapshot.grading.pending&&!snapshot.grading.failed&&!homeStatus.help) && <div className={`hw-home-status ${homeStatus.help ? "hw-home-question" : ""}`} role="status">{homeStatus.help ? <button className="hw-status-question" aria-label="和小步说说" onClick={askAboutDay}><MessageCircle size={23} /><span>{homeStatus.text}<small>点这里，和小步说说</small></span></button> : <>{homeStatus.busy ? <LoaderCircle size={23} className="spin" /> : <Sparkles size={23} />}<p>{homeStatus.text}</p></>}</div>}
           {snapshot?.grading?.enabled && <div className="hw-grading-overview">{summary && <p>{snapshot.grading.pending ? "AI正在批改，完成后自动更新。" : snapshot.grading.failed ? "有作业批改未完成，可查看原因并重试。" : snapshot.grading.finished ? `已批改${snapshot.grading.correct + snapshot.grading.wrong + snapshot.grading.blank + snapshot.grading.uncertain + snapshot.grading.feedback}题 · ${snapshot.grading.wrong}道错题${snapshot.grading.uncertain ? ` · ${snapshot.grading.uncertain}题尚未确认` : ""}` : "书面作业上传后会自动批改。"}</p>}<div>{summary && <button className="text-button" onClick={() => showGrading("grading")}><ClipboardList size={17} aria-hidden="true" />查看批改</button>}<button className="text-button" onClick={() => showGrading("mistakes")}><BookOpen size={17} aria-hidden="true" />我的错题本</button></div></div>}
           <button className="hw-details-link" onClick={() => showDetails(true)}><FolderOpen size={18} />查看详情</button>
-          <nav className="hw-module-links" aria-label="其他学习活动"><a href="/reading/"><BookOpen size={18} aria-hidden="true" />课外阅读</a><a href="/reading/?view=growth"><Sparkles size={18} aria-hidden="true" />成长与奖励</a></nav>
+          </div><HomeCompanion date={date} viewerKey={viewer?.id||"legacy"}/></div>
         </section> : <section className="hw-details-page" aria-label="作业详情">
           <div className="hw-details-heading"><button className="button secondary" onClick={() => showDetails(false)}>返回首页</button><label className="hw-date">作业日期<input type="date" value={date} onChange={(e) => { if (e.target.value) { setDate(e.target.value); setDetailId(null); } }} /></label></div>
         <nav className="hw-tabs" aria-label="学习资料导航"><button className={tab === "today" ? "selected" : ""} onClick={() => setTab("today")}><ClipboardList size={19} /> 作业清单</button>{snapshot?.grading?.enabled && <><button className={tab === "grading" ? "selected" : ""} onClick={() => setTab("grading")}>批改结果</button><button className={tab === "mistakes" ? "selected" : ""} onClick={() => setTab("mistakes")}>错题本</button></>}<button className={tab === "archive" ? "selected" : ""} onClick={() => setTab("archive")}><FolderOpen size={19} /> 历史资料</button><button className="hw-refresh" onClick={() => void refresh()} aria-label="刷新作业状态"><RefreshCw size={18} /></button></nav>
@@ -105,7 +108,6 @@ export function HomeworkApp({ onDemo, onDateChange, onAssistantTarget }: { onDem
         <div className="hw-storage"><ShieldCheck size={18} /><span>原件和整理结果保存在家庭服务器，通过家庭访问码保护。家长和孩子使用独立账号权限，旧家庭访问码只进入孩子学习空间。</span></div>
         </section>}
       </>}
-      {auth === "ready" && <a className="hw-account-entry" href="/admin/">{isParent(viewer) ? "家长管理" : "家长入口"}</a>}
       {error && <p className="form-error hw-error" role="alert">{error}</p>}
       {notice && <div className="hw-notice" role="status"><span>{notice}</span><button className="icon-button" onClick={() => setNotice("")} aria-label="关闭提示"><X size={17} /></button></div>}
       {(auth !== "ready" || detailsOpen) && <footer className="hw-footer"><span><Sprout size={17} /> 小步学习 · 陪伴每一次慢慢长大</span><div>{auth === "ready" && <button onClick={() => setLegacy(true)}>迁移本浏览器旧资料</button>}<button onClick={onDemo}>示例体验与旧记录</button></div></footer>}
@@ -114,7 +116,7 @@ export function HomeworkApp({ onDemo, onDateChange, onAssistantTarget }: { onDem
     {upload && <HomeworkUpload kind={upload.kind} initialFiles={upload.files} date={date} close={() => setUpload(null)} onSaved={async (u) => { setUpload(null); setDate(u.date); setNotice(""); await refresh(); }} />}
     {detail && <UploadDetail canManage={canManage} upload={detail} close={() => setDetailId(null)} refresh={refresh} onDate={(d) => { setDate(d); setDetailId(null); }} />}
     {legacy && <LegacyMigration close={() => setLegacy(false)} refresh={refresh} />}
-  </div>;
+  </StudyShell>;
 }
 
 function validateFiles(files: File[]) {

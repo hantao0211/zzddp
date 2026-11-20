@@ -19,6 +19,7 @@ try {
   copyFileSync(join(root, "docs/homework.md"), join(release, "HOMEWORK.md"));
   copyFileSync(join(root, "docs/accounts.md"), join(release, "ACCOUNTS.md"));
   copyFileSync(join(root, "docs/reading.md"), join(release, "READING.md"));
+  copyFileSync(join(root, "docs/design-system.md"), join(release, "DESIGN.md"));
   copyFileSync(join(root, "deploy/README.md"), join(release, "README.md"));
   const version = JSON.parse(readFileSync(join(root, "package.json"), "utf8")).version;
   copyFileSync(join(root, "deploy/xiaobu-prototype.service"), join(release, "xiaobu-prototype.service"));

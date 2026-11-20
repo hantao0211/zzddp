@@ -17,6 +17,7 @@ try {
   await page.route("**/assistant-api/**", async route => {
     const url = new URL(route.request().url()), path = url.pathname;
     const json = data => route.fulfill({ contentType: "application/json", body: JSON.stringify(data) });
+    if (path.endsWith("/reading/state")) return json(null);
     if (path.endsWith("/status")) return json({ authenticated: true, available: true, speech: true });
     if (path.endsWith("/memories")) return json({ items: [] });
     if (path.endsWith("/homework-context")) return json({ date: url.searchParams.get("date"), revision: 1, availableDates: [selectedDate], hasMaterials: true, pending: false, status: "processed", note: "", taskCount: 1, entries: [], familyNotes: [], uncertainties: [] });

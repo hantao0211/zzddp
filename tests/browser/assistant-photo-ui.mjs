@@ -15,6 +15,7 @@ try {
     const send = (value, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(value) });
     if (path.endsWith("/memories")) return send({ items: memories });
     if (path.match(/\/memories\/[^/]+\/revoke$/)) { memories = []; return send({ revoked: true }); }
+    if (path.endsWith("/reading/state")) return send(null);
     if (path.endsWith("/status")) return send({ available: true, authenticated: true, speech: true });
     if (path.endsWith("/homework-context")) return send({ date, revision: 1, availableDates: [date], hasMaterials: true, pending: false, status: "processed", note: "Synthetic fixture", taskCount: 0, unclassifiedCount: 0, entries: [], uncertainties: [], familyNotes: [{ id: "synthetic-note-1", userQuote: "模拟家庭说明一", canUndo: false }, { id: "synthetic-note-2", userQuote: "模拟家庭说明二", canUndo: false }] });
     if (path.endsWith("/learning/state")) return send({ date, status: "processed", note: "Synthetic fixture", report: null, uploads: [], dates: [date], quota: { calls: 0, limit: 60 }, pending: false });
