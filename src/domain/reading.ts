@@ -14,8 +14,14 @@ export type ReadingBook=BookInput&{id:string;finished:boolean;description:string
 export type ReadingLog={id:string;version:number;bookId:string;date:string;startPage:number;endPage:number;minutes:number;summary:string;chapter:string;reflection:string;excerpt:string;imageId:string|null;actorId:string;backfilled:boolean;createdAt:string;updatedAt:string;reviewStatus:"queued"|"running"|"done"|"failed";review:ReadingReview|null;canEdit:boolean};
 export const RewardInputSchema=z.object({title:text(80).min(1),description:text(500).default(""),cost:z.number().int().min(1).max(100000),active:z.boolean().default(true)}).strict();
 export type Reward=z.infer<typeof RewardInputSchema>&{id:string};
+export const WishInputSchema=z.object({id:z.string().uuid(),title:text(80).min(1),description:text(500).default("")}).strict();
+export const WishDecisionSchema=z.discriminatedUnion("status",[
+ z.object({status:z.literal("approved"),title:text(80).min(1),description:text(500).default(""),cost:z.number().int().min(1).max(100000),note:text(300).default("")}).strict(),
+ z.object({status:z.literal("declined"),note:text(300).min(1)}).strict()
+]);
+export type Wish={id:string;title:string;description:string;actorId:string;status:"pending"|"approved"|"declined"|"withdrawn";rewardId:string|null;note:string;createdAt:string;updatedAt:string;canWithdraw:boolean};
 export type Redemption={id:string;rewardTitle:string;cost:number;status:"pending"|"approved"|"fulfilled"|"rejected";createdAt:string;updatedAt:string};
-export type ReadingState={today:string;viewer:{id:string;role:string;name:string};books:ReadingBook[];logs:ReadingLog[];rules:ReadingRules;stats:{days:number;minutes:number;pages:number;currentStreak:number;bestStreak:number;booksFinished:number};growth:{balance:number;earned:number;ledger:{id:string;date:string;points:number;label:string;kind:string}[]};rewards:Reward[];redemptions:Redemption[];calendar:{date:string;backfilled:boolean;minutes:number}[];reviewBudget:{used:number;limit:number};hasMore:boolean};
+export type ReadingState={today:string;viewer:{id:string;role:string;name:string};books:ReadingBook[];logs:ReadingLog[];rules:ReadingRules;stats:{days:number;minutes:number;pages:number;currentStreak:number;bestStreak:number;booksFinished:number};growth:{balance:number;earned:number;ledger:{id:string;date:string;points:number;label:string;kind:string}[]};rewards:Reward[];wishes:Wish[];redemptions:Redemption[];calendar:{date:string;backfilled:boolean;minutes:number}[];reviewBudget:{used:number;limit:number};hasMore:boolean};
 export type CatalogBook={id:string;title:string;author:string;isbn:string;publisher:string;totalPages:number|null;description:string;sourceUrl:string};
 export const previousDay=(day:string)=>new Date(Date.parse(day+"T00:00:00Z")-86400000).toISOString().slice(0,10);
 export function streaks(dates:string[],today:string){const ordered=[...new Set(dates)].filter(d=>d<=today).sort();let run=0,best=0,previous="";for(const date of ordered){run=previous===previousDay(date)?run+1:1;best=Math.max(best,run);previous=date;}return{currentStreak:previous===today||previous===previousDay(today)?run:0,bestStreak:best};}
