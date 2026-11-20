@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { HomeworkDialogueSchema } from "../../domain/ai-contracts";
-import { ClarificationActionSchema, type ClarificationAction, type ClarificationPreview, type ClarificationReceipt, type HomeworkChatContext, type MemoEntry } from "../../domain/clarifications";
+import { ClarificationActionSchema, MemoEditSchema, type MemoEdit, type ClarificationAction, type ClarificationPreview, type ClarificationReceipt, type HomeworkChatContext, type MemoEntry } from "../../domain/clarifications";
 import type { ChatInput, PhotoReview } from "../../domain/assistant";
 import { shanghaiDay } from "../../domain/homework";
 import { AIServiceError, type AIImage, type StructuredAI } from "../ai/provider";
@@ -111,7 +111,25 @@ export class HomeworkConversation {
     }
     return { ...reply, studyDate: context.date, proposal, photoReview: photos.review, memoriesSaved: memory.saved, memoryNotices: memory.notices, activeMemories: memory.saved.length ? this.memories.list() : undefined, changeStatus: proposal ? "pending" as const : "none" as const };
   }
-  propose(context: HomeworkChatContext, actionInput: ClarificationAction, owner: string, userTexts: string[]): ClarificationPreview {
+  editEntry(value: MemoEdit, owner: string): ClarificationReceipt {
+    const input = MemoEditSchema.parse(value);
+    return this.store.transaction(() => {
+      const existing = this.store.db.prepare("SELECT * FROM clarification_drafts WHERE id=?").get(input.requestId) as DraftRow | undefined;
+      if (existing) {
+        if (existing.owner !== owner) throw new HomeworkError(404, "这次保存不存在，请重新打开修改。");
+        const previous = JSON.parse(existing.payload).action as ClarificationAction;
+        if (existing.date !== input.date || existing.revision !== input.revision || previous.entryId !== input.entryId || JSON.stringify(previous.changes) !== JSON.stringify(input.entry)) throw new HomeworkError(409, "这次保存的内容已变化，请重新打开修改。");
+        return this.confirmDraft(existing.id, owner);
+      }
+      const context = this.context(input.date, owner);
+      if (context.revision !== input.revision) throw new HomeworkError(409, "清单刚有更新，请重新读取后再修改；你填写的内容仍保留。");
+      if (input.entry.subject === null && context.entries.find(e => e.entryId === input.entryId)?.subject) throw new HomeworkError(400, "请为这项作业选择正确科目，不能将已确定科目改为空。只有名称或要求改错时，可保持原科目。 ");
+      const userQuote = `直接修改备忘录：${input.entry.title}。`;
+      this.propose(context, { entryId: input.entryId, changes: input.entry, userQuote, resolves: [] }, owner, [userQuote], input.requestId);
+      return this.confirmDraft(input.requestId, owner);
+    });
+  }
+  propose(context: HomeworkChatContext, actionInput: ClarificationAction, owner: string, userTexts: string[], draftId: string = randomUUID()): ClarificationPreview {
     const action = ClarificationActionSchema.parse(actionInput);
     if (!userTexts.some((text) => text.includes(action.userQuote)) || !context.entries.some((e) => e.entryId === action.entryId)) throw new HomeworkError(400, "这次说明没有对应到可修改的作业。请说清是哪一项，以及要补充的内容。");
     if (!Object.values(action.changes).some((v) => v !== null)) throw new HomeworkError(400, "没有需要保存的作业修改。");
@@ -128,13 +146,15 @@ export class HomeworkConversation {
     this.store.db.prepare("DELETE FROM clarification_drafts WHERE expires_at<? AND confirmed_id IS NULL").run(now);
     const count = this.store.db.prepare("SELECT COUNT(*) AS n FROM clarification_drafts WHERE owner=? AND confirmed_id IS NULL AND expires_at>=?").get(owner, now) as { n: number };
     if (count.n >= 20) throw new HomeworkError(429, "待确认的说明较多，请先确认已有修改。");
-    const id = randomUUID(), expiresAt = now + 15 * 60_000;
+    const id = draftId, expiresAt = now + 15 * 60_000;
     const preview: ClarificationPreview = { id, date: context.date, entryId: action.entryId, before, after, userQuote: action.userQuote, resolves: action.resolves.map((i) => data.original.uncertainties[i]), expiresAt };
     this.store.db.prepare("INSERT INTO clarification_drafts(id,owner,date,memo_id,entry_index,revision,source_hash,payload,expires_at) VALUES(?,?,?,?,?,?,?,?,?)").run(id, owner, context.date, memo.id, index, context.revision, sourceHash(data.original.assignments[index]), JSON.stringify({ action, preview }), expiresAt);
     return preview;
   }
   confirm(id: string, owner: string): ClarificationReceipt {
-    return this.store.transaction(() => {
+    return this.store.transaction(() => this.confirmDraft(id, owner));
+  }
+  private confirmDraft(id: string, owner: string): ClarificationReceipt {
       const draft = this.store.db.prepare("SELECT * FROM clarification_drafts WHERE id=? AND owner=?").get(id, owner) as DraftRow | undefined;
       if (!draft) throw new HomeworkError(404, "这条待确认说明不存在，或属于另一台设备的会话。");
       if (draft.confirmed_id) {
@@ -154,7 +174,6 @@ export class HomeworkConversation {
       this.refreshMemo(memo);
       this.store.bump(draft.date);
       return this.receipt(noteId);
-    });
   }
   private refreshMemo(memo: UploadRow) {
     const result = effectiveMemo(this.store, memo).result;

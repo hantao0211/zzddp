@@ -7,6 +7,7 @@ import { randomUUID, scrypt, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
 import { z } from "zod";
 import { ChatInputSchema, validateRecording } from "../../domain/assistant";
+import { MemoEditSchema } from "../../domain/clarifications";
 import { chatPhotos } from "./photos";
 import { AIServiceError, type StructuredAI } from "../ai/provider";
 import { answerTutor } from "../ai/workflows";
@@ -112,6 +113,11 @@ export function createAssistantServer(options: Options) {
       }
       if (path === "/assistant-api/memories" && request.method === "GET" && options.learning) {
         json(response, 200, { items: options.learning.memories.list() }); return;
+      }
+      if (path === "/assistant-api/memo-entries/update" && request.method === "POST" && options.learning) {
+        const input = MemoEditSchema.safeParse(await jsonBody(request, 16000));
+        if (!input.success) throw new HttpError(400, "请填写有效的科目、作业名称和要求后保存。");
+        json(response, 200, options.learning.editEntry(input.data, digest(token))); return;
       }
       const memoryPath = path.match(/^\/assistant-api\/memories\/([a-f0-9-]{36})\/revoke$/);
       if (memoryPath && request.method === "POST" && options.learning) {

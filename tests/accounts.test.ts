@@ -194,3 +194,26 @@ test("reading routes share account authentication; children can read and check i
 });
 
 test("wish HTTP routes enforce login, child ownership, parent approval and CSRF; successful approval is an idempotent mall insert",async()=>{const f=await fixture();try{assert.equal((await f.send("reading/wishes","POST",{id:randomUUID(),title:"未登录"})).status,401);const admin=await f.bootstrap();for(const role of ["child","parent"] as const)await f.send("admin/accounts","POST",{username:role,name:"模拟"+role,role,password},admin.cookie);const child=await f.login("child"),parent=await f.login("parent");const input={id:randomUUID(),title:"一起看星星",description:"想和爸爸妈妈一起去"};assert.equal((await f.send("reading/wishes","POST",{...input,cost:1,status:"approved"},child.cookie)).status,400);assert.equal((await f.send("reading/wishes","POST",input,child.cookie)).data.status,"pending");assert.equal((await f.send("reading/wishes","POST",input,child.cookie)).data.id,input.id);const decision={status:"approved",title:"家庭观星夜",cost:3,note:"周末一起去"};assert.equal((await f.send("reading/wishes/"+input.id,"PATCH",decision,child.cookie)).status,403);assert.equal((await f.send("reading/wishes/"+input.id,"PATCH",decision,parent.cookie,{Origin:"https://other.test"})).status,403);assert.equal((await f.send("reading/wishes/"+input.id+"/withdraw","POST",{},parent.cookie)).status,403);assert.equal((await f.send("reading/wishes/"+input.id,"PATCH",decision,parent.cookie)).data.status,"approved");assert.equal((await f.send("reading/wishes/"+input.id,"PATCH",decision,admin.cookie)).data.status,"approved");const state=(await f.send("reading/state","GET",undefined,child.cookie)).data;assert.equal(state.wishes[0].rewardId,state.rewards[0].id);assert.equal(state.rewards.length,1);assert.equal(state.growth.balance,0);const w=await f.send("reading/wishes","POST",{id:randomUUID(),title:"另一个愿望"},child.cookie);assert.equal((await f.send("reading/wishes/"+w.data.id+"/withdraw","POST",{},child.cookie)).data.status,"withdrawn");assert.equal((await f.send("reading/wishes/"+w.data.id,"PATCH",decision,parent.cookie)).status,409);}finally{await f.cleanup();}});
+
+test("children and parents can explicitly correct memo entries through authenticated same-origin HTTP without AI", async () => {
+  const f = await fixture();
+  try {
+    const admin = await f.bootstrap();
+    assert.equal((await f.send("admin/accounts", "POST", { username: "child", name: "模拟孩子", role: "child", password }, admin.cookie)).status, 200);
+    const child = await f.login("child");
+    const upload = f.homework.begin({ date, kind: "memo", files: [{ name: "synthetic.png", size: 100, sha256: "a".repeat(64) }] });
+    f.homework.stored(upload.files[0].id, "image/png"); f.homework.finalize(upload.id); const job = f.homework.claim()!;
+    const original = { date, readable: true, assignments: [{ subject: "数学", title: "练居", requirement: "练居", format: "written", evidence: [{ fileId: upload.files[0].id + "-p1", page: 1, excerpt: "练居" }] }], uncertainties: [] };
+    f.homework.recognized(job, original, ["数学"], false, 100, "fixture");
+    const context = (await f.send(`homework-context?date=${date}`, "GET", undefined, child.cookie)).data;
+    const input = { requestId: randomUUID(), date, revision: context.revision, entryId: context.entries[0].entryId, entry: { subject: "数学", title: "练习册P74", requirement: "完成数学练习册第74页。", format: "written" } };
+    assert.equal((await f.send("memo-entries/update", "POST", input)).status, 401);
+    assert.equal((await f.send("memo-entries/update", "POST", input, child.cookie, { Origin: "https://other.test" })).status, 403);
+    assert.equal((await f.send("memo-entries/update", "POST", { ...input, actor: "admin" }, child.cookie)).status, 400);
+    const result = await f.send("memo-entries/update", "POST", input, child.cookie); assert.equal(result.status, 200);
+    assert.equal((await f.send("memo-entries/update", "POST", input, child.cookie)).data.id, result.data.id);
+    assert.equal((await f.send(`homework-context?date=${date}`, "GET", undefined, admin.cookie)).data.entries[0].title, "练习册P74");
+    assert.equal(f.calls(), 0); assert.equal(f.homework.upload(upload.id)!.result, JSON.stringify(original));
+    assert.equal((await f.send(`clarifications/${result.data.id}/undo`, "POST", {}, child.cookie)).status, 200);
+  } finally { await f.cleanup(); }
+});

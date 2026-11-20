@@ -14,6 +14,12 @@ export const ClarificationActionSchema = z.object({
 }).strict();
 export type ClarificationAction = z.infer<typeof ClarificationActionSchema>;
 export type MemoEntry = { subject: z.infer<typeof SubjectSchema> | null; title: string; requirement: string; format: "written" | "oral" | "reading" | "other" };
+export const MemoEditSchema = z.object({
+  requestId: z.string().uuid(), date: DaySchema, revision: z.number().int().nonnegative(),
+  entryId: z.string().min(1).max(180),
+  entry: z.object({ subject: SubjectSchema.nullable(), title: z.string().trim().min(1).max(150), requirement: z.string().trim().min(1).max(2000), format: z.enum(["written", "oral", "reading", "other"]) }).strict(),
+}).strict();
+export type MemoEdit = z.infer<typeof MemoEditSchema>;
 export type ClarificationPreview = { id: string; date: string; entryId: string; before: MemoEntry; after: MemoEntry; userQuote: string; resolves: string[]; expiresAt: number };
 export const ClarificationReceiptSchema = z.object({
   id: z.string(), date: z.string(), userQuote: z.string(), title: z.string(), createdAt: z.string(),

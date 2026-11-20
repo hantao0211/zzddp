@@ -34,3 +34,13 @@ test("processing masks stale results; dates with no report or no uploads have ho
   s.pending = false; s.uploads = s.uploads.filter(u => u.kind === "homework"); assert.match(homeworkSummary(s)!.empty, /补一张备忘录/);
   s.uploads = []; assert.equal(homeworkSummary(s), null); assert.equal(homeworkSummary(null), null);
 });
+
+test("photo and completion explanations distinguish not submitted, unmatched, partial and written checks", () => {
+  const s = snapshot(); s.writtenCompletionEnabled = true;
+  s.report!.tasks[1].coverage = "none";
+  let row = homeworkSummary(s)!.rows[1]; assert.equal(row.photo.text, "未匹配"); assert.equal(row.activity.text, "等匹配"); assert.match(row.photoDetail, /已经有作业照片/); assert.match(row.activityDetail, /无需一律重传/);
+  s.uploads = s.uploads.filter(u => u.kind === "memo");
+  row = homeworkSummary(s)!.rows[1]; assert.equal(row.photo.text, "未交照片"); assert.equal(row.activity.text, "等照片"); assert.match(row.activityDetail, /不是要求家长/);
+  s.report!.tasks[1].coverage = "complete"; row = homeworkSummary(s)!.rows[1]; assert.equal(row.activity.text, "需检查"); assert.match(row.activityDetail, /系统会自动检查/);
+  s.pending = true; row = homeworkSummary(s)!.rows[1]; assert.match(row.activityDetail, /不沿用旧/);
+});

@@ -280,3 +280,37 @@ test("new chat pictures take focus without silently sending the day's stored hom
     assert.equal(both.photoReview.requested, true); assert.equal(reads, 1);
   } finally { f.cleanup(); }
 });
+
+test("direct memo correction saves without AI, is idempotent, preserves originals, and can be undone", async () => {
+  const f = setup();
+  try {
+    const context = f.service.context(date, owner), original = f.store.upload(f.uploadId)!.result;
+    const input = { requestId: "11111111-1111-4111-8111-111111111111", date, revision: context.revision, entryId: context.entries[1].entryId, entry: { subject: "语文" as const, title: "复习第19课", requirement: "复习语文第19课，原来的9是识别错误。", format: "reading" as const } };
+    const receipt = f.service.editEntry(input, owner);
+    assert.equal(f.service.context(date).entries[1].title, "复习第19课");
+    assert.equal(f.store.upload(f.uploadId)!.result, original);
+    assert.equal(f.service.editEntry(input, owner).id, receipt.id);
+    assert.equal(f.store.db.prepare("SELECT COUNT(*) AS n FROM clarifications").get()!.n, 1);
+    assert.throws(() => f.service.editEntry(input, other));
+    assert.throws(() => f.service.editEntry({ ...input, entry: { ...input.entry, title: "其他改动" } }, owner));
+    f.service.undo(receipt.id, owner);
+    assert.equal(f.service.context(date).entries[1].title, context.entries[1].title);
+    assert.throws(() => f.service.editEntry(input, owner));
+    assert.equal(f.store.upload(f.uploadId)!.result, original);
+  } finally { f.cleanup(); }
+});
+
+test("manual correction refuses stale revisions and foreign entries atomically", () => {
+  const f = setup();
+  try {
+    const context = f.service.context(date, owner);
+    const input = { requestId: "22222222-2222-4222-8222-222222222222", date, revision: context.revision, entryId: context.entries[0].entryId, entry: { subject: "数学" as const, title: "数学练习", requirement: "第74页", format: "written" as const } };
+    assert.throws(() => f.service.editEntry({ ...input, revision: context.revision + 1 }, owner));
+    assert.throws(() => f.service.editEntry({ ...input, entry: { ...input.entry, subject: null } }, owner));
+    assert.throws(() => f.service.editEntry({ ...input, entryId: "other-memo:entry:0" }, owner));
+    assert.equal(f.store.db.prepare("SELECT COUNT(*) AS n FROM clarification_drafts").get()!.n, 0);
+    assert.equal(f.store.db.prepare("SELECT COUNT(*) AS n FROM clarifications").get()!.n, 0);
+    f.service.editEntry(input, owner);
+    assert.throws(() => f.service.editEntry({ ...input, requestId: "33333333-3333-4333-8333-333333333333" }, owner));
+  } finally { f.cleanup(); }
+});

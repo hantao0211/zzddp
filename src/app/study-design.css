@@ -122,3 +122,23 @@
 .study-shell .hw-primary-actions>button{justify-content:flex-start}
 @media(max-width:899px){html:has(.study-shell){scroll-padding-bottom:calc(100px + env(safe-area-inset-bottom))}.study-shell :is(button,a,input,select,textarea){scroll-margin-bottom:calc(100px + env(safe-area-inset-bottom))}.study-shell .reading-book-date{grid-template-columns:minmax(0,1fr) 155px;gap:12px}.study-shell .reading-summary-label{flex-direction:row;align-items:center;gap:10px;flex-wrap:wrap}.study-shell .reading-summary-label label{margin:0}.study-shell .reading-summary-label .text-button{font-size:14px;min-height:38px}}
 @media(max-width:359px){.study-shell .reading-book-date{grid-template-columns:1fr;gap:0}}
+
+/* Direct corrections and predictable status help, available on every visit. */
+.hw-summary-heading>div{display:flex;align-items:center;gap:12px;flex-wrap:wrap;justify-content:flex-end}
+.study-edit-list{display:inline-flex;align-items:center;gap:4px;min-height:44px;font-size:13px}
+.study-task-title>.study-edit-task{display:flex;align-items:center;gap:4px;width:fit-content;min-height:30px;padding:0;background:none;color:var(--accent);font-size:12px;font-weight:400}
+.study-status-detail{display:inline-flex;align-items:center;min-height:44px;padding:0;background:none;text-align:left;font:inherit;color:inherit;border-radius:8px}
+.study-status-detail:focus-visible,.study-edit-task:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.study-status-detail:hover .status-indicator{text-decoration:underline;text-underline-offset:3px}
+.study-status-explanation p{font-size:15px;line-height:1.8;color:var(--muted);margin:8px 0 20px}
+.study-status-explanation h4{margin:16px 0 0;font-size:15px}
+.study-status-actions{display:flex;flex-wrap:wrap;align-items:center;gap:16px;margin-top:16px}
+.memo-editor .dialog-header h2{display:flex;align-items:center;gap:8px;font-size:18px}
+.memo-edit-intro{font-size:14px;line-height:1.8;color:var(--muted);margin-top:0}
+.memo-edit-list{display:flex;flex-direction:column;gap:8px}
+.memo-edit-list>button{display:flex;align-items:center;gap:12px;padding:14px;border:1px solid var(--border);border-radius:10px;text-align:left;background:#fff;min-height:56px;color:var(--ink)}
+.memo-edit-list>button>span{color:var(--muted);font-size:13px;flex-shrink:0}.memo-edit-list>button>strong{flex:1;overflow-wrap:anywhere}.memo-edit-list>button>svg{flex-shrink:0;color:var(--accent)}
+.memo-editor form>label,.memo-edit-format label{display:flex;flex-direction:column;gap:8px;margin:16px 0;font-size:14px}
+.memo-editor input,.memo-editor textarea,.memo-editor select{width:100%;min-width:0;border:1px solid var(--border);border-radius:9px;padding:11px 12px;background:#fff;color:var(--ink);font:inherit;font-size:16px;line-height:1.6}
+.memo-editor textarea{resize:vertical;min-height:100px}.memo-edit-format{color:var(--muted);font-size:14px}.memo-edit-format summary{min-height:40px;cursor:pointer}.memo-edit-back{display:flex;align-items:center;gap:6px;min-height:40px}
+@media(max-width:600px){.hw-summary-heading>div{gap:4px 9px}.study-edit-list{font-size:12px}.study-status-actions>.button{font-size:14px}.memo-editor .dialog-body{padding:16px}.memo-editor .dialog-footer{gap:8px}.memo-editor .dialog-footer>.button{font-size:14px;padding:10px 12px}}
