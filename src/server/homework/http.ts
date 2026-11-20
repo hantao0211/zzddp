@@ -6,6 +6,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { DaySchema, UploadInputSchema } from "../../domain/homework";
 import { HomeworkError, HomeworkStore } from "./store";
 import { detectMime } from "./images";
+import type { HomeworkRewards } from "./rewards";
 
 function json(res: ServerResponse, value: unknown, status = 200) { res.writeHead(status, { "Content-Type": "application/json; charset=utf-8" }); res.end(JSON.stringify(value)); }
 async function input(req: IncomingMessage) {
@@ -17,14 +18,14 @@ async function input(req: IncomingMessage) {
 export class HomeworkHTTP {
   private writing = new Set<string>();
   private active = 0;
-  constructor(private store: HomeworkStore) {}
+  constructor(private store: HomeworkStore, private rewards?: HomeworkRewards) {}
   async handle(req: IncomingMessage, res: ServerResponse) {
     const url = new URL(req.url!, "http://internal"), path = url.pathname.replace("/assistant-api/learning", "");
     try {
       if (path === "/state" && req.method === "GET") {
         const date = DaySchema.safeParse(url.searchParams.get("date"));
         if (!date.success) throw new HomeworkError(400, "请选择有效的作业日期。");
-        json(res, this.store.snapshot(date.data)); return;
+        json(res, { ...this.store.snapshot(date.data), ...(this.rewards ? { homeworkReward: this.rewards.status(date.data) } : {}) }); return;
       }
       if (path === "/grading" && req.method === "GET") {
         const date = DaySchema.safeParse(url.searchParams.get("date"));

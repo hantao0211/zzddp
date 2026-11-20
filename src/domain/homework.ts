@@ -43,6 +43,7 @@ export type UploadView = {
   files: { id: string; name: string; size: number; stored: boolean; pages: { id: string; number: number }[] }[];
 };
 export type HomeworkSnapshot = {
+  homeworkReward?: import("./homework-reward").HomeworkRewardStatus;
   date: string; status: string; note: string; report: DailyReport | null; uploads: UploadView[];
   dates: string[]; grading?: GradingSummary; writtenCompletionEnabled?: boolean; reviewPolicy?: ReviewPolicy | null; quota: { calls: number; limit: number }; pending: boolean;
 };

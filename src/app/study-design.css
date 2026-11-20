@@ -142,3 +142,7 @@
 .memo-editor input,.memo-editor textarea,.memo-editor select{width:100%;min-width:0;border:1px solid var(--border);border-radius:9px;padding:11px 12px;background:#fff;color:var(--ink);font:inherit;font-size:16px;line-height:1.6}
 .memo-editor textarea{resize:vertical;min-height:100px}.memo-edit-format{color:var(--muted);font-size:14px}.memo-edit-format summary{min-height:40px;cursor:pointer}.memo-edit-back{display:flex;align-items:center;gap:6px;min-height:40px}
 @media(max-width:600px){.hw-summary-heading>div{gap:4px 9px}.study-edit-list{font-size:12px}.study-status-actions>.button{font-size:14px}.memo-editor .dialog-body{padding:16px}.memo-editor .dialog-footer{gap:8px}.memo-editor .dialog-footer>.button{font-size:14px;padding:10px 12px}}
+
+.study-homework-reward{display:flex;align-items:center;gap:7px;flex-wrap:wrap;padding:10px 12px;margin:10px 0;background:#faf3f6;border-radius:10px;color:var(--accent);font-size:13px}
+.study-homework-reward>.reading-token{font-size:14px}.study-homework-reward>.reading-token svg{width:16px;height:16px}.study-homework-reward>.reading-token small{font-size:12px}
+.study-homework-reward.earned{background:#f0f5f1;color:#54745d}.reading-homework-reward h2{display:flex;align-items:center;gap:8px}
