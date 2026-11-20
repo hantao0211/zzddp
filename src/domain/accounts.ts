@@ -1,0 +1,13 @@
+import { z } from "zod";
+export const RoleSchema = z.enum(["admin", "parent", "child"]);
+export type Role = z.infer<typeof RoleSchema>;
+export type Viewer = { id: string; username: string; name: string; role: Role; legacy?: boolean };
+export const ROLE_LABELS: Record<Role, string> = { admin: "家庭管理员", parent: "家长", child: "孩子" };
+export const UsernameSchema = z.string().trim().min(3).max(32).regex(/^[A-Za-z0-9_.-]+$/);
+export const PasswordSchema = z.string().min(8).max(128);
+export const AccountLoginSchema = z.object({ username: UsernameSchema, password: PasswordSchema }).strict();
+export const CreateAccountSchema = AccountLoginSchema.extend({ name: z.string().trim().min(1).max(30), role: RoleSchema }).strict();
+export const UpdateAccountSchema = z.object({ name: z.string().trim().min(1).max(30), role: RoleSchema, active: z.boolean(), password: PasswordSchema.optional() }).strict();
+export const BootstrapSchema = AccountLoginSchema.extend({ name: z.string().trim().min(1).max(30), setupCode: z.string().min(20).max(100) }).strict();
+export const LimitsSchema = z.object({ chat: z.number().int().min(1).max(5000), asr: z.number().int().min(1).max(5000), tts: z.number().int().min(1).max(5000) }).strict();
+export const isParent = (viewer: Viewer | null | undefined) => viewer?.role === "admin" || viewer?.role === "parent";

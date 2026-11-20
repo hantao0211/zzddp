@@ -2,11 +2,13 @@ import { createHash, randomBytes } from "node:crypto";
 import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
+import { LimitsSchema } from "../../domain/accounts";
 
 const StateSchema = z.object({
   version: z.literal(1), day: z.string(),
   usage: z.object({ chat: z.number().int().nonnegative(), asr: z.number().int().nonnegative(), tts: z.number().int().nonnegative() }),
-  sessions: z.array(z.object({ hash: z.string().length(64), expires: z.number() })).max(20),
+  sessions: z.array(z.object({ hash: z.string().length(64), expires: z.number(), userId: z.string().uuid().optional() })).max(20),
+  limits: LimitsSchema.optional(),
   authHits: z.array(z.object({ ip: z.string().length(64), at: z.number() })).max(60),
 });
 export type AssistantLimits = { chat: number; asr: number; tts: number };
@@ -35,6 +37,7 @@ export class AssistantStore {
     this.path = join(directory, "state.json");
     // Corrupt or incompatible state is never silently reset: limits fail closed.
     this.state = existsSync(this.path) ? StateSchema.parse(JSON.parse(readFileSync(this.path, "utf8"))) : { version: 1, day: "", usage: { chat: 0, asr: 0, tts: 0 }, sessions: [], authHits: [] };
+    this.limits = this.state.limits || limits;
   }
   private save() {
     const temporary = this.path + ".next";
@@ -54,10 +57,10 @@ export class AssistantStore {
     this.state.authHits.push({ ip: hash, at: this.now() });
     this.save();
   }
-  createSession() {
+  createSession(userId?: string) {
     this.clean();
     const token = randomBytes(32).toString("base64url");
-    this.state.sessions = [...this.state.sessions.slice(-19), { hash: digest(token), expires: this.now() + 30 * 86400_000 }];
+    this.state.sessions = [...this.state.sessions.slice(-19), { hash: digest(token), expires: this.now() + 30 * 86400_000, ...(userId ? { userId } : {}) }];
     this.save();
     return token;
   }
@@ -65,6 +68,14 @@ export class AssistantStore {
     this.clean();
     return /^[A-Za-z0-9_-]{43}$/.test(token) && this.state.sessions.some((item) => item.hash === digest(token));
   }
+  userId(token: string) { return this.authenticate(token) ? this.state.sessions.find(s => s.hash === digest(token))?.userId : undefined; }
+  revokeUser(id: string) { this.state.sessions = this.state.sessions.filter(s => s.userId !== id); this.save(); }
+  revokeLegacy() { this.state.sessions = this.state.sessions.filter(s => !!s.userId); this.save(); }
+  settings() {
+    const day = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(this.now()));
+    return { limits: { ...this.limits }, usage: day === this.state.day ? { ...this.state.usage } : { chat: 0, asr: 0, tts: 0 }, day };
+  }
+  setLimits(value: AssistantLimits) { this.limits = LimitsSchema.parse(value); this.state.limits = this.limits; this.save(); }
   logout(token: string) {
     this.state.sessions = this.state.sessions.filter((item) => item.hash !== digest(token));
     this.recent.delete(digest(token));

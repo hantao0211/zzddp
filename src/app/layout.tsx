@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import "./assistant.css";
 import "./homework.css";
+import "./admin.css";
 
 export const metadata: Metadata = {
   title: "小步学习 · 每一步，都算数",

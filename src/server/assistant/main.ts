@@ -1,3 +1,4 @@
+import { Accounts } from "./accounts";
 import { readAutoGrading } from "../../domain/grading";
 import { readWrittenCompletion } from "../../domain/written-completion";
 import { readReviewPolicy } from "../../domain/review-policy";
@@ -22,6 +23,8 @@ try {
   const port = Number(process.env.ASSISTANT_PORT || 3091);
   if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new Error("Invalid port");
   const server = createAssistantServer({
+    accounts: new Accounts(process.env.ASSISTANT_STATE_DIRECTORY || "/var/lib/xiaobu-assistant"),
+    serviceInfo: { provider: config.provider, model: config.model },
     homework: new HomeworkHTTP(homeworkStore),
     learning: new HomeworkConversation(homeworkStore, new ServerImages(homeworkStore)),
     origin: process.env.ASSISTANT_ORIGIN || "https://14.103.24.55",

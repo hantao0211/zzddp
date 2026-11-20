@@ -38,6 +38,8 @@ HOST=0.0.0.0 PORT=3080 node server.cjs public
 
 后台使用固定Node.js 22.23.5（内置SQLite），依赖Ubuntu官方 `imagemagick libheif-examples poppler-utils`。安装 `xiaobu-assistant.service` 和Nginx的学习上传代理配置，不能只更新静态页面。私有数据位于 `/var/lib/xiaobu-assistant/learning`，不得随发布目录替换。详见 [作业整理说明](../docs/homework.md)。
 
-完整独立成员权限和真实针对练习尚未接入；真实自动批改、错因分析与错题归档由私有ASSISTANT_AUTO_GRADING=1启用；示例体验保留原有浏览器资料。HTTP与HTTPS浏览器资料隔离，旧文件不会自动迁移；保留原HTTP入口用于查看下载，真实上传仅走HTTPS。
+独立家庭账号和家长管理已接通，真实针对练习尚未接入；真实自动批改、错因分析与错题归档由私有ASSISTANT_AUTO_GRADING=1启用；示例体验保留原有浏览器资料。HTTP与HTTPS浏览器资料隔离，旧文件不会自动迁移；保留原HTTP入口用于查看下载，真实上传仅走HTTPS。
 
 公开仓库不含真实服务器维护日志。可复制 `DEPLOYMENT.example.md` 为被Git忽略的 `DEPLOYMENT.md`，在维护环境记录实际发布及回退信息，不将真实学习结果或私有备份位置发布到仓库。
+
+首次启动账号服务后，家长用服务器私有状态目录中的一次性开通码在 `/admin/` 建立管理员，再创建孩子账号。旧访问码只保留孩子权限。备份时同时保留新增 `accounts.sqlite`（含WAL文件）和原有学习数据库、原件及state.json。详见 [家庭账号与管理](../docs/accounts.md)。

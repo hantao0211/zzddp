@@ -11,10 +11,13 @@ import { answerTutor } from "../ai/workflows";
 import { AssistantLimitError, AssistantStore, digest } from "./store";
 import type { HomeworkHTTP } from "../homework/http";
 import type { SpeechServices } from "./speech";
+import type { Accounts } from "./accounts";
+import { AdminHTTP } from "./admin";
+import { AccountLoginSchema, BootstrapSchema, isParent, type Viewer } from "../../domain/accounts";
 
 const scryptAsync = promisify(scrypt);
 const COOKIE = "__Secure-xiaobu-assistant";
-type Options = { origin: string; accessHash: string; store: AssistantStore; ai: (signal: AbortSignal) => StructuredAI; speech?: SpeechServices; homework?: HomeworkHTTP; learning?: HomeworkConversation };
+type Options = { origin: string; accessHash: string; store: AssistantStore; ai: (signal: AbortSignal) => StructuredAI; speech?: SpeechServices; homework?: HomeworkHTTP; learning?: HomeworkConversation; accounts?: Accounts; serviceInfo?: { provider: string; model: string } };
 class HttpError extends Error { constructor(public status: number, message: string) { super(message); } }
 function json(response: ServerResponse, status: number, value: unknown) { response.writeHead(status, { "Content-Type": "application/json; charset=utf-8" }); response.end(JSON.stringify(value)); }
 function aiErrorMessage(error: AIServiceError, operation: string) {
@@ -42,6 +45,7 @@ export function createAssistantServer(options: Options) {
   if (!options.origin.startsWith("https://") || !/^[a-f\d]{32}:[a-f\d]{64}$/.test(options.accessHash)) throw new Error("Invalid assistant configuration");
   const [salt, expected] = options.accessHash.split(":");
   const replies = new Map<string, { owner: string; text: string; expires: number }>();
+  const admin = options.accounts ? new AdminHTTP(options.accounts, options.store, options.learning, options.serviceInfo) : undefined;
   let active = 0, logins = 0;
   const server = createServer(async (request, response) => {
     response.setHeader("Cache-Control", "no-store"); response.setHeader("X-Content-Type-Options", "nosniff");
@@ -53,21 +57,44 @@ export function createAssistantServer(options: Options) {
       const path = new URL(request.url || "/", options.origin).pathname;
       operation = path === "/assistant-api/chat" ? "chat" : path === "/assistant-api/speech" ? "speech" : path === "/assistant-api/transcribe" ? "transcribe" : "other";
       if (request.method !== "GET" && request.headers.origin !== options.origin) throw new HttpError(403, "请从小步学习网页发起请求。");
-      if (path === "/assistant-api/status" && request.method === "GET") { json(response, 200, { available: true, authenticated: options.store.authenticate(token), speech: !!options.speech }); return; }
-      if (path === "/assistant-api/session" && request.method === "POST") {
+      const userId = options.store.userId(token);
+      const viewer: Viewer | null = options.accounts ? userId ? options.accounts.profile(userId) : options.accounts.legacyAllowed() ? { id: "legacy", username: "", name: "孩子（旧访问码）", role: "child", legacy: true } : null : null;
+      const authenticated = options.store.authenticate(token) && (!options.accounts || !!viewer);
+      const beginSession = (identity?: Viewer) => {
+        const session = options.store.createSession(identity?.id);
+        response.setHeader("Set-Cookie", `${COOKIE}=${session}; Path=/assistant-api; HttpOnly; Secure; SameSite=Strict; Max-Age=2592000`);
+        json(response, 200, { authenticated: true, viewer: identity || null });
+      };
+      if (path === "/assistant-api/status" && request.method === "GET") { json(response, 200, { available: true, authenticated, speech: !!options.speech, viewer: authenticated ? viewer : null, accounts: !!options.accounts, setupRequired: options.accounts?.needsSetup() || false }); return; }
+      if ((path === "/assistant-api/session" || path === "/assistant-api/parent-setup") && request.method === "POST") {
         if (logins >= 2) throw new HttpError(429, "正在验证，请稍后再试。");
         options.store.loginAttempt(String(request.headers["x-real-ip"] || request.socket.remoteAddress));
-        const input = z.object({ code: z.string().regex(/^\d{8}$/) }).strict().safeParse(await jsonBody(request, 1024));
-        if (!input.success) throw new HttpError(400, "请输入8位家庭访问码。");
+        const value = await jsonBody(request, 2048);
         logins++;
-        let actual: Buffer;
-        try { actual = await scryptAsync(input.data.code, salt, 32) as Buffer; } finally { logins--; }
-        if (!timingSafeEqual(actual, Buffer.from(expected, "hex"))) throw new HttpError(401, "家庭访问码不正确。");
-        const session = options.store.createSession();
-        response.setHeader("Set-Cookie", `${COOKIE}=${session}; Path=/assistant-api; HttpOnly; Secure; SameSite=Strict; Max-Age=2592000`);
-        json(response, 200, { authenticated: true }); return;
+        try {
+          if (path === "/assistant-api/parent-setup") {
+            if (!options.accounts) throw new HttpError(404, "家长管理尚未启用。");
+            const parsed = BootstrapSchema.safeParse(value);
+            if (!parsed.success) throw new HttpError(400, "请填写家长开通码、3—32位英文或数字登录名，以及至少8位密码。");
+            beginSession(await options.accounts.bootstrap(parsed.data)); return;
+          }
+          const account = AccountLoginSchema.safeParse(value);
+          if (options.accounts && account.success) {
+            const identity = await options.accounts.login(account.data.username, account.data.password);
+            if (!identity) throw new HttpError(401, "登录名或密码不正确，或账号已停用。");
+            beginSession(identity); return;
+          }
+          const input = z.object({ code: z.string().regex(/^\d{8}$/) }).strict().safeParse(value);
+          if (!input.success) throw new HttpError(400, "请填写登录名和密码，或使用8位旧家庭访问码。");
+          if (options.accounts && !options.accounts.legacyAllowed()) throw new HttpError(401, "旧访问码已关闭，请使用家长为你建立的账号。");
+          const actual = await scryptAsync(input.data.code, salt, 32) as Buffer;
+          if (!timingSafeEqual(actual, Buffer.from(expected, "hex"))) throw new HttpError(401, "家庭访问码不正确。");
+          beginSession(); return;
+        } finally { logins--; }
       }
-      if (!options.store.authenticate(token)) throw new HttpError(401, "请先输入家庭访问码。");
+      if (!authenticated) throw new HttpError(401, "请先登录学习账号。");
+      if (path.startsWith("/assistant-api/admin/") && admin && viewer) { await admin.handle(request, response, path, viewer, () => jsonBody(request, 4096)); return; }
+      if (options.accounts && !isParent(viewer) && (path.match(/^\/assistant-api\/memories\/[a-f0-9-]{36}\/revoke$/) || path.match(/^\/assistant-api\/learning\/(?:retry-day|grading\/(?:start|retry)|uploads\/[a-f0-9-]{36}\/date)$/)) && request.method !== "GET") throw new HttpError(403, "这是家长管理操作，请让家长到管理页处理。日常上传和小助手仍可使用。");
       if (path === "/assistant-api/session" && request.method === "DELETE") {
         options.store.logout(token);
         for (const [id, reply] of replies) if (reply.owner === digest(token)) replies.delete(id);
@@ -103,7 +130,7 @@ export function createAssistantServer(options: Options) {
           const input = ChatInputSchema.safeParse(await jsonBody(request));
           if (!input.success) throw new HttpError(400, "问题太长或内容不完整，请换个短一点的问题。");
           options.store.reserve("chat", token);
-          const result = options.learning ? await options.learning.answer(options.ai(abort.signal), input.data, digest(token)) : await answerTutor(options.ai(abort.signal), { ...input.data, materials: [] });
+          const result = options.learning ? await options.learning.answer(options.ai(abort.signal), input.data, digest(token), viewer) : await answerTutor(options.ai(abort.signal), { ...input.data, materials: [] });
           for (const [id, reply] of replies) if (reply.expires < Date.now()) replies.delete(id);
           while (replies.size >= 100) replies.delete(replies.keys().next().value!);
           const id = randomUUID();
