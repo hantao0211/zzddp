@@ -1,0 +1,38 @@
+[Unit]
+Description=Xiaobu learning assistant
+Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec=120
+StartLimitBurst=3
+
+[Service]
+Type=simple
+DynamicUser=yes
+WorkingDirectory=/home/hantao/work/zzddp/xiaobu-prototype/current
+ExecStart=/opt/xiaobu-node/bin/node /home/hantao/work/zzddp/xiaobu-prototype/current/assistant.cjs
+EnvironmentFile=/etc/xiaobu-learning/ai.env
+EnvironmentFile=/etc/xiaobu-learning/assistant.env
+Environment=ASSISTANT_ORIGIN=https://14.103.24.55
+Environment=ASSISTANT_PORT=3091
+Environment=ASSISTANT_STATE_DIRECTORY=/var/lib/xiaobu-assistant
+StateDirectory=xiaobu-assistant
+StateDirectoryMode=0700
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+CapabilityBoundingSet=
+AmbientCapabilities=
+MemoryMax=512M
+TasksMax=128
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

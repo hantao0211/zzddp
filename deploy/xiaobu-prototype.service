@@ -1,0 +1,17 @@
+[Unit]
+Description=Xiaobu learning prototype
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=@RELEASE@
+Environment=HOST=0.0.0.0
+Environment=PORT=3080
+ExecStart=@NODE@ @RELEASE@/server.cjs @RELEASE@/public
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+UMask=0077
+
+[Install]
+WantedBy=default.target
