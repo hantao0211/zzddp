@@ -66,6 +66,7 @@ test("admin creates distinct parent and child accounts; parent can manage learni
     for (const role of ["parent", "child"] as const) assert.equal((await f.send("admin/accounts", "POST", { username: role, name: "模拟" + role, role, password }, admin.cookie)).status, 200);
     const parent = await f.login("parent"), child = await f.login("child");
     assert.equal((await f.send("admin/overview", "GET", undefined, parent.cookie)).status, 200);
+    assert.deepEqual((await f.send("admin/overview", "GET", undefined, parent.cookie)).data.knowledge, { rules: [], corrections: [], history: [] });
     assert.equal((await f.send("admin/accounts", "GET", undefined, parent.cookie)).status, 403);
     assert.equal((await f.send("admin/limits", "PATCH", { chat: 99, asr: 99, tts: 99 }, parent.cookie)).status, 403);
     assert.equal((await f.send("admin/overview", "GET", undefined, child.cookie)).status, 403);

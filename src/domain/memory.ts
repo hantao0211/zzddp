@@ -15,3 +15,11 @@ export type LearnedMemory = {
   id: string; kind: MemoryCandidate["kind"]; trigger: string; summary: string; subject: MemoryCandidate["subject"];
   sourceQuote: string; sourceDate: string; createdAt: string;
 };
+export type ConfirmedKnowledgeExample = {
+  id: string; sourceDate: string;
+  original: { subject: string | null; title: string; requirement: string; format: string };
+  corrected: { subject: string | null; title: string; requirement: string; format: string };
+  explanation: string;
+};
+export type MemoryHistory = LearnedMemory & { status: "revoked" | "superseded" | "excluded"; reason: string };
+export type KnowledgeCatalog = { rules: LearnedMemory[]; corrections: ConfirmedKnowledgeExample[]; history: MemoryHistory[] };

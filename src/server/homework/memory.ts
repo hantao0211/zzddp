@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { MemoryCandidateSchema, type LearnedMemory, type MemoryCandidate } from "../../domain/memory";
+import { MemoryCandidateSchema, type LearnedMemory, type MemoryCandidate, type KnowledgeCatalog, type ConfirmedKnowledgeExample } from "../../domain/memory";
 import { ClarificationActionSchema } from "../../domain/clarifications";
 import { HomeworkError, type HomeworkStore, type UploadRow } from "./store";
 import { effectiveMemo, sourceHash, type NoteRow } from "./memo-context";
@@ -31,7 +31,7 @@ export function isReusableAbbreviationEvidence(evidence: string) {
   const pairs = new RegExp(`(?:预|复|默|背|抄|读)\\s*[“‘\"']?(${numbers})[”’\"']?[^。！？\\n]{0,40}?第\\s*(${numbers})\\s*课`, "gu");
   return [...evidence.normalize("NFKC").matchAll(pairs)].every(pair => numeral(pair[1]) === numeral(pair[2]));
 }
-const reusable = (memory: { kind: MemoryCandidate["kind"]; sourceQuote: string }) => isReusableMemoryEvidence(memory.sourceQuote) && (memory.kind !== "memo_abbreviation" || isReusableAbbreviationEvidence(memory.sourceQuote));
+const reusable = (memory: { kind: MemoryCandidate["kind"]; sourceQuote: string; summary: string }) => isReusableMemoryEvidence(memory.sourceQuote) && (memory.kind !== "memo_abbreviation" || isReusableAbbreviationEvidence(memory.sourceQuote) && isReusableAbbreviationEvidence(memory.summary));
 const view = (row: MemoryRow): LearnedMemory => ({ id: row.id, kind: row.kind, trigger: row.trigger_text, summary: row.summary, subject: row.subject, sourceQuote: row.source_quote, sourceDate: row.source_date, createdAt: row.created_at });
 const tokens = (text: string) => {
   const result = new Set(text.toLowerCase().match(/[a-z]+|\d+/g) || []);
@@ -43,6 +43,20 @@ const tokens = (text: string) => {
 export class LearnedMemories {
   constructor(private store: HomeworkStore) {}
   list(): LearnedMemory[] { return (this.store.db.prepare("SELECT * FROM learned_memories WHERE status='active' ORDER BY rowid DESC LIMIT 500").all() as MemoryRow[]).map(view); }
+  catalog(): KnowledgeCatalog {
+    const rows = this.store.db.prepare("SELECT * FROM learned_memories ORDER BY rowid DESC LIMIT 500").all() as MemoryRow[];
+    const applicable = reusable;
+    return {
+      rules: rows.filter(r => r.status === "active" && applicable(view(r))).map(view),
+      corrections: this.corrections(),
+      history: rows.filter(r => r.status !== "active" || !applicable(view(r))).map(r => {
+        const memory = view(r);
+        const status = r.status === "active" ? "excluded" as const : r.status === "superseded" ? "superseded" as const : "revoked" as const;
+        const reason = !isReusableMemoryEvidence(memory.sourceQuote) ? "这条只说明当次照片或作业的对应关系，不作为跨作业的长期规则。" : memory.kind === "memo_abbreviation" && (!isReusableAbbreviationEvidence(memory.sourceQuote) || !isReusableAbbreviationEvidence(memory.summary)) ? "识字或课号纠正只适用于当次记录，不能作为替换课号的简称规则。" : status === "superseded" ? "已有较新的解释，不再调用这一版。" : "已停用，不再用于后续识别和问答。";
+        return { ...memory, status, reason };
+      }),
+    };
+  }
   recall(question: string) {
     const terms = tokens(question), normalized = key(question);
     return this.list().filter(reusable).map((memory, order) => {
@@ -90,7 +104,7 @@ export class LearnedMemories {
     this.store.db.prepare("UPDATE learned_memories SET status='revoked',updated_at=? WHERE id=?").run(new Date(this.store.now()).toISOString(), id);
     return { revoked: true };
   }
-  private corrections() {
+  private corrections(): ConfirmedKnowledgeExample[] {
     const notes = this.store.db.prepare(`SELECT c.* FROM clarifications c JOIN uploads u ON u.id=c.memo_id
       WHERE c.undone_at IS NULL AND u.kind='memo' AND u.result IS NOT NULL
       AND NOT EXISTS (SELECT 1 FROM clarifications newer WHERE newer.memo_id=c.memo_id AND newer.entry_index=c.entry_index AND newer.undone_at IS NULL AND newer.rowid>c.rowid)
@@ -107,7 +121,7 @@ export class LearnedMemories {
     });
   }
   forRecognition() {
-    const rules = this.list().filter((m) => m.kind === "memo_abbreviation" && reusable(m) && isReusableAbbreviationEvidence(m.summary)).slice(0, 20), corrections = this.corrections();
+    const rules = this.list().filter((m) => m.kind === "memo_abbreviation" && reusable(m)).slice(0, 20), corrections = this.corrections();
     const revision = createHash("sha256").update(JSON.stringify({ rules, corrections })).digest("hex").slice(0, 20);
     return { rules, corrections, revision, boundary: "这些是这个孩子的已提炼知识和确认过的纠正案例。规则只在当前图片与科目上下文相符时适用；识字纠正案例中original是旧识别，不一定是孩子原文，corrected才是用户确认的当次含义。漏字、漏数字不构成简称规则，不能把一个课号永久替换成另一个，不能把历史课号固定套用于本次数字。当前清晰图片和新的明确说明优先；有矛盾就保留不确定。证据ID必须来自本次页面，不能引用记忆或旧案例ID作为本次图片证据。" };
   }

@@ -73,8 +73,10 @@ test("memory deduplicates, versions explicit updates, and revocation removes it 
     assert.equal(f.memories.remember([update], newerQuote, date).saved.length, 0);
     const second = f.memories.remember([{ ...update, replacesMemoryId: first.id }], newerQuote, date).saved[0];
     assert.equal(f.memories.list().length, 1); assert.equal(f.memories.list()[0].id, second.id);
+    assert.equal(f.memories.catalog().rules.length, 1); assert.equal(f.memories.catalog().history[0].status, "superseded");
     f.memories.revoke(second.id); assert.equal(f.memories.recall("预21").length, 0);
     assert.equal(f.memories.forRecognition().rules.length, 0);
+    assert.equal(f.memories.catalog().rules.length, 0); assert.equal(f.memories.catalog().history.length, 2); assert.equal(f.memories.catalog().history[0].status, "revoked");
     assert.equal(f.store.db.prepare("SELECT COUNT(*) AS n FROM learned_memories").get()!.n, 2);
   } finally { f.cleanup(); }
 });
@@ -108,7 +110,8 @@ test("confirmed corrections are recognition examples and cease to be used when u
     const preview = service.propose(service.context(date), { entryId: upload.id + ":entry:0", changes: { subject: "语文", title: "预习课文", requirement: "预习第21课", format: "reading" }, userQuote: explanation, resolves: [0] }, owner, [explanation]);
     const receipt = service.confirm(preview.id, owner);
     const knowledge = f.memories.forRecognition(); assert.equal(knowledge.corrections.length, 1); assert.equal(knowledge.corrections[0].explanation, explanation);
-    service.undo(receipt.id, owner); assert.equal(f.memories.forRecognition().corrections.length, 0);
+    assert.deepEqual(f.memories.catalog().corrections, knowledge.corrections); assert.equal(f.memories.catalog().rules.length, 0);
+    service.undo(receipt.id, owner); assert.equal(f.memories.forRecognition().corrections.length, 0); assert.equal(f.memories.catalog().corrections.length, 0);
     assert.notEqual(f.memories.forRecognition().revision, knowledge.revision);
   } finally { f.cleanup(); }
 });
@@ -125,6 +128,7 @@ test("today's photo association is not a reusable abbreviation, including old po
     assert.equal(f.memories.recall("预22").length, 0);
     assert.equal(f.memories.forRecognition().rules.length, 0);
     assert.equal(f.memories.list().length, 1); // Audit/UI visibility retained; only future use is filtered.
+    assert.equal(f.memories.catalog().rules.length, 0); assert.equal(f.memories.catalog().history[0].status, "excluded"); assert.ok(f.memories.catalog().history[0].reason.includes("当次照片"));
     const general = { ...oneOff, evidenceQuote: "以后备忘录里的预加数字表示预习对应课文，那张照片只是本次的内容。" };
     assert.equal(f.memories.remember([general], general.evidenceQuote, date).saved.length, 1);
   } finally { f.cleanup(); }
@@ -142,6 +146,9 @@ test("OCR numeral corrections cannot become reusable aliases, including old mism
     f.store.db.prepare("UPDATE learned_memories SET source_quote=?,summary=? WHERE id=?").run("复七就是语文的复习第27课。", "复表示复习第27课。", stored.id);
     assert.equal(f.memories.recall("复28是什么意思").length, 0);
     assert.equal(f.memories.forRecognition().rules.length, 0);
+    f.store.db.prepare("UPDATE learned_memories SET source_quote=?,summary=? WHERE id=?").run(candidate().evidenceQuote, "复7表示复习第27课。", stored.id);
+    assert.equal(f.memories.recall("预28是什么意思").length, 0); assert.equal(f.memories.catalog().rules.length, 0);
+    assert.equal(f.memories.catalog().history[0].status, "excluded");
     const valid = { ...candidate(), trigger: "复", evidenceQuote: "复七就是复习第七课，复27就是复习第27课，后面的数字是课号。", summary: "语文备忘录里的复加数字表示复习对应课文，保留当前课号。" };
     assert.equal(f.memories.remember([valid], valid.evidenceQuote, date).saved.length, 1);
   } finally { f.cleanup(); }
