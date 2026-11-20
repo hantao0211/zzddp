@@ -4,6 +4,7 @@ import "./assistant.css";
 import "./homework.css";
 import "./admin.css";
 import "./status.css";
+import "./reading.css";
 
 export const metadata: Metadata = {
   title: "小步学习 · 每一步，都算数",

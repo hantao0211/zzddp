@@ -42,7 +42,7 @@ try {
   for (const viewport of [{ width: 390, height: 670 }, { width: 320, height: 568 }, { width: 768, height: 1024 }, { width: 1280, height: 900 }]) {
     await page.setViewportSize(viewport);
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
-    const controls = await page.locator(".hw-simple-home").boundingBox();
+    const controls = await page.locator(".hw-primary-actions").boundingBox();
     await page.screenshot({ path: output + `/simple-home-${viewport.width}.png` });
     assert.ok(controls.y + controls.height <= viewport.height - 45, `Primary controls below the fold: ${JSON.stringify(viewport)}`);
     for (const button of await page.locator(".hw-primary-actions button").all()) assert.ok((await button.boundingBox()).height >= 100);

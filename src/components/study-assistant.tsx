@@ -24,7 +24,7 @@ async function request(path: string, init: RequestInit = {}) {
 const formatLabel = { written: "书面", oral: "口头", reading: "朗读或阅读", other: "其他" };
 const json = (value: unknown) => ({ headers: { "Content-Type": "application/json" }, body: JSON.stringify(value) });
 
-export function StudyAssistant({ studyDate, launcherTarget }: { studyDate?: string; launcherTarget?: HTMLElement | null } = {}) {
+export function StudyAssistant({ studyDate, launcherTarget, readingMode = false, readingLogId }: { studyDate?: string; launcherTarget?: HTMLElement | null; readingMode?: boolean; readingLogId?: string } = {}) {
   const [open, setOpen] = useState(false);
   const { viewer, accounts } = useViewer();
   const [toolsOpen, setToolsOpen] = useState(false);
@@ -91,6 +91,7 @@ export function StudyAssistant({ studyDate, launcherTarget }: { studyDate?: stri
   function controller() { current.current?.abort(); const value = new AbortController(); current.current = value; return value; }
 
   async function loadContext(task: AbortController, date = selectedDate || studyDate || "", fallback = false) {
+    if (readingMode) { setHomeworkContext(null); return; }
     let value: HomeworkChatContext;
     try { value = await (await request("homework-context" + (date ? `?date=${date}` : ""), { signal: task.signal })).json(); }
     catch (e) { if (e instanceof RequestError && e.status === 404) { setHomeworkContext(null); return; } throw e; }
@@ -102,6 +103,7 @@ export function StudyAssistant({ studyDate, launcherTarget }: { studyDate?: stri
     if (!task.signal.aborted) { setSelectedDate(value.date); setHomeworkContext(value); }
   }
   async function loadMemories(task: AbortController) {
+    if (readingMode) { setMemories([]); return; }
     try { const value = await (await request("memories", { signal: task.signal })).json(); if (!task.signal.aborted) setMemories(value.items || []); }
     catch (e) { if (!(e instanceof RequestError && e.status === 404)) throw e; }
   }
@@ -192,7 +194,7 @@ export function StudyAssistant({ studyDate, launcherTarget }: { studyDate?: stri
     try {
       const history: { role: "user" | "assistant"; content: string }[] = []; let length = 0;
       for (const { role, content } of messages.slice(-8).reverse()) { if (length + content.length > 12000) break; history.unshift({ role, content }); length += content.length; }
-      const result = await (await request("chat", { method: "POST", ...json({ question, history, reviewPhotos, ...(homeworkContext ? { studyDate: selectedDate } : {}) }), signal: task.signal })).json();
+      const result = await (await request("chat", { method: "POST", ...json({ question, history, reviewPhotos, ...(readingMode ? { readingMode: true, ...(readingLogId ? { readingLogId } : {}) } : {}), ...(homeworkContext ? { studyDate: selectedDate } : {}) }), signal: task.signal })).json();
       if (task.signal.aborted) return;
       answer = { role: "assistant", content: result.answer, id: result.id, spokenAnswer: result.spokenAnswer, proposal: result.proposal, photoReview: result.photoReview, memoriesSaved: result.memoriesSaved, memoryNotices: result.memoryNotices, changeStatus: result.changeStatus };
       setMessages((items) => [...items, { role: "user" as const, content: question }, answer!]);
@@ -261,6 +263,7 @@ export function StudyAssistant({ studyDate, launcherTarget }: { studyDate?: stri
     {open && <dialog className="assistant-dialog" ref={dialog} aria-labelledby="assistant-title" onCancel={(event) => { event.preventDefault(); if (toolsOpen) setToolsOpen(false); else close(); }} onClick={(event) => { if (event.target === dialog.current) close(); }}>
       <header className="assistant-header"><span className="assistant-avatar"><Sparkles size={24} /></span><div><h2 id="assistant-title">小步学习小助手</h2><p>有问题，就来问小步。</p></div><div className="assistant-header-actions">{status === "ready" && <button className="icon-button" onClick={() => setToolsOpen(!toolsOpen)} aria-label={toolsOpen ? "收起更多" : "更多功能"} aria-expanded={toolsOpen} aria-controls="assistant-settings"><MoreHorizontal size={23} /></button>}<button className="icon-button" onClick={close} aria-label="关闭小助手"><X size={23} /></button></div></header>
       {status === "checking" ? <div className="assistant-welcome" role="status"><LoaderCircle className="spin" /> 正在连接小助手…</div> : status === "insecure" ? <div className="assistant-welcome"><LockKeyhole size={32} /><h3>从安全地址打开吧</h3><p>小助手和麦克风需要安全连接。</p><a className="button primary" href="https://14.103.24.55/?assistant=1">打开 HTTPS 小助手</a></div> : status === "offline" ? <div className="assistant-welcome"><MessageCircle size={32} /><h3>暂时没有连接上</h3><p>{error}</p><button className="button primary" onClick={() => void check()}>重新连接</button></div> : status === "locked" ? accounts ? <div className="assistant-welcome"><h3>登录学习账号</h3><AccountLogin legacy onSignedIn={() => void check()} /><a href="/admin/">家长登录与管理</a></div> : <form className="assistant-welcome" onSubmit={login}><LockKeyhole size={32} /><h3>打开家里的小助手</h3><p>第一次使用，请输入家长提供的家庭访问码。<br />这台设备会记住登录状态。</p><label>家庭访问码<input type="password" inputMode="numeric" pattern="[0-9]{8}" maxLength={8} minLength={8} autoComplete="one-time-code" required value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, ""))} placeholder="8位数字" /></label>{error && <p className="form-error" role="alert">{error}</p>}<button className="button primary" disabled={!!pending}>{pending ? <LoaderCircle size={18} className="spin" /> : <Check size={18} />}打开小助手</button></form> : <>
+        {readingMode && <div className="assistant-context-bar"><span>课外阅读交流</span><span>{readingLogId ? "已关联这次阅读" : "阅读与奖励使用帮助"}</span></div>}
         {homeworkContext && <div className="assistant-context-bar" inert={toolsOpen}><button onClick={() => setToolsOpen(true)} aria-label="切换作业日期"><CalendarDays size={16} /><span>{selectedDate.replaceAll("-", "/")} 的作业</span></button><span>{reviewPhotos ? "本次重看照片" : homeworkContext.pending ? "正在整理" : homeworkContext.hasMaterials ? "已关联记录" : "暂无资料"}</span></div>}
         <section id="assistant-settings" className="assistant-settings" aria-label="小助手更多功能" hidden={!toolsOpen}>
           <div className="assistant-settings-heading"><strong>更多功能</strong><button className="text-button" onClick={() => setToolsOpen(false)}>返回对话</button></div>

@@ -1,3 +1,6 @@
+import { ReadingStore } from "../reading/store";
+import { ReadingHTTP } from "../reading/http";
+import { ReadingWorker } from "../reading/worker";
 import { Accounts } from "./accounts";
 import { readAutoGrading } from "../../domain/grading";
 import { readWrittenCompletion } from "../../domain/written-completion";
@@ -22,7 +25,10 @@ try {
   const worker = new HomeworkWorker(homeworkStore, () => new VisionAI(config), new ServerImages(homeworkStore));
   const port = Number(process.env.ASSISTANT_PORT || 3091);
   if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new Error("Invalid port");
+  const reading = new ReadingStore(join(process.env.ASSISTANT_STATE_DIRECTORY || "/var/lib/xiaobu-assistant", "reading"));
+  const readingWorker = new ReadingWorker(reading, () => new VisionAI(config));
   const server = createAssistantServer({
+    reading: new ReadingHTTP(reading),
     accounts: new Accounts(process.env.ASSISTANT_STATE_DIRECTORY || "/var/lib/xiaobu-assistant"),
     serviceInfo: { provider: config.provider, model: config.model },
     homework: new HomeworkHTTP(homeworkStore),
@@ -33,8 +39,8 @@ try {
     ai: (signal) => new VisionAI(config, (url, init) => fetch(url, { ...init, signal: AbortSignal.any([signal, ...(init?.signal ? [init.signal] : [])]) })),
     speech: config.provider === "deepseek" ? new DeepSeekSpeech(config.apiKey) : undefined,
   });
-  worker.start();
+  worker.start(); readingWorker.start();
   server.listen(port, "127.0.0.1", () => console.log("Xiaobu assistant ready on loopback"));
   server.on("error", () => { console.error("Assistant listener unavailable"); process.exitCode = 1; });
-  for (const signal of ["SIGTERM", "SIGINT"] as const) process.on(signal, () => { worker.stop(); server.close(() => process.exit(0)); setTimeout(() => process.exit(0), 5000).unref(); });
+  for (const signal of ["SIGTERM", "SIGINT"] as const) process.on(signal, () => { worker.stop(); readingWorker.stop(); server.close(() => process.exit(0)); setTimeout(() => process.exit(0), 5000).unref(); });
 } catch { console.error("Assistant configuration or private state unavailable"); process.exitCode = 1; }

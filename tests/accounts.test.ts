@@ -1,3 +1,6 @@
+import { ReadingStore } from "../src/server/reading/store";
+import { ReadingHTTP } from "../src/server/reading/http";
+import { randomUUID } from "node:crypto";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { scryptSync } from "node:crypto";
@@ -14,8 +17,8 @@ import { HomeworkHTTP } from "../src/server/homework/http";
 const date = "2026-11-15", origin = "https://family.test", code = "81746290", salt = "ab".repeat(16);
 const password = "synthetic-password";
 async function fixture() {
-  const directory = mkdtempSync(join(tmpdir(), "xiaobu-accounts-test-")), accounts = new Accounts(directory), sessions = new AssistantStore(directory), homework = new HomeworkStore(join(directory, "learning")); let calls = 0;
-  const server = createAssistantServer({ origin, accessHash: salt + ":" + scryptSync(code, salt, 32).toString("hex"), accounts, store: sessions, learning: new HomeworkConversation(homework), homework: new HomeworkHTTP(homework), serviceInfo: { provider: "synthetic", model: "synthetic-model" }, ai: () => ({ async run(_task, schema) { calls++; return schema.parse({ answer: "模拟回答", spokenAnswer: "模拟回答", hint: null, followUpQuestion: null, sourceMaterialIds: [], clarification: null, memoryCandidates: [] }); } }) });
+  const directory = mkdtempSync(join(tmpdir(), "xiaobu-accounts-test-")), accounts = new Accounts(directory), sessions = new AssistantStore(directory), homework = new HomeworkStore(join(directory, "learning")); const reading = new ReadingStore(join(directory, "reading")); let calls = 0;
+  const server = createAssistantServer({ reading: new ReadingHTTP(reading, async () => []), origin, accessHash: salt + ":" + scryptSync(code, salt, 32).toString("hex"), accounts, store: sessions, learning: new HomeworkConversation(homework), homework: new HomeworkHTTP(homework), serviceInfo: { provider: "synthetic", model: "synthetic-model" }, ai: () => ({ async run(_task, schema) { calls++; return schema.parse({ answer: "模拟回答", spokenAnswer: "模拟回答", hint: null, followUpQuestion: null, sourceMaterialIds: [], clarification: null, memoryCandidates: [] }); } }) });
   await new Promise<void>(r => server.listen(0, "127.0.0.1", r)); const address = server.address(); assert.ok(address && typeof address !== "string");
   const port = address.port;
   let ip = 0;
@@ -28,7 +31,7 @@ async function fixture() {
   const setupCode = readFileSync(join(directory, "parent-setup-code"), "utf8").trim();
   async function bootstrap() { const result = await send("parent-setup", "POST", { setupCode, username: "admin", name: "模拟家长", password }); assert.equal(result.status, 200); return result; }
   async function login(username: string, pass = password) { return send("session", "POST", { username, password: pass }); }
-  return { directory, accounts, sessions, homework, send, setupCode, bootstrap, login, calls: () => calls, async cleanup() { server.closeAllConnections(); await new Promise<void>(r => server.close(() => r())); accounts.close(); homework.close(); rmSync(directory, { recursive: true, force: true }); } };
+  return { directory, accounts, sessions, homework, reading, send, setupCode, bootstrap, login, calls: () => calls, async cleanup() { server.closeAllConnections(); await new Promise<void>(r => server.close(() => r())); accounts.close(); homework.close(); reading.close(); rmSync(directory, { recursive: true, force: true }); } };
 }
 
 test("server-only bootstrap cannot be claimed by the first visitor or family code; consumed once, hashes only", async () => {
@@ -160,4 +163,32 @@ test("two-character accounts can sign in, and parents change only their own pass
     assert.equal(f.accounts.db.prepare("SELECT COUNT(*) AS n FROM account_audit WHERE action='change-own-password'").get()!.n, 1);
     assert.equal(f.calls(), 0);
   } finally { await f.cleanup(); }
+});
+
+
+test("reading routes share account authentication; children can read and check in but cannot configure rules or approve rewards", async () => {
+ const f = await fixture(); try {
+  assert.equal((await f.send("reading/state")).status, 401);
+  const admin=await f.bootstrap();
+  for(const role of ["child","parent"] as const)await f.send("admin/accounts","POST",{username:role,name:"模拟"+role,role,password},admin.cookie);
+  const child=await f.login("child"), parent=await f.login("parent");
+  const book=await f.send("reading/books","POST",{title:"模拟阅读书",totalPages:100},child.cookie);assert.equal(book.status,200);
+  const input={id:randomUUID(),version:0,bookId:book.data.id,date:f.reading.today(),startPage:1,endPage:5,minutes:10,summary:"我读到了人物遇到问题后如何寻求帮助。"};
+  assert.equal((await f.send("reading/logs","POST",input,child.cookie)).data.pointsAdded,2);
+  assert.equal((await f.send("reading/logs","POST",input,child.cookie)).data.pointsAdded,0);
+  assert.equal((await f.send("reading/logs","POST",{...input,role:"admin"},child.cookie)).status,400);
+  const rules={dailyPoints:3,backfillCounts:false,milestones:[]};
+  assert.equal((await f.send("reading/rules","PATCH",rules,child.cookie)).status,403);
+  assert.equal((await f.send("reading/rules","PATCH",rules,parent.cookie)).status,200);
+  assert.equal((await f.send("reading/rules","PATCH",rules,parent.cookie,{Origin:"https://other.test"})).status,403);
+  const reward=await f.send("reading/rewards","POST",{title:"模拟亲子活动",cost:2},parent.cookie);assert.equal(reward.status,200);
+  assert.equal((await f.send("reading/rewards","POST",{title:"伪造奖励",cost:1},child.cookie)).status,403);
+  const redemption=randomUUID();assert.equal((await f.send("reading/redemptions","POST",{id:redemption,rewardId:reward.data.id},child.cookie)).status,200);
+  assert.equal((await f.send("reading/redemptions/"+redemption,"PATCH",{status:"fulfilled"},child.cookie)).status,403);
+  assert.equal((await f.send("reading/redemptions/"+redemption,"PATCH",{status:"approved"},parent.cookie)).status,200);
+  assert.equal((await f.send("reading/redemptions/"+redemption,"PATCH",{status:"fulfilled"},parent.cookie)).status,200);
+  const chat=await f.send("chat","POST",{question:"怎样修改阅读记录？",history:[],readingMode:true,readingLogId:input.id},child.cookie);assert.equal(chat.status,200);assert.equal(f.calls(),1);
+  assert.equal((await f.send("reading/state","GET",undefined,child.cookie)).data.growth.balance,0);
+  assert.equal((await f.send("reading/logs?date="+input.date,"GET",undefined,parent.cookie)).data.total,1);
+ } finally {await f.cleanup();}
 });

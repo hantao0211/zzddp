@@ -5,6 +5,8 @@ import type { LearnedMemory } from "./memory";
 
 export const ChatInputSchema = z.object({
   studyDate: DaySchema.optional(),
+  readingMode: z.boolean().optional(),
+  readingLogId: z.string().uuid().optional(),
   reviewPhotos: z.boolean().optional(),
   question: z.string().trim().min(1).max(1200),
   history: z.array(z.object({ role: z.enum(["user", "assistant"]), content: z.string().min(1).max(3000) }).strict()).max(8).default([]),

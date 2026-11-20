@@ -1,3 +1,4 @@
+import type { ReadingHTTP } from "../reading/http";
 import { HomeworkError } from "../homework/store";
 import type { HomeworkConversation } from "../homework/conversation";
 import { DaySchema } from "../../domain/calendar";
@@ -17,7 +18,7 @@ import { AccountLoginSchema, BootstrapSchema, isParent, type Viewer } from "../.
 
 const scryptAsync = promisify(scrypt);
 const COOKIE = "__Secure-xiaobu-assistant";
-type Options = { origin: string; accessHash: string; store: AssistantStore; ai: (signal: AbortSignal) => StructuredAI; speech?: SpeechServices; homework?: HomeworkHTTP; learning?: HomeworkConversation; accounts?: Accounts; serviceInfo?: { provider: string; model: string } };
+type Options = { reading?: ReadingHTTP; origin: string; accessHash: string; store: AssistantStore; ai: (signal: AbortSignal) => StructuredAI; speech?: SpeechServices; homework?: HomeworkHTTP; learning?: HomeworkConversation; accounts?: Accounts; serviceInfo?: { provider: string; model: string } };
 class HttpError extends Error { constructor(public status: number, message: string) { super(message); } }
 function json(response: ServerResponse, status: number, value: unknown) { response.writeHead(status, { "Content-Type": "application/json; charset=utf-8" }); response.end(JSON.stringify(value)); }
 function aiErrorMessage(error: AIServiceError, operation: string) {
@@ -93,6 +94,7 @@ export function createAssistantServer(options: Options) {
         } finally { logins--; }
       }
       if (!authenticated) throw new HttpError(401, "请先登录学习账号。");
+      if (path.startsWith("/assistant-api/reading/") && options.reading && viewer) { await options.reading.handle(request, response, viewer, () => jsonBody(request, 3_000_000)); return; }
       if (path.startsWith("/assistant-api/admin/") && admin && viewer) { await admin.handle(request, response, path, viewer, () => jsonBody(request, 4096)); return; }
       if (options.accounts && !isParent(viewer) && (path.match(/^\/assistant-api\/memories\/[a-f0-9-]{36}\/revoke$/) || path.match(/^\/assistant-api\/learning\/(?:retry-day|grading\/(?:start|retry)|uploads\/[a-f0-9-]{36}\/date)$/)) && request.method !== "GET") throw new HttpError(403, "这是家长管理操作，请让家长到管理页处理。日常上传和小助手仍可使用。");
       if (path === "/assistant-api/session" && request.method === "DELETE") {
@@ -130,7 +132,7 @@ export function createAssistantServer(options: Options) {
           const input = ChatInputSchema.safeParse(await jsonBody(request));
           if (!input.success) throw new HttpError(400, "问题太长或内容不完整，请换个短一点的问题。");
           options.store.reserve("chat", token);
-          const result = options.learning ? await options.learning.answer(options.ai(abort.signal), input.data, digest(token), viewer) : await answerTutor(options.ai(abort.signal), { ...input.data, materials: [] });
+          const result = input.data.readingMode && options.reading && viewer ? await options.reading.answer(options.ai(abort.signal), input.data, viewer) : options.learning ? await options.learning.answer(options.ai(abort.signal), input.data, digest(token), viewer) : await answerTutor(options.ai(abort.signal), { ...input.data, materials: [] });
           for (const [id, reply] of replies) if (reply.expires < Date.now()) replies.delete(id);
           while (replies.size >= 100) replies.delete(replies.keys().next().value!);
           const id = randomUUID();
