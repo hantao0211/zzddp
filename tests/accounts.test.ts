@@ -217,3 +217,21 @@ test("children and parents can explicitly correct memo entries through authentic
     assert.equal((await f.send(`clarifications/${result.data.id}/undo`, "POST", {}, child.cookie)).status, 200);
   } finally { await f.cleanup(); }
 });
+
+test("homework reward settings require parent identity and same origin, persist across requests, and reject invalid amounts", async () => {
+ const f = await fixture();
+ try {
+  const admin = await f.bootstrap();
+  for (const [username, role] of [["child", "child"], ["parent", "parent"]] as const) assert.equal((await f.send("admin/accounts", "POST", { username, name: "模拟账号", role, password }, admin.cookie)).status, 200);
+  const child = await f.login("child"), parent = await f.login("parent");
+  assert.equal((await f.send("reading/homework-rules", "PATCH", { dailyPoints: 5 })).status, 401);
+  assert.equal((await f.send("reading/homework-rules", "PATCH", { dailyPoints: 5 }, child.cookie)).status, 403);
+  assert.equal((await f.send("reading/homework-rules", "PATCH", { dailyPoints: 5 }, parent.cookie, { Origin: "https://other.test" })).status, 403);
+  assert.equal((await f.send("reading/homework-rules", "PATCH", { dailyPoints: 2.5 }, parent.cookie)).status, 400);
+  assert.equal((await f.send("reading/homework-rules", "PATCH", { dailyPoints: 3 }, parent.cookie)).status, 200);
+  assert.equal((await f.send("reading/state", "GET", undefined, child.cookie)).data.homeworkRewardRules.dailyPoints, 3);
+  assert.equal((await f.send("reading/homework-rules", "PATCH", { dailyPoints: 0 }, admin.cookie)).status, 200);
+  assert.equal((await f.send("reading/state", "GET", undefined, parent.cookie)).data.homeworkRewardRules.dailyPoints, 0);
+  assert.equal(f.calls(), 0); assert.equal(f.reading.balance(), 0);
+ } finally { await f.cleanup(); }
+});

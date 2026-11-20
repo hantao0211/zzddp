@@ -86,3 +86,22 @@ test("homework and reading credits combine and can be redeemed with the existing
   assert.equal(f.reading.balance(), 0); assert.equal(f.reading.snapshot(child).growth.earned, 3);
  } finally { f.cleanup(); }
 });
+
+test("parents can change or disable homework rewards; earned amounts and reading rules stay unchanged", () => {
+ const f = fixture(), parent: Viewer = { id: "qa-parent", username: "qa-parent", name: "模拟家长", role: "parent" };
+ try {
+  const readingRules = f.reading.rules(); f.seed(); const worker = new HomeworkRewards(f.homework, f.reading);
+  assert.equal(f.reading.homeworkRewardRules().dailyPoints, 1);
+  assert.throws(() => f.reading.setHomeworkRewardRules({ dailyPoints: 99 }, child));
+  for (const dailyPoints of [-1, 1.5, 101, "3", null]) assert.throws(() => f.reading.setHomeworkRewardRules({ dailyPoints }, parent));
+  assert.throws(() => f.reading.setHomeworkRewardRules({ dailyPoints: 3, extra: true }, parent));
+  f.reading.setHomeworkRewardRules({ dailyPoints: 0 }, parent); worker.tick(); assert.equal(f.reading.balance(), 0); assert.equal(f.reading.homeworkRewardStatus(day).eligible, false);
+  f.reading.setHomeworkRewardRules({ dailyPoints: 3 }, parent); worker.tick(); assert.equal(f.reading.balance(), 3);
+  f.reading.setHomeworkRewardRules({ dailyPoints: 5 }, parent); worker.tick(); assert.equal(f.reading.balance(), 3); assert.equal(f.reading.homeworkRewardStatus(day).points, 3);
+  f.reading.setHomeworkRewardRules({ dailyPoints: 0 }, parent); assert.equal(f.reading.homeworkRewardStatus(day).points, 3); assert.equal(f.reading.homeworkRewardStatus(day).earned, true);
+  f.reopen(); assert.equal(f.reading.homeworkRewardRules().dailyPoints, 0); assert.deepEqual(f.reading.rules(), readingRules);
+  f.reading.setHomeworkRewardRules({ dailyPoints: 5 }, parent); f.advance("2026-11-21"); f.seed("2026-11-21"); new HomeworkRewards(f.homework, f.reading).tick();
+  assert.equal(f.reading.balance(), 8); assert.equal(f.reading.snapshot(child).homeworkRewardRules!.dailyPoints, 5);
+  assert.equal(f.reading.homeworkRewardStatus(day).points, 3);
+ } finally { f.cleanup(); }
+});

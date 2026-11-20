@@ -1,9 +1,12 @@
 import type { HomeworkSnapshot } from "./homework";
+import { z } from "zod";
 import { homeworkSummary } from "./homework-summary";
 import { needsWrittenCompletionUpdate } from "./written-completion";
 import { needsReviewTraceUpdate } from "./review-policy";
 
 export const HOMEWORK_DAILY_STEPS = 1;
+export const HomeworkRewardRulesSchema = z.object({ dailyPoints: z.number().int().min(0).max(100) }).strict();
+export type HomeworkRewardRules = z.infer<typeof HomeworkRewardRulesSchema>;
 export type HomeworkRewardStatus = { points: number; eligible: boolean; earned: boolean };
 export function isHomeworkDayComplete(snapshot: HomeworkSnapshot): boolean {
   const report = snapshot.report;

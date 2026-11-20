@@ -1,5 +1,6 @@
 import {z} from "zod";
 import {DaySchema} from "./calendar";
+import type {HomeworkRewardRules} from "./homework-reward";
 const text=(n:number)=>z.string().trim().max(n);
 export const BookInputSchema=z.object({title:text(150).min(1),author:text(150).default(""),isbn:text(20).default(""),publisher:text(150).default(""),totalPages:z.number().int().min(1).max(20000).nullable().default(null),catalogId:text(80).nullable().default(null)}).strict();
 export type BookInput=z.infer<typeof BookInputSchema>;
@@ -21,7 +22,7 @@ export const WishDecisionSchema=z.discriminatedUnion("status",[
 ]);
 export type Wish={id:string;title:string;description:string;actorId:string;status:"pending"|"approved"|"declined"|"withdrawn";rewardId:string|null;note:string;createdAt:string;updatedAt:string;canWithdraw:boolean};
 export type Redemption={id:string;rewardTitle:string;cost:number;status:"pending"|"approved"|"fulfilled"|"rejected";createdAt:string;updatedAt:string};
-export type ReadingState={today:string;viewer:{id:string;role:string;name:string};books:ReadingBook[];logs:ReadingLog[];rules:ReadingRules;stats:{days:number;minutes:number;pages:number;currentStreak:number;bestStreak:number;booksFinished:number};growth:{balance:number;earned:number;ledger:{id:string;date:string;points:number;label:string;kind:string}[]};rewards:Reward[];wishes:Wish[];redemptions:Redemption[];calendar:{date:string;backfilled:boolean;minutes:number}[];reviewBudget:{used:number;limit:number};hasMore:boolean};
+export type ReadingState={homeworkRewardRules?:HomeworkRewardRules;today:string;viewer:{id:string;role:string;name:string};books:ReadingBook[];logs:ReadingLog[];rules:ReadingRules;stats:{days:number;minutes:number;pages:number;currentStreak:number;bestStreak:number;booksFinished:number};growth:{balance:number;earned:number;ledger:{id:string;date:string;points:number;label:string;kind:string}[]};rewards:Reward[];wishes:Wish[];redemptions:Redemption[];calendar:{date:string;backfilled:boolean;minutes:number}[];reviewBudget:{used:number;limit:number};hasMore:boolean};
 export type CatalogBook={id:string;title:string;author:string;isbn:string;publisher:string;totalPages:number|null;description:string;sourceUrl:string};
 export const previousDay=(day:string)=>new Date(Date.parse(day+"T00:00:00Z")-86400000).toISOString().slice(0,10);
 export function streaks(dates:string[],today:string){const ordered=[...new Set(dates)].filter(d=>d<=today).sort();let run=0,best=0,previous="";for(const date of ordered){run=previous===previousDay(date)?run+1:1;best=Math.max(best,run);previous=date;}return{currentStreak:previous===today||previous===previousDay(today)?run:0,bestStreak:best};}

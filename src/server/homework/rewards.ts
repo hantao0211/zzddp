@@ -6,9 +6,13 @@ import type { ReadingStore } from "../reading/store";
 export class HomeworkRewards {
   private timer?: ReturnType<typeof setInterval>;
   private checked = new Map<string, number>();
+  private points?: number;
   readonly startDate: string;
   constructor(private homework: HomeworkStore, private reading: ReadingStore) { this.startDate = reading.enableHomeworkRewards(); }
   tick() {
+    const points = this.reading.homeworkRewardRules().dailyPoints;
+    if (points !== this.points) { this.checked.clear(); this.points = points; }
+    if (!points) return;
     const earned = new Set(this.reading.homeworkRewardDates());
     const days = this.homework.db.prepare("SELECT date,revision FROM days WHERE date>=? AND date<=? AND status='processed'").all(this.startDate, this.reading.today()) as { date: string; revision: number }[];
     for (const day of days) {
