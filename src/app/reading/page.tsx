@@ -1,2 +1,2 @@
-import {ReadingApp} from "@/components/reading-app";
-export default function ReadingPage(){return <ReadingApp/>;}
+import {StudyWorkspace} from "@/components/study-workspace";
+export default function ReadingPage(){return <StudyWorkspace initialPage="reading"/>;}

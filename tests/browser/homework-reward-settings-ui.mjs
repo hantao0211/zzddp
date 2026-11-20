@@ -22,6 +22,7 @@ try {
    amount = data.dailyPoints; return send({ dailyPoints: amount });
   }
   if (path.endsWith('/memories')) return send({ items: [] });
+  if (path.endsWith('/learning/state')) return send({ date: new URL(route.request().url()).searchParams.get('date'), status: 'empty', report: null, uploads: [], dates: [], pending: false });
   throw Error('Unexpected mock API: ' + path);
  });
  await page.goto(base + '/reading/?view=manage', { waitUntil: 'networkidle' });

@@ -12,6 +12,7 @@ import { makeDemoState, mistakes, subjects, summarize } from "@/domain/demo";
 import { BrowserDemoGateway } from "@/services/browser-gateway";
 import { createMaterialId } from "@/services/material-id";
 import { HomeworkApp } from "@/components/homework-app";
+import { useStudyNavigation } from "./study-navigation";
 import { StudyAssistant } from "@/components/study-assistant";
 
 type View = "today" | "archive" | "mistakes" | "growth" | "family";
@@ -37,10 +38,12 @@ function Seedling() {
   return <svg className="seedling" viewBox="0 0 240 180" aria-hidden="true"><ellipse cx="128" cy="158" rx="72" ry="12" fill="#e7d4dd" /><path d="M102 108h63l-10 45h-43z" fill="#c59da9" /><path d="M99 108h69v12H99z" fill="#d8b5c0" /><path d="M133 108V54" stroke="#627968" strokeWidth="5" strokeLinecap="round" /><path d="M132 87C91 87 85 59 88 41c26 2 46 18 44 46" fill="#93a796" /><path d="M134 70c1-35 27-49 49-43 1 26-17 46-49 43" fill="#748d7b" /><path d="M130 52c-16-4-23-18-19-30 17 1 26 12 19 30" fill="#b0bfae" /><path d="M179 99l4-10m-9 5 12 2" stroke="#c5aa99" strokeWidth="3" strokeLinecap="round" /><circle cx="69" cy="99" r="4" fill="#c5aa99" /><path d="M67 45l3-10m-7 4 10 2" stroke="#c5aa99" strokeWidth="2" strokeLinecap="round" /></svg>;
 }
 
-export function LearningApp() {
+export function LearningApp({active=true,onDemoModeChange}:{active?:boolean;onDemoModeChange?:(demo:boolean)=>void}={}) {
+  const workspace=useStudyNavigation();
   const [demo, setDemo] = useState(false);
   const [studyDate, setStudyDate] = useState("");
-  return <>{demo ? <><div className="hw-demo-return"><button className="button primary" onClick={() => setDemo(false)}>返回真实作业空间</button><span>以下为示例体验及本浏览器旧记录</span></div><PrototypeApp /></> : <HomeworkApp onDemo={() => setDemo(true)} onDateChange={setStudyDate} />}<StudyAssistant studyDate={studyDate || undefined} navigationManaged={!demo} /></>;
+  useEffect(()=>{onDemoModeChange?.(active&&demo);},[active,demo,onDemoModeChange]);
+  return <>{demo ? <><div className="hw-demo-return"><button className="button primary" onClick={() => setDemo(false)}>返回真实作业空间</button><span>以下为示例体验及本浏览器旧记录</span></div><PrototypeApp /></> : <HomeworkApp active={active} onDemo={() => setDemo(true)} onDateChange={setStudyDate} />}{!workspace&&<StudyAssistant studyDate={studyDate || undefined} navigationManaged={!demo} />}</>;
 }
 
 function PrototypeApp() {

@@ -6,6 +6,7 @@ import { shanghaiDay } from "@/domain/homework";
 import { reviewActivityLabel, needsReviewTraceUpdate } from "@/domain/review-policy";
 import { taskGradingLabel } from "@/domain/grading";
 import { GradingPanel, MistakeBook } from "./grading-panel";
+import { useStudyNavigation } from "./study-navigation";
 import { StudyShell } from "./study-shell";
 import { HomeCompanion } from "./study-companion";
 import { FamilyNotes } from "./family-notes";
@@ -30,12 +31,15 @@ function Dialog({ title, close, children }: { title: string; close: () => void; 
 }
 function errorText(error: unknown) { return error instanceof Error ? error.message : "操作暂未完成，请稍后重试。"; }
 
-export function HomeworkApp({ onDemo, onDateChange }: { onDemo: () => void; onDateChange?: (date: string) => void }) {
+export function HomeworkApp({ onDemo, onDateChange, active=true }: { onDemo: () => void; onDateChange?: (date: string) => void; active?:boolean }) {
+  const workspace=useStudyNavigation();
+  const activeRef=useRef(active);activeRef.current=active;
+  const [dateReady,setDateReady]=useState(false);
   const [date, setDate] = useState(shanghaiDay);
   const { viewer, accounts } = useViewer();
   const canManage = !accounts || isParent(viewer);
-  useEffect(() => { const value = new URLSearchParams(location.search).get("studyDate"); if (value && /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(value))) setDate(value); }, []);
-  useEffect(() => { onDateChange?.(date); }, [date, onDateChange]);
+  useEffect(() => { const update=()=>{const value = new URLSearchParams(location.search).get("studyDate"); if (value && /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(value))) setDate(value);setDateReady(true);};update();window.addEventListener("popstate",update);return()=>window.removeEventListener("popstate",update); }, []);
+  useEffect(() => { if(!dateReady)return;onDateChange?.(date);workspace?.setDate(date); }, [date, dateReady, onDateChange, workspace?.setDate]);
   const [savedSnapshot, setSnapshot] = useState<HomeworkSnapshot | null>(null);
   const [auth, setAuth] = useState<"loading" | "locked" | "ready" | "insecure">("loading");
   const [code, setCode] = useState("");
@@ -53,10 +57,12 @@ export function HomeworkApp({ onDemo, onDateChange }: { onDemo: () => void; onDa
   useEffect(() => { setMemoEdit(null); setRowStatus(null); setUndoEdit(null); }, [date, viewer?.id]);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [legacy, setLegacy] = useState(false);
-  const requestId = useRef(0);
-  const refresh = useCallback(async () => {
+  const requestId = useRef(0), pendingReads=useRef(0), previousActive=useRef(active);
+  const refresh = useCallback(async (background=false) => {
+    if(background&&pendingReads.current)return;
     const id = ++requestId.current;
     if (location.protocol !== "https:") { setAuth("insecure"); return; }
+    pendingReads.current++;
     try {
       const result = await getHomework(date);
       if (id !== requestId.current) return;
@@ -65,9 +71,10 @@ export function HomeworkApp({ onDemo, onDateChange }: { onDemo: () => void; onDa
       if (id !== requestId.current) return;
       if (e instanceof HomeworkRequestError && e.status === 401) { setAuth("locked"); setSnapshot(null); }
       else setError(errorText(e));
-    }
+    } finally {pendingReads.current--;}
   }, [date]);
-  useEffect(() => { setSnapshot(null); void refresh(); const timer = setInterval(() => { if (!document.hidden) void refresh(); }, 4000); const focus = () => { void refresh(); }; window.addEventListener("focus", focus); window.addEventListener("xiaobu:homework-updated", focus); window.addEventListener("xiaobu:session-changed", focus); return () => { clearInterval(timer); window.removeEventListener("focus", focus); window.removeEventListener("xiaobu:homework-updated", focus); window.removeEventListener("xiaobu:session-changed", focus); requestId.current++; }; }, [refresh]);
+  useEffect(() => { setSnapshot(null); void refresh(); const timer = setInterval(() => { if (activeRef.current && !document.hidden) void refresh(true); }, 4000); const focus = () => { if(activeRef.current)void refresh(true); }; window.addEventListener("focus", focus); window.addEventListener("xiaobu:homework-updated", focus); window.addEventListener("xiaobu:session-changed", focus); return () => { clearInterval(timer); window.removeEventListener("focus", focus); window.removeEventListener("xiaobu:homework-updated", focus); window.removeEventListener("xiaobu:session-changed", focus); requestId.current++; }; }, [refresh]);
+  useEffect(()=>{if(active&&!previousActive.current)void refresh(true);previousActive.current=active;},[active,refresh]);
   useEffect(() => { if (!notice) return; const timer = setTimeout(() => setNotice(""), 8000); return () => clearTimeout(timer); }, [notice]);
   async function login(e: React.FormEvent) {
     e.preventDefault(); setBusy(true); setError("");
