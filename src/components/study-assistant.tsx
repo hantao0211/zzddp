@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { CalendarDays, Check, Copy, Download, LoaderCircle, LockKeyhole, LogOut, MessageCircle, Mic, MoreHorizontal, Send, Sparkles, Square, Trash2, Volume2, X } from "lucide-react";
 import type { ClarificationReceipt, HomeworkChatContext } from "@/domain/clarifications";
 import { FamilyNotes } from "./family-notes";
@@ -23,7 +24,7 @@ async function request(path: string, init: RequestInit = {}) {
 const formatLabel = { written: "书面", oral: "口头", reading: "朗读或阅读", other: "其他" };
 const json = (value: unknown) => ({ headers: { "Content-Type": "application/json" }, body: JSON.stringify(value) });
 
-export function StudyAssistant({ studyDate }: { studyDate?: string } = {}) {
+export function StudyAssistant({ studyDate, launcherTarget }: { studyDate?: string; launcherTarget?: HTMLElement | null } = {}) {
   const [open, setOpen] = useState(false);
   const { viewer, accounts } = useViewer();
   const [toolsOpen, setToolsOpen] = useState(false);
@@ -254,8 +255,9 @@ export function StudyAssistant({ studyDate }: { studyDate?: string } = {}) {
   }
   stopRecordingRef.current = () => { void endRecording(); };
 
+  const launcher = <button className="assistant-launcher" onClick={() => setOpen(true)} aria-haspopup="dialog"><MessageCircle size={22} /><span>小助手</span></button>;
   return <>
-    <button className="assistant-launcher" onClick={() => setOpen(true)} aria-haspopup="dialog"><MessageCircle size={22} /><span>小助手</span></button>
+    {launcherTarget ? createPortal(launcher, launcherTarget) : launcher}
     {open && <dialog className="assistant-dialog" ref={dialog} aria-labelledby="assistant-title" onCancel={(event) => { event.preventDefault(); if (toolsOpen) setToolsOpen(false); else close(); }} onClick={(event) => { if (event.target === dialog.current) close(); }}>
       <header className="assistant-header"><span className="assistant-avatar"><Sparkles size={24} /></span><div><h2 id="assistant-title">小步学习小助手</h2><p>有问题，就来问小步。</p></div><div className="assistant-header-actions">{status === "ready" && <button className="icon-button" onClick={() => setToolsOpen(!toolsOpen)} aria-label={toolsOpen ? "收起更多" : "更多功能"} aria-expanded={toolsOpen} aria-controls="assistant-settings"><MoreHorizontal size={23} /></button>}<button className="icon-button" onClick={close} aria-label="关闭小助手"><X size={23} /></button></div></header>
       {status === "checking" ? <div className="assistant-welcome" role="status"><LoaderCircle className="spin" /> 正在连接小助手…</div> : status === "insecure" ? <div className="assistant-welcome"><LockKeyhole size={32} /><h3>从安全地址打开吧</h3><p>小助手和麦克风需要安全连接。</p><a className="button primary" href="https://14.103.24.55/?assistant=1">打开 HTTPS 小助手</a></div> : status === "offline" ? <div className="assistant-welcome"><MessageCircle size={32} /><h3>暂时没有连接上</h3><p>{error}</p><button className="button primary" onClick={() => void check()}>重新连接</button></div> : status === "locked" ? accounts ? <div className="assistant-welcome"><h3>登录学习账号</h3><AccountLogin legacy onSignedIn={() => void check()} /><a href="/admin/">家长登录与管理</a></div> : <form className="assistant-welcome" onSubmit={login}><LockKeyhole size={32} /><h3>打开家里的小助手</h3><p>第一次使用，请输入家长提供的家庭访问码。<br />这台设备会记住登录状态。</p><label>家庭访问码<input type="password" inputMode="numeric" pattern="[0-9]{8}" maxLength={8} minLength={8} autoComplete="one-time-code" required value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, ""))} placeholder="8位数字" /></label>{error && <p className="form-error" role="alert">{error}</p>}<button className="button primary" disabled={!!pending}>{pending ? <LoaderCircle size={18} className="spin" /> : <Check size={18} />}打开小助手</button></form> : <>

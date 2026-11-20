@@ -40,7 +40,8 @@ function Seedling() {
 export function LearningApp() {
   const [demo, setDemo] = useState(false);
   const [studyDate, setStudyDate] = useState("");
-  return <>{demo ? <><div className="hw-demo-return"><button className="button primary" onClick={() => setDemo(false)}>返回真实作业空间</button><span>以下为示例体验及本浏览器旧记录</span></div><PrototypeApp /></> : <HomeworkApp onDemo={() => setDemo(true)} onDateChange={setStudyDate} />}<StudyAssistant studyDate={studyDate || undefined} /></>;
+  const [assistantTarget, setAssistantTarget] = useState<HTMLDivElement | null>(null);
+  return <>{demo ? <><div className="hw-demo-return"><button className="button primary" onClick={() => setDemo(false)}>返回真实作业空间</button><span>以下为示例体验及本浏览器旧记录</span></div><PrototypeApp /></> : <HomeworkApp onDemo={() => setDemo(true)} onDateChange={setStudyDate} onAssistantTarget={setAssistantTarget} />}<StudyAssistant studyDate={studyDate || undefined} launcherTarget={assistantTarget} /></>;
 }
 
 function PrototypeApp() {
