@@ -21,13 +21,13 @@ try{
  page.on('pageerror',e=>errors.push(e.message));page.on('dialog',d=>d.accept());
  await page.goto(base+'/admin/',{waitUntil:'networkidle'});
  await page.getByLabel('一次性开通码',{exact:true}).fill(setupCode);
- await page.getByLabel('家长登录名',{exact:true}).fill('admin');await page.getByLabel('称呼',{exact:true}).fill('模拟管理员');await page.getByLabel('设置密码（至少8位）',{exact:true}).fill(password);
+ await page.getByLabel('家长登录名',{exact:true}).fill('aa');await page.getByLabel('称呼',{exact:true}).fill('模拟管理员');await page.getByLabel('设置密码（至少8位）',{exact:true}).fill(password);
  await page.getByRole('button',{name:'建立家长管理员账号',exact:true}).click();
  await page.getByRole('navigation',{name:'家长管理导航'}).waitFor();
  assert.equal((await api.post(base+'/assistant-api/parent-setup',{headers:{Origin:base},data:{setupCode,username:'repeat',name:'模拟',password}})).status(),409);
  await page.getByRole('button',{name:'家庭账号',exact:true}).click();
  async function create(username,name,role){const form=page.locator('.admin-create');await form.getByLabel('登录名',{exact:true}).fill(username);await form.getByLabel('称呼',{exact:true}).fill(name);await form.getByLabel('密码',{exact:true}).fill(password);await form.getByLabel('角色',{exact:true}).selectOption(role);await form.getByRole('button',{name:'建立账号',exact:true}).click();await page.getByRole('form',{name:'编辑账号 '+username,exact:true}).waitFor();}
- await create('child','模拟孩子','child');await create('parent','模拟家长','parent');
+ await create('child','模拟孩子','child');await create('pp','模拟家长','parent');
  const legacy=await browser.newContext(),legacyPage=await legacy.newPage();await legacyPage.goto(base+'/admin/',{waitUntil:'networkidle'});const legacyApi=requests(legacyPage);
  const old=await legacyApi.post(base+'/assistant-api/session',{headers:{Origin:base},data:{code:'81746290'}});assert.equal(old.status(),200);
  assert.equal((await legacyApi.get(base+'/assistant-api/admin/overview')).status(),403);
@@ -40,8 +40,17 @@ try{
  for(const width of [320,390,768,1280]){await page.setViewportSize({width,height:844});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'Management must fit narrow screens');}
  await page.setViewportSize({width:390,height:844});await page.screenshot({path:output+'/parent-settings-mobile.png',fullPage:true});
  await page.getByRole('button',{name:'退出账号',exact:true}).click();
- async function login(username){await page.getByLabel('登录名',{exact:true}).fill(username);await page.getByLabel('密码',{exact:true}).fill(password);await page.getByRole('button',{name:'登录',exact:true}).click();}
- await login('parent');await page.getByRole('navigation',{name:'家长管理导航'}).waitFor();assert.equal(await page.getByRole('button',{name:'家庭账号',exact:true}).count(),0);assert.equal((await api.get(base+'/assistant-api/admin/accounts')).status(),403);
+ async function login(username,pass=password){await page.getByLabel('登录名',{exact:true}).fill(username);await page.getByLabel('密码',{exact:true}).fill(pass);await page.getByRole('button',{name:'登录',exact:true}).click();}
+ await login('pp');await page.getByRole('navigation',{name:'家长管理导航'}).waitFor();assert.equal(await page.getByRole('button',{name:'家庭账号',exact:true}).count(),0);assert.equal((await api.get(base+'/assistant-api/admin/accounts')).status(),403);
+ await page.getByRole('button',{name:'修改密码',exact:true}).click();
+ const nextPassword='Changed-synthetic-2026';
+ await page.getByLabel('当前密码',{exact:true}).fill(password);await page.getByLabel('新密码',{exact:true}).fill(nextPassword);await page.getByLabel('再次输入新密码',{exact:true}).fill('Mismatch-synthetic-2026');
+ await page.getByRole('button',{name:'保存新密码',exact:true}).click();await page.getByText('两次新密码不一致，请检查。',{exact:true}).waitFor();
+ await page.getByLabel('再次输入新密码',{exact:true}).fill(nextPassword);
+ for(const width of [320,390,768,1280]){await page.setViewportSize({width,height:844});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'Password form must fit narrow screens');}
+ await page.getByRole('button',{name:'保存新密码',exact:true}).click();await page.getByRole('heading',{name:'家长登录',exact:true}).waitFor();
+ assert.equal((await api.post(base+'/assistant-api/session',{data:{username:'pp',password}})).status(),401);
+ await login('pp',nextPassword);await page.getByRole('navigation',{name:'家长管理导航'}).waitFor();
  await page.getByRole('button',{name:'退出账号',exact:true}).click();await login('child');await page.getByRole('heading',{name:'这里需要家长账号',exact:true}).waitFor();assert.equal((await api.get(base+'/assistant-api/admin/overview')).status(),403);
  await page.goto(base+'/',{waitUntil:'networkidle'});await page.getByRole('button',{name:'拍备忘录',exact:false}).waitFor();assert.equal(await page.getByRole('link',{name:'家长管理',exact:true}).count(),0);
  await page.screenshot({path:output+'/child-home-mobile.png',fullPage:true});

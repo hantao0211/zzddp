@@ -3,13 +3,21 @@ import type { Accounts } from "./accounts";
 import type { AssistantStore } from "./store";
 import type { HomeworkConversation } from "../homework/conversation";
 import { HomeworkError } from "../homework/store";
-import { CreateAccountSchema, UpdateAccountSchema, LimitsSchema, isParent, type Viewer } from "../../domain/accounts";
+import { CreateAccountSchema, UpdateAccountSchema, ChangePasswordSchema, LimitsSchema, isParent, type Viewer } from "../../domain/accounts";
 import { z } from "zod";
 const json = (response: ServerResponse, value: unknown) => { response.writeHead(200, { "Content-Type": "application/json; charset=utf-8" }); response.end(JSON.stringify(value)); };
 export class AdminHTTP {
   constructor(private accounts: Accounts, private sessions: AssistantStore, private learning?: HomeworkConversation, private serviceInfo?: { provider: string; model: string }) {}
   async handle(request: IncomingMessage, response: ServerResponse, path: string, viewer: Viewer, body: () => Promise<unknown>) {
     if (!isParent(viewer)) throw new HomeworkError(403, "这是家长管理功能，请使用家长账号登录。");
+    if (path === "/assistant-api/admin/password" && request.method === "PATCH") {
+      this.sessions.loginAttempt(String(request.headers["x-real-ip"] || request.socket.remoteAddress));
+      const parsed = ChangePasswordSchema.safeParse(await body());
+      if (!parsed.success) throw new HomeworkError(400, "请填写当前密码和至少8位的新密码。");
+      await this.accounts.changePassword(viewer.id, parsed.data.currentPassword, parsed.data.password);
+      this.sessions.revokeUser(viewer.id);
+      json(response, { updated: true, signInAgain: true }); return;
+    }
     if (path === "/assistant-api/admin/overview" && request.method === "GET") {
       const store = this.learning?.store;
       const days = store ? (store.db.prepare("SELECT date,status,note,report FROM days ORDER BY date DESC LIMIT 60").all() as { date: string; status: string; note: string; report: string | null }[]).map(d => {
@@ -25,7 +33,7 @@ export class AdminHTTP {
     if (viewer.role !== "admin") throw new HomeworkError(403, "只有家庭管理员可以管理账号和额度。");
     if (path === "/assistant-api/admin/accounts" && request.method === "GET") { json(response, { items: this.accounts.list() }); return; }
     if (path === "/assistant-api/admin/accounts" && request.method === "POST") {
-      const parsed = CreateAccountSchema.safeParse(await body()); if (!parsed.success) throw new HomeworkError(400, "登录名为3—32位英文或数字，密码至少8位，请检查称呼和角色。");
+      const parsed = CreateAccountSchema.safeParse(await body()); if (!parsed.success) throw new HomeworkError(400, "登录名为2—32位英文或数字，密码至少8位，请检查称呼和角色。");
       json(response, await this.accounts.create(parsed.data, viewer.id)); return;
     }
     const member = path.match(/^\/assistant-api\/admin\/accounts\/([a-f0-9-]{36})$/);

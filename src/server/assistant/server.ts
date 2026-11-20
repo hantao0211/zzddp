@@ -75,7 +75,7 @@ export function createAssistantServer(options: Options) {
           if (path === "/assistant-api/parent-setup") {
             if (!options.accounts) throw new HttpError(404, "家长管理尚未启用。");
             const parsed = BootstrapSchema.safeParse(value);
-            if (!parsed.success) throw new HttpError(400, "请填写家长开通码、3—32位英文或数字登录名，以及至少8位密码。");
+            if (!parsed.success) throw new HttpError(400, "请填写家长开通码、2—32位英文或数字登录名，以及至少8位密码。");
             beginSession(await options.accounts.bootstrap(parsed.data)); return;
           }
           const account = AccountLoginSchema.safeParse(value);

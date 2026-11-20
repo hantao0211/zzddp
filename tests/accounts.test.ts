@@ -131,3 +131,32 @@ test("racing first-admin requests consume setup once and leave no open transacti
     assert.equal(existsSync(join(f.directory, "parent-setup-code")), false);
   } finally { await f.cleanup(); }
 });
+
+test("two-character accounts can sign in, and parents change only their own password with current credentials", async () => {
+  const f = await fixture(); try {
+    const admin = await f.send("parent-setup", "POST", { setupCode: f.setupCode, username: "ab", name: "模拟管理员", password });
+    assert.equal(admin.status, 200);
+    assert.equal((await f.login("AB")).status, 200);
+    assert.equal((await f.send("admin/accounts", "POST", { username: "x", name: "模拟", role: "parent", password }, admin.cookie)).status, 400);
+    const member = await f.send("admin/accounts", "POST", { username: "cd", name: "模拟家长", role: "parent", password }, admin.cookie);
+    assert.equal(member.status, 200);
+    const parent = await f.login("CD"), another = await f.login("cd");
+    const nextPassword = "new-synthetic-password";
+    const change = { currentPassword: password, password: nextPassword };
+    assert.equal((await f.send("admin/password", "PATCH", change)).status, 401);
+    assert.equal((await f.send("admin/password", "PATCH", change, parent.cookie, { Origin: "https://other.test" })).status, 403);
+    assert.equal((await f.send("admin/password", "PATCH", { ...change, id: admin.data.viewer.id }, parent.cookie)).status, 400);
+    assert.equal((await f.send("admin/password", "PATCH", { ...change, currentPassword: "incorrect-password" }, parent.cookie)).status, 401);
+    assert.equal((await f.send("status", "GET", undefined, parent.cookie)).data.authenticated, true);
+    assert.equal((await f.send("admin/password", "PATCH", change, parent.cookie)).status, 200);
+    for (const cookie of [parent.cookie, another.cookie]) assert.equal((await f.send("status", "GET", undefined, cookie)).data.authenticated, false);
+    assert.equal((await f.login("cd")).status, 401);
+    const fresh = await f.login("cd", nextPassword); assert.equal(fresh.status, 200);
+    assert.equal(fresh.data.viewer.role, "parent");
+    assert.equal((await f.send("admin/accounts", "GET", undefined, fresh.cookie)).status, 403);
+    assert.equal((await f.send("admin/accounts", "GET", undefined, admin.cookie)).status, 200);
+    assert.equal((await f.login("ab")).status, 200);
+    assert.equal(f.accounts.db.prepare("SELECT COUNT(*) AS n FROM account_audit WHERE action='change-own-password'").get()!.n, 1);
+    assert.equal(f.calls(), 0);
+  } finally { await f.cleanup(); }
+});

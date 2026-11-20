@@ -67,6 +67,17 @@ export class Accounts {
     return user;
   }
   async create(value: unknown, actor: string) { const input = CreateAccountSchema.parse(value), hash = await passwordHash(input.password); return this.insert(input, hash, actor); }
+  async changePassword(id: string, currentPassword: string, password: string) {
+    const current = this.db.prepare("SELECT * FROM accounts WHERE id=? AND active=1").get(id) as UserRow | undefined;
+    if (!current || !(await this.login(current.username, currentPassword))) throw new HomeworkError(401, "当前密码不正确，请重新输入。");
+    const hash = await passwordHash(password);
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      const result = this.db.prepare("UPDATE accounts SET password_hash=?,updated_at=? WHERE id=? AND active=1 AND password_hash=?").run(hash, new Date(this.now()).toISOString(), id, current.password_hash);
+      if (result.changes !== 1) throw new HomeworkError(409, "账号刚刚发生变化，请重新登录后再修改密码。");
+      this.audit(id, "change-own-password", id); this.db.exec("COMMIT");
+    } catch (e) { this.db.exec("ROLLBACK"); throw e; }
+  }
   async update(id: string, value: unknown, actor: string) {
     const input = UpdateAccountSchema.parse(value), hash = input.password ? await passwordHash(input.password) : undefined;
     this.db.exec("BEGIN IMMEDIATE");
