@@ -192,6 +192,7 @@ export class HomeworkWorker {
         if (!task) throw new AIServiceError("UNKNOWN_MATCH_TASK", true, "关联引用了清单以外的作业。");
         if (seen.has(m.taskId)) throw new AIServiceError("DUPLICATE_MATCH", true, "作业关联重复，正在重新整理。");
         seen.add(m.taskId); validateEvidence(m.evidence, pages);
+        if(m.evidence.some(e=>{const p=observed.find(p=>p.fileId===e.fileId);return p?.subject&&p.subject!==task.subject;}))throw new AIServiceError("SUBJECT_EVIDENCE_MISMATCH",true,"作业证据与科目不一致，正在重新整理。");
         // Contradictory completeness is a review outcome, not a reason to retry the whole day.
         if(m.coverage==="complete"&&(task.format==="oral"||task.format==="reading")&&!task.reviewActivity){
           m.coverage="uncertain";m.missing=[...new Set([...m.missing,"已收到相关照片；这一项的要求暂不足以判断材料是否齐全，先保留对应内容。"])];

@@ -122,3 +122,16 @@ test("a claimed complete oral task is retained as uncertain rather than causing 
   assert.equal(snapshot.report!.tasks.find(t=>t.subject==="英语")!.coverage,"uncertain");assert.equal(f.calls.length,1);
  }finally{f.cleanup();}
 });
+
+
+test("a contradictory completeness flag cannot turn another subject's page into partial evidence",async()=>{
+ const f=fixture();try{
+  f.seed("memo",null,"memo");const math=f.seed("homework","数学","math");f.seed("homework",null,"unknown");
+  const run=f.ai.run.bind(f.ai);f.ai.run=async<T>(task:AITask,schema:z.ZodType<T>,input:unknown,images:AIImage[]=[])=>{
+    const result=await run(task,schema,input,images) as any;
+    result.matches.push({taskId:(input as any).candidates.find((t:any)=>t.subject==="英语").id,coverage:"complete",missing:["缺少另一页"],evidence:[{fileId:math.pageId,page:1,excerpt:"错误科目的页面"}]});
+    return schema.parse(result);
+  };
+  await f.worker().tick();assert.equal(f.store.snapshot(date).report,null);assert.equal(f.store.snapshot(date).status,"retrying");
+ }finally{f.cleanup();}
+});
