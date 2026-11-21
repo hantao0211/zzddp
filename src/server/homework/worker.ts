@@ -189,8 +189,16 @@ export class HomeworkWorker {
         const seen = new Set<string>();
         for (const m of value.matches) {
         const task = tasks.find((t) => t.id === m.taskId);
-        if (!task || seen.has(m.taskId) || !value.subjects.includes(task.subject) || (m.coverage === "complete" && (task.format === "oral" || task.format === "reading") && !task.reviewActivity) || (m.coverage === "complete" && m.missing.length)) throw new AIServiceError("INVALID_MATCH", true, "作业关联未通过检查。");
+        if (!task) throw new AIServiceError("UNKNOWN_MATCH_TASK", true, "关联引用了清单以外的作业。");
+        if (seen.has(m.taskId)) throw new AIServiceError("DUPLICATE_MATCH", true, "作业关联重复，正在重新整理。");
         seen.add(m.taskId); validateEvidence(m.evidence, pages);
+        // Contradictory completeness is a review outcome, not a reason to retry the whole day.
+        if(m.coverage==="complete"&&(task.format==="oral"||task.format==="reading")&&!task.reviewActivity){
+          m.coverage="uncertain";m.missing=[...new Set([...m.missing,"已收到相关照片；这一项的要求暂不足以判断材料是否齐全，先保留对应内容。"])];
+        }else if(m.coverage==="complete"&&m.missing.length)m.coverage="partial";
+        // Subjects are already known from validated candidates/pages; an omitted summary label
+        // must not invalidate otherwise correctly cited evidence.
+        if(!value.subjects.includes(task.subject))value.subjects.push(task.subject);
         if (m.coverage === "complete" && !m.evidence.length) throw new AIServiceError("MISSING_EVIDENCE", true, "材料齐全必须有对应页面。 ");
         if (m.coverage === "complete" && m.evidence.some((e) => { const p = observed.find((p) => p.fileId === e.fileId); return !p?.readable || p.subject !== task.subject; })) throw new AIServiceError("UNREADABLE_MATCH", true, "看不清的页面不能认定材料齐全。");
         }

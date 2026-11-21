@@ -98,3 +98,27 @@ test("supplemental pages inspect only changed written work and keep other subjec
   assert.deepEqual(f.store.snapshot(date).report!.tasks.find(t=>t.subject==="语文"),before);
  }finally{f.cleanup();}
 });
+
+
+test("contradictory completeness and an omitted subject label remain conservative without retrying the whole day",async()=>{
+ const f=fixture();try{
+  f.seed("memo",null,"memo");f.seed("homework","数学","math");f.seed("homework","英语","english");
+  const run=f.ai.run.bind(f.ai);f.ai.run=async<T>(task:AITask,schema:z.ZodType<T>,input:unknown,images:AIImage[]=[])=>{
+    const result=await run(task,schema,input,images) as any;
+    if((input as any).candidates[0].subject==="英语"){result.subjects=[];result.matches[0].missing=["缺少第2页"];}
+    return schema.parse(result);
+  };
+  await f.drain();const snapshot=f.store.snapshot(date);assert.equal(snapshot.pending,false);assert.equal(snapshot.status,"processed");
+  assert.equal(snapshot.report!.tasks.find(t=>t.subject==="数学")!.coverage,"complete");assert.equal(snapshot.report!.tasks.find(t=>t.subject==="英语")!.coverage,"partial");
+  assert.equal(f.calls.length,2);
+ }finally{f.cleanup();}
+});
+test("a claimed complete oral task is retained as uncertain rather than causing a retry or false completion",async()=>{
+ const f=fixture();try{
+  const memo=f.seed("memo",null,"memo");f.seed("homework","英语","english");
+  const value=JSON.parse(f.store.upload(memo.uploadId)!.result!);value.assignments.find((a:any)=>a.subject==="英语").format="oral";
+  f.store.db.prepare("UPDATE uploads SET result=? WHERE id=?").run(JSON.stringify(value),memo.uploadId);
+  await f.drain();const snapshot=f.store.snapshot(date);assert.equal(snapshot.pending,false);assert.equal(snapshot.status,"processed");
+  assert.equal(snapshot.report!.tasks.find(t=>t.subject==="英语")!.coverage,"uncertain");assert.equal(f.calls.length,1);
+ }finally{f.cleanup();}
+});
