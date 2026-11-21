@@ -1,3 +1,4 @@
+import { DEFAULT_HOMEWORK_DAILY_CALLS, HomeworkQuotaSettingsSchema, type HomeworkQuota } from "../../domain/homework-quota";
 import { currentUploadTarget, readUploadTarget, resolveUploadTarget } from "./upload-target";
 import { GradingStore } from "./grading-store";
 import { needsWrittenCompletionUpdate } from "../../domain/written-completion";
@@ -24,6 +25,7 @@ export class HomeworkStore {
     this.db = new DatabaseSync(join(directory, "homework.sqlite"));
     const version = (this.db.prepare("PRAGMA user_version").get() as { user_version: number }).user_version;
     if (version !== 0 && version !== 1) throw new Error("Unsupported homework database version");
+    const hasQuotaWaits = !!this.db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='homework_quota_waits'").get();
     this.db.exec(`PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;
       CREATE TABLE IF NOT EXISTS uploads (id TEXT PRIMARY KEY, fingerprint TEXT UNIQUE NOT NULL, date TEXT NOT NULL, kind TEXT NOT NULL, created_at TEXT NOT NULL, status TEXT NOT NULL, note TEXT NOT NULL DEFAULT '', result TEXT, subjects TEXT NOT NULL DEFAULT '[]', ai_ms INTEGER NOT NULL DEFAULT 0);
       CREATE TABLE IF NOT EXISTS files (id TEXT PRIMARY KEY, upload_id TEXT NOT NULL REFERENCES uploads(id), name TEXT NOT NULL, size INTEGER NOT NULL, sha256 TEXT NOT NULL, stored INTEGER NOT NULL DEFAULT 0, mime TEXT);
@@ -37,12 +39,16 @@ export class HomeworkStore {
       CREATE INDEX IF NOT EXISTS learned_memory_status ON learned_memories(status,kind,trigger_key);
       CREATE TABLE IF NOT EXISTS upload_targets (upload_id TEXT PRIMARY KEY REFERENCES uploads(id), payload TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS analysis_cache (key TEXT PRIMARY KEY, result TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS homework_quota_waits (job_id INTEGER PRIMARY KEY REFERENCES jobs(id));
+      CREATE TABLE IF NOT EXISTS homework_quota (id INTEGER PRIMARY KEY CHECK(id=1), daily_calls INTEGER NOT NULL CHECK(daily_calls BETWEEN 1 AND 5000), updated_by TEXT NOT NULL, updated_at TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS budget (day TEXT PRIMARY KEY, calls INTEGER NOT NULL DEFAULT 0, batches INTEGER NOT NULL DEFAULT 0, bytes INTEGER NOT NULL DEFAULT 0);
       CREATE INDEX IF NOT EXISTS jobs_queue ON jobs(status,next_at,id); CREATE INDEX IF NOT EXISTS uploads_date ON uploads(date);
       PRAGMA user_version=1;`);
     this.grading = new GradingStore(this);
     // Restart recovers interrupted work, without erasing attempts, quotas or originals.
     this.db.exec("UPDATE jobs SET status='queued' WHERE status='running'; UPDATE uploads SET status='queued', note='后台已恢复，等待继续整理。' WHERE status IN ('converting','recognizing');");
+    if (!hasQuotaWaits) this.db.prepare("INSERT OR IGNORE INTO homework_quota_waits(job_id) SELECT id FROM jobs WHERE status='queued' AND next_at%86400000=57600000 AND (date IN (SELECT date FROM days WHERE note=?) OR upload_id IN (SELECT id FROM uploads WHERE note=?))").run("今天的AI整理限额已到，原件已保存，明天自动继续。", "今天的AI整理限额已到，原件已保存，明天自动继续。");
+    this.resumeQuotaWork();
   }
   transaction<T>(fn: () => T): T { this.db.exec("BEGIN IMMEDIATE"); try { const result = fn(); this.db.exec("COMMIT"); return result; } catch (e) { this.db.exec("ROLLBACK"); throw e; } }
   upload(id: string) { return this.db.prepare("SELECT * FROM uploads WHERE id=?").get(id) as UploadRow | undefined; }
@@ -125,6 +131,7 @@ export class HomeworkStore {
       const job = this.db.prepare("SELECT * FROM jobs WHERE status='queued' AND next_at<=? ORDER BY CASE kind WHEN 'recognize' THEN 0 ELSE 1 END,id LIMIT 1").get(this.now()) as Job | undefined;
       if (!job) return;
       this.db.prepare("UPDATE jobs SET status='running', attempts=attempts+1 WHERE id=?").run(job.id);
+      this.db.prepare("DELETE FROM homework_quota_waits WHERE job_id=?").run(job.id);
       return { ...job, attempts: job.attempts + 1 };
     });
   }
@@ -136,14 +143,44 @@ export class HomeworkStore {
       this.done(job);
     });
   }
+  dailyCallLimit() {
+    const row = this.db.prepare("SELECT daily_calls FROM homework_quota WHERE id=1").get() as { daily_calls: number } | undefined;
+    return row ? HomeworkQuotaSettingsSchema.parse({ dailyCalls: row.daily_calls }).dailyCalls : DEFAULT_HOMEWORK_DAILY_CALLS;
+  }
+  quota(): HomeworkQuota {
+    const day = shanghaiDay(this.now());
+    const usage = this.db.prepare("SELECT calls FROM budget WHERE day=?").get(day) as { calls: number } | undefined;
+    return { day, calls: usage?.calls || 0, limit: this.dailyCallLimit() };
+  }
+  setQuota(value: unknown, actor: string) {
+    const settings = HomeworkQuotaSettingsSchema.parse(value);
+    return this.transaction(() => {
+      this.db.prepare("INSERT INTO homework_quota(id,daily_calls,updated_by,updated_at) VALUES(1,?,?,?) ON CONFLICT(id) DO UPDATE SET daily_calls=excluded.daily_calls,updated_by=excluded.updated_by,updated_at=excluded.updated_at").run(settings.dailyCalls, actor, new Date(this.now()).toISOString());
+      this.resumeQuotaWork();
+      return this.quota();
+    });
+  }
+  private resumeQuotaWork() {
+    const quota = this.quota();
+    if (quota.calls >= quota.limit) return;
+    // Wake quota waits only. Network backoff and exhausted failure retries remain intact.
+    const reason = "今天的AI整理限额已到，原件已保存，明天自动继续。";
+    this.db.prepare("UPDATE jobs SET next_at=0 WHERE status='queued' AND id IN (SELECT job_id FROM homework_quota_waits)").run();
+    this.db.prepare("UPDATE uploads SET status='queued',note='额度已可用，等待继续整理。' WHERE status='retrying' AND note=? AND id IN (SELECT upload_id FROM jobs WHERE status='queued' AND next_at=0)").run(reason);
+    this.db.prepare("UPDATE days SET status='queued',note='额度已可用，正在继续整理。' WHERE status='retrying' AND note=? AND date IN (SELECT date FROM jobs WHERE status='queued' AND next_at=0)").run(reason);
+    this.db.prepare("DELETE FROM homework_quota_waits WHERE job_id IN (SELECT id FROM jobs WHERE status!='queued' OR next_at=0)").run();
+    this.db.prepare("UPDATE grading_runs SET next_at=0,note='' WHERE active=1 AND status='queued' AND note='今天的AI额度已用完，批改会在明天继续，原件已保存。'").run();
+  }
   reserve() {
     const day = shanghaiDay(this.now()); this.db.prepare("INSERT OR IGNORE INTO budget(day) VALUES(?)").run(day);
     const usage = this.db.prepare("SELECT calls FROM budget WHERE day=?").get(day) as { calls: number };
-    if (usage.calls >= 60) throw new HomeworkError(429, "今天的AI整理限额已到，原件已保存，明天自动继续。");
+    if (usage.calls >= this.dailyCallLimit()) throw new HomeworkError(429, "今天的AI整理限额已到，原件已保存，明天自动继续。");
     this.db.prepare("UPDATE budget SET calls=calls+1 WHERE day=?").run(day);
   }
   fail(job: Job, note: string, retry: boolean, budget = false) {
     this.transaction(() => {
+      if (budget) this.db.prepare("INSERT OR IGNORE INTO homework_quota_waits(job_id) VALUES(?)").run(job.id);
+      else this.db.prepare("DELETE FROM homework_quota_waits WHERE job_id=?").run(job.id);
       const again = budget || (retry && job.attempts < 3);
       const nextAt = budget ? new Date(shanghaiDay(this.now()) + "T00:00:00+08:00").getTime() + 86400_000 : this.now() + (job.attempts === 1 ? 15000 : 60000);
       this.db.prepare("UPDATE jobs SET status=?,next_at=?,attempts=? WHERE id=?").run(again ? "queued" : "failed", nextAt, budget ? Math.max(0, job.attempts - 1) : job.attempts, job.id);
@@ -191,7 +228,6 @@ export class HomeworkStore {
     const day = this.db.prepare("SELECT * FROM days WHERE date=?").get(date) as { status: string; note: string; report: string | null } | undefined;
     const all = this.db.prepare("SELECT id FROM uploads WHERE date=? ORDER BY created_at DESC,rowid DESC").all(date) as { id: string }[];
     const dates = (this.db.prepare("SELECT DISTINCT date FROM uploads ORDER BY date DESC").all() as { date: string }[]).map((r) => r.date);
-    const usage = this.db.prepare("SELECT calls FROM budget WHERE day=?").get(shanghaiDay(this.now())) as { calls: number } | undefined;
     const pending = !!this.db.prepare("SELECT id FROM jobs WHERE date=? AND status IN ('queued','running') AND (kind='recognize' OR revision=(SELECT revision FROM days WHERE date=jobs.date)) LIMIT 1").get(date);
     const report = day?.report ? DailyReportSchema.parse(JSON.parse(day.report)) : null;
     // Read current explanations even before reorganization, without rewriting the saved report.
@@ -204,7 +240,7 @@ export class HomeworkStore {
     }):[];
     const scoped=pendingUploads.filter(u=>u.kind==="homework").map(u=>({upload:u,target:resolveUploadTarget(this,u.id)}));
     const processing=pending?{taskIds:[...new Set(scoped.flatMap(s=>s.target?[s.target.taskId]:[]))],memo:pendingUploads.some(u=>u.kind==="memo"),subjects:[...new Set(scoped.filter(s=>!s.target).flatMap(s=>JSON.parse(s.upload.subjects)))],unclassified:scoped.some(s=>!s.target&&(!s.upload.result||!JSON.parse(s.upload.subjects).length)),retrying:day?.status==="retrying"}:undefined;
-    return { date, processing, grading: this.grading.summary(date), writtenCompletionEnabled: this.writtenCompletionEnabled, reviewPolicy: this.reviewPolicy, status: day?.status || "empty", note: day?.note || "先上传当天的作业备忘录，再把作业照片交给AI整理。", report, uploads: all.map((u) => this.view(u.id)), dates, quota: { calls: usage?.calls || 0, limit: 60 }, pending };
+    return { date, processing, grading: this.grading.summary(date), writtenCompletionEnabled: this.writtenCompletionEnabled, reviewPolicy: this.reviewPolicy, status: day?.status || "empty", note: day?.note || "先上传当天的作业备忘录，再把作业照片交给AI整理。", report, uploads: all.map((u) => this.view(u.id)), dates, quota: this.quota(), pending };
   }
   close() { this.db.close(); }
 }

@@ -1,3 +1,4 @@
+import { HomeworkQuotaSettingsSchema } from "../../domain/homework-quota";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Accounts } from "./accounts";
 import type { AssistantStore } from "./store";
@@ -27,9 +28,15 @@ export class AdminHTTP {
         return { date: d.date, status: d.status, note: d.note, tasks: report?.tasks.length || 0, uploads: uploads.n, originals: files.n, grading: store.grading.summary(d.date) };
       }) : [];
       const jobCounts = store?.db.prepare("SELECT status,COUNT(*) AS count FROM jobs GROUP BY status").all() || [];
-      json(response, { viewer, days, jobCounts, ...this.sessions.settings(), legacyAccess: this.accounts.legacyAllowed(), service: this.serviceInfo || null, features: { autoGrading: !!store?.autoGradingEnabled, writtenCompletion: !!store?.writtenCompletionEnabled }, memories: this.learning?.memories.list() || [], knowledge: this.learning?.memories.catalog() || { rules: [], corrections: [], history: [] } }); return;
+      json(response, { viewer, days, jobCounts, homeworkQuota: store?.quota() || null, ...this.sessions.settings(), legacyAccess: this.accounts.legacyAllowed(), service: this.serviceInfo || null, features: { autoGrading: !!store?.autoGradingEnabled, writtenCompletion: !!store?.writtenCompletionEnabled }, memories: this.learning?.memories.list() || [], knowledge: this.learning?.memories.catalog() || { rules: [], corrections: [], history: [] } }); return;
     }
-    // Family members and spend limits can only be administered by an administrator.
+    if (path === "/assistant-api/admin/homework-quota" && request.method === "PATCH") {
+      const parsed = HomeworkQuotaSettingsSchema.safeParse(await body());
+      if (!parsed.success) throw new HomeworkError(400, "作业每日AI额度须为1—5000的整数。");
+      if (!this.learning) throw new HomeworkError(503, "作业服务尚未启用。");
+      json(response, this.learning.store.setQuota(parsed.data, viewer.id)); return;
+    }
+    // Family members and assistant spend limits can only be administered by an administrator.
     if (viewer.role !== "admin") throw new HomeworkError(403, "只有家庭管理员可以管理账号和额度。");
     if (path === "/assistant-api/admin/accounts" && request.method === "GET") { json(response, { items: this.accounts.list() }); return; }
     if (path === "/assistant-api/admin/accounts" && request.method === "POST") {

@@ -67,7 +67,7 @@ test("uploads are deduplicated; interrupted queue and reserved paid-call budget 
     f.store.reserve(); f.store.close();
     const reopened = new HomeworkStore(f.directory, () => Date.parse("2026-11-20T04:00:00Z"));
     assert.equal(reopened.claim()!.attempts, 2); assert.equal(reopened.snapshot(date).quota.calls, 1);
-    for (let i = 0; i < 59; i++) reopened.reserve();
+    for (let i = 0; i < 99; i++) reopened.reserve();
     assert.throws(() => reopened.reserve()); reopened.close();
     // Restore handle for fixture teardown.
     (f.store as unknown as { db: unknown }).db = new HomeworkStore(f.directory).db;

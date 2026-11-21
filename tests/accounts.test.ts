@@ -235,3 +235,24 @@ test("homework reward settings require parent identity and same origin, persist 
   assert.equal(f.calls(), 0); assert.equal(f.reading.balance(), 0);
  } finally { await f.cleanup(); }
 });
+
+
+test("parents and admins can set persistent homework AI quotas, while children and cross-origin requests cannot", async () => {
+  const f = await fixture(); try {
+    const admin = await f.bootstrap();
+    for (const role of ["parent", "child"] as const) await f.send("admin/accounts", "POST", { username: role, name: "模拟" + role, role, password }, admin.cookie);
+    const parent = await f.login("parent"), child = await f.login("child");
+    assert.equal((await f.send("admin/overview", "GET", undefined, parent.cookie)).data.homeworkQuota.limit, 100);
+    assert.equal((await f.send("admin/homework-quota", "PATCH", { dailyCalls: 150 })).status, 401);
+    assert.equal((await f.send("admin/homework-quota", "PATCH", { dailyCalls: 150 }, child.cookie)).status, 403);
+    assert.equal((await f.send("admin/homework-quota", "PATCH", { dailyCalls: 150 }, parent.cookie, { Origin: "https://other.test" })).status, 403);
+    for (const body of [{ dailyCalls: 0 }, { dailyCalls: 5001 }, { dailyCalls: 1.5 }, { dailyCalls: "150" }, { dailyCalls: 150, extra: true }]) assert.equal((await f.send("admin/homework-quota", "PATCH", body, parent.cookie)).status, 400);
+    for (let i = 0; i < 60; i++) f.homework.reserve();
+    const saved = await f.send("admin/homework-quota", "PATCH", { dailyCalls: 150 }, parent.cookie);
+    assert.equal(saved.status, 200); assert.equal(saved.data.limit, 150); assert.equal(saved.data.calls, 60);
+    assert.equal((await f.send("learning/state?date=" + date, "GET", undefined, child.cookie)).data.quota.limit, 150);
+    assert.equal((await f.send("admin/homework-quota", "PATCH", { dailyCalls: 50 }, admin.cookie)).data.calls, 60);
+    assert.throws(() => f.homework.reserve(), /限额/);
+    assert.equal((await f.send("admin/limits", "PATCH", { chat: 5000, asr: 30, tts: 40 }, parent.cookie)).status, 403, "Other administrator settings remain restricted");
+  } finally { await f.cleanup(); }
+});
