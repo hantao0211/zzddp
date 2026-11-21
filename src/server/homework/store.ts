@@ -128,7 +128,7 @@ export class HomeworkStore {
   claim(): Job | undefined {
     return this.transaction(() => {
       this.db.exec("UPDATE jobs SET status='done' WHERE kind='organize' AND status='queued' AND revision < (SELECT revision FROM days WHERE days.date=jobs.date)");
-      const job = this.db.prepare("SELECT * FROM jobs WHERE status='queued' AND next_at<=? ORDER BY CASE kind WHEN 'recognize' THEN 0 ELSE 1 END,id LIMIT 1").get(this.now()) as Job | undefined;
+      const job = this.db.prepare("SELECT j.* FROM jobs j WHERE j.status='queued' AND j.next_at<=? AND (j.kind='recognize' OR NOT EXISTS (SELECT 1 FROM jobs busy WHERE busy.date=j.date AND busy.status IN ('queued','running') AND (busy.kind='recognize' OR (busy.kind='organize' AND busy.status='running')))) ORDER BY CASE j.kind WHEN 'recognize' THEN 0 ELSE 1 END,j.id LIMIT 1").get(this.now()) as Job | undefined;
       if (!job) return;
       this.db.prepare("UPDATE jobs SET status='running', attempts=attempts+1 WHERE id=?").run(job.id);
       this.db.prepare("DELETE FROM homework_quota_waits WHERE job_id=?").run(job.id);

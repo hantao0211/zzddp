@@ -110,13 +110,13 @@ test("a corrected reading of the same source withdraws the former mistake rather
 });
 
 test("two targeted independent rechecks can resolve an OCR disagreement without creating a false mistake", async () => {
-  const f = fixture(); let focused = 0;
+  const f = fixture(); let focused = 0, active = 0, peak = 0;
   const grader = new HomeworkGrader(f.store, () => ({ async run(task, schema, metadata) {
     if (task === "grade_homework") return schema.parse({ scopeComplete: true, note: "", questions: [{ ...question(f.page), verdict: "uncertain", confidence: "low" }] });
     const input = metadata as { source: { focus?: boolean }; questions: { questionId: string }[] };
-    if (input.source.focus) focused++;
+    if (input.source.focus) { focused++; active++; peak = Math.max(peak, active); await new Promise(resolve => setTimeout(resolve, 15)); active--; }
     return schema.parse({ scopeComplete: true, omittedLabels: [], checks: [{ ...(input.source.focus ? question(f.page, "correct") : { ...question(f.page), verdict: "uncertain", confidence: "low" }), questionId: input.questions[0].questionId }] });
   } }), { images: () => [] });
-  try { await grader.tick(); assert.equal(focused, 2); assert.equal(f.store.grading.summary(date).correct, 1); assert.equal(f.store.grading.summary(date).uncertain, 0); assert.equal(f.store.grading.mistakes(null).total, 0); }
+  try { await grader.tick(); assert.equal(focused, 2); assert.equal(peak, 2, "Independent targeted rechecks can run together"); assert.equal(f.store.grading.summary(date).correct, 1); assert.equal(f.store.grading.summary(date).uncertain, 0); assert.equal(f.store.grading.mistakes(null).total, 0); }
   finally { f.close(); }
 });

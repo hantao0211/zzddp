@@ -71,12 +71,12 @@ test("unknown subjects receive a conservative joint pass, without guessing a sub
   assert.equal(f.calls.length,1);assert.equal(f.calls[0].input.candidates.length,3);assert.equal(f.calls[0].input.extractedPages.length,2);assert.equal(f.store.snapshot(date).status,"needs_rescan");
  }finally{f.cleanup();}
 });
-test("a new upload supersedes a running organization before later subjects consume AI calls",async()=>{
+test("a new upload supersedes parallel organization before later stages and reuses completed scopes",async()=>{
  const f=fixture();try{
   f.seed("memo",null,"memo");f.seed("homework","数学","math");f.seed("homework","英语","english");
   let release!:()=>void,entered!:()=>void;const waiting=new Promise<void>(r=>entered=r),gate=new Promise<void>(r=>release=r);
   f.setHook(async()=>{entered();await gate;});const current=f.worker().tick();await waiting;
-  f.store.bump(date);release();await current;assert.equal(f.calls.length,1);assert.equal(f.store.snapshot(date).report,null,"Obsolete partial results must not replace the current report");
+  f.store.bump(date);release();await current;assert.equal(f.calls.length,2);assert.equal(f.store.snapshot(date).report,null,"Obsolete partial results must not replace the current report");
   f.setHook(undefined);await f.drain();assert.equal(f.calls.length,2,"The completed scope is cached and reused by the latest job");assert.equal(f.store.snapshot(date).status,"processed");
  }finally{f.cleanup();}
 });

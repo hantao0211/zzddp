@@ -38,7 +38,7 @@ export class GradingStore {
   claim(): GradingRun | undefined {
     if (!this.store.autoGradingEnabled) return;
     return this.store.transaction(() => {
-      const run = this.store.db.prepare("SELECT * FROM grading_runs WHERE active=1 AND status='queued' AND next_at<=? ORDER BY created_at,rowid LIMIT 1").get(this.store.now()) as GradingRun | undefined;
+      const run = this.store.db.prepare("SELECT g.* FROM grading_runs g WHERE g.active=1 AND g.status='queued' AND g.next_at<=? AND NOT EXISTS (SELECT 1 FROM grading_runs busy WHERE busy.primary_page_id=g.primary_page_id AND busy.status='running') ORDER BY g.created_at,g.rowid LIMIT 1").get(this.store.now()) as GradingRun | undefined;
       if (!run) return;
       this.store.db.prepare("UPDATE grading_runs SET status='running',attempts=attempts+1,updated_at=? WHERE id=?").run(new Date(this.store.now()).toISOString(), run.id);
       return { ...run, attempts: run.attempts + 1 };
