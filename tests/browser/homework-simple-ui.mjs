@@ -69,7 +69,7 @@ try {
   await dialog.getByRole("button", { name: "确认上传", exact: true }).click(); await dialog.waitFor({ state: "hidden" });
   assert.equal(created[0].kind, "homework"); assert.equal(created[0].date, date); assert.equal(created[0].files.length, 2);
   assert.match(created[0].files[0].sha256, /^[a-f0-9]{64}$/); assert.ok(sent[0].equals(png));
-  await page.getByText("照片已收到，小步正在整理。", { exact: true }).waitFor();
+  await page.getByText("正在识别新照片，你可以继续交作业。", { exact: true }).waitFor();
   // Pending processing must suppress stale uncertainty from the previous report.
   assert.equal(await page.getByRole("button", { name: "和小步说说", exact: true }).count(), 0);
   scenario = "waiting"; await page.reload({ waitUntil: "networkidle" });
@@ -137,6 +137,7 @@ try {
   const overviewRoute = async route => {
     const data = snapshot(new URL(route.request().url()).searchParams.get("date"));
     const written = data.report.tasks[0];
+    if(scenario==="pending")written.coverage="complete"; // Preserve the last report while new files are queued.
     if (writtenState) {
       data.writtenCompletionEnabled = true;
       written.writtenCompletion = { status: writtenState, reason: writtenState === "done" ? "两题均已填写，尚未批改" : "第2题空白", parts: [{ label: "第1题", status: "answered", evidence: { fileId: "synthetic-page", page: 1, excerpt: "模拟答案" } }, { label: "第2题", status: writtenState === "done" ? "answered" : "blank", evidence: { fileId: "synthetic-page", page: 1, excerpt: "模拟第二题" } }] };
@@ -185,8 +186,10 @@ try {
   scenario = "pending";
   await page.reload({ waitUntil: "networkidle" });
   await page.locator(".hw-simple-home input[type=date]").fill(past);
-  await overview.getByRole("cell", { name: "整理中", exact: true }).first().waitFor();
-  assert.equal(await overview.getByRole("cell", { name: "已做", exact: true }).count(), 0);
+  await page.locator(".hw-summary-processing").waitFor();
+  await overview.getByRole("cell", { name: "已做", exact: true }).waitFor();
+  await overview.getByRole("cell", { name: "未做完", exact: true }).waitFor();
+  assert.equal(await overview.getByRole("cell", { name: "整理中", exact: true }).count(), 0);
   await page.unroute("**/assistant-api/learning/state**", overviewRoute);
   scenario = "marked";
   await page.route("**/assistant-api/learning/state**", async route => {

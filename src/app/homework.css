@@ -38,3 +38,5 @@
 .hw-assistant-slot .assistant-launcher{position:static;min-height:44px;padding:9px 14px;box-shadow:none}
 @media(max-width:600px){.hw-header{min-height:78px;gap:10px;padding:12px 18px}.hw-header-actions{gap:10px}.hw-brand{min-width:0}.hw-brand>div{min-width:0}}
 @media(max-width:380px){.hw-brand small{display:none}}
+
+.hw-summary-processing{display:flex;align-items:flex-start;gap:7px;color:#815770;font-size:13px;line-height:1.6;margin:10px 0}.hw-summary-processing svg{flex:none;margin-top:3px}.hw-row-updating{display:flex;align-items:center;gap:4px;color:#815770;font-size:11px;line-height:1.5;margin-top:3px}

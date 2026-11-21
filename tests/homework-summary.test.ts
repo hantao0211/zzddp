@@ -27,9 +27,12 @@ test("overview distinguishes receipt from completion, counts only stored files a
   s.report!.tasks[0].reviewActivity = null;
   assert.equal(homeworkSummary(s)!.rows[0].activity.text, "需重新整理");
 });
-test("processing masks stale results; dates with no report or no uploads have honest empty states", () => {
+test("new uploads preserve previous results; dates with no report or no uploads have honest empty states", () => {
   const s = snapshot(); s.pending = true;
-  assert.ok(homeworkSummary(s)!.rows.every(row => row.photo.text === "整理中" && row.activity.text === "整理中"));
+  assert.equal(homeworkSummary(s)!.rows[0].activity.text,"已做");
+  assert.ok(homeworkSummary(s)!.rows.every(row=>row.photo.text!=="整理中"&&!row.updating));
+  s.processing={subjects:["数学"],memo:false,unclassified:false,retrying:false};
+  assert.equal(homeworkSummary(s)!.rows[1].updating,true);assert.equal(homeworkSummary(s)!.rows[0].updating,false);
   s.report = null; assert.match(homeworkSummary(s)!.empty, /AI正在整理/);
   s.pending = false; s.uploads = s.uploads.filter(u => u.kind === "homework"); assert.match(homeworkSummary(s)!.empty, /补一张备忘录/);
   s.uploads = []; assert.equal(homeworkSummary(s), null); assert.equal(homeworkSummary(null), null);
@@ -42,5 +45,5 @@ test("photo and completion explanations distinguish not submitted, unmatched, pa
   s.uploads = s.uploads.filter(u => u.kind === "memo");
   row = homeworkSummary(s)!.rows[1]; assert.equal(row.photo.text, "未交照片"); assert.equal(row.activity.text, "等照片"); assert.match(row.activityDetail, /不是要求家长/);
   s.report!.tasks[1].coverage = "complete"; row = homeworkSummary(s)!.rows[1]; assert.equal(row.activity.text, "需检查"); assert.match(row.activityDetail, /系统会自动检查/);
-  s.pending = true; row = homeworkSummary(s)!.rows[1]; assert.match(row.activityDetail, /不沿用旧/);
+  s.pending = true; row = homeworkSummary(s)!.rows[1]; assert.match(row.activityDetail, /系统会自动检查/);
 });

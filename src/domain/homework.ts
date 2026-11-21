@@ -27,6 +27,7 @@ export const HomeworkTaskSchema = z.object({
 });
 export const DailyReportSchema = z.object({
   date: DaySchema, memoId: z.string().nullable(), tasks: z.array(HomeworkTaskSchema),
+  organizedUploadIds: z.array(z.string()).optional(),
   familyNotes: z.array(ClarificationReceiptSchema).default([]),
   unclassified: z.array(z.object({ title: z.string(), requirement: z.string(), evidence: z.array(EvidenceSchema) })).default([]),
   uncertainties: z.array(z.string()), unassigned: OrganizationSchema.shape.unassigned,
@@ -43,6 +44,7 @@ export type UploadView = {
   files: { id: string; name: string; size: number; stored: boolean; pages: { id: string; number: number }[] }[];
 };
 export type HomeworkSnapshot = {
+  processing?: { subjects: z.infer<typeof SubjectSchema>[]; memo: boolean; unclassified: boolean; retrying: boolean };
   homeworkReward?: import("./homework-reward").HomeworkRewardStatus;
   date: string; status: string; note: string; report: DailyReport | null; uploads: UploadView[];
   dates: string[]; grading?: GradingSummary; writtenCompletionEnabled?: boolean; reviewPolicy?: ReviewPolicy | null; quota: { calls: number; limit: number }; pending: boolean;

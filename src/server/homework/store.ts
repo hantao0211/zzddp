@@ -76,6 +76,7 @@ export class HomeworkStore {
   bump(date: string) {
     this.db.prepare("INSERT INTO days(date,revision,status,note) VALUES(?,1,'queued','正在整理当天资料。') ON CONFLICT(date) DO UPDATE SET revision=revision+1,status='queued',note='正在整理当天资料。'").run(date);
     const revision = this.revision(date);
+    this.db.prepare("UPDATE jobs SET status='done' WHERE date=? AND kind='organize' AND status='queued' AND revision<?").run(date,revision);
     this.db.prepare("INSERT OR IGNORE INTO jobs(key,kind,date,revision) VALUES(?,'organize',?,?)").run(`day:${date}:${revision}`, date, revision);
   }
   revision(date: string) { return (this.db.prepare("SELECT revision FROM days WHERE date=?").get(date) as { revision: number } | undefined)?.revision || 0; }
@@ -103,6 +104,7 @@ export class HomeworkStore {
   busy(date: string) { return !!this.db.prepare("SELECT id FROM jobs WHERE date=? AND kind='recognize' AND status IN ('queued','running') LIMIT 1").get(date); }
   claim(): Job | undefined {
     return this.transaction(() => {
+      this.db.exec("UPDATE jobs SET status='done' WHERE kind='organize' AND status='queued' AND revision < (SELECT revision FROM days WHERE days.date=jobs.date)");
       const job = this.db.prepare("SELECT * FROM jobs WHERE status='queued' AND next_at<=? ORDER BY CASE kind WHEN 'recognize' THEN 0 ELSE 1 END,id LIMIT 1").get(this.now()) as Job | undefined;
       if (!job) return;
       this.db.prepare("UPDATE jobs SET status='running', attempts=attempts+1 WHERE id=?").run(job.id);
@@ -173,12 +175,18 @@ export class HomeworkStore {
     const all = this.db.prepare("SELECT id FROM uploads WHERE date=? ORDER BY created_at DESC,rowid DESC").all(date) as { id: string }[];
     const dates = (this.db.prepare("SELECT DISTINCT date FROM uploads ORDER BY date DESC").all() as { date: string }[]).map((r) => r.date);
     const usage = this.db.prepare("SELECT calls FROM budget WHERE day=?").get(shanghaiDay(this.now())) as { calls: number } | undefined;
-    const pending = !!this.db.prepare("SELECT id FROM jobs WHERE date=? AND status IN ('queued','running') LIMIT 1").get(date);
+    const pending = !!this.db.prepare("SELECT id FROM jobs WHERE date=? AND status IN ('queued','running') AND (kind='recognize' OR revision=(SELECT revision FROM days WHERE date=jobs.date)) LIMIT 1").get(date);
     const report = day?.report ? DailyReportSchema.parse(JSON.parse(day.report)) : null;
     // Read current explanations even before reorganization, without rewriting the saved report.
     const memo = report?.memoId ? this.upload(report.memoId) : undefined;
     if (report && memo?.result) report.familyNotes = effectiveMemo(this, memo).receipts;
-    return { date, grading: this.grading.summary(date), writtenCompletionEnabled: this.writtenCompletionEnabled, reviewPolicy: this.reviewPolicy, status: day?.status || "empty", note: day?.note || "先上传当天的作业备忘录，再把作业照片交给AI整理。", report, uploads: all.map((u) => this.view(u.id)), dates, quota: { calls: usage?.calls || 0, limit: 60 }, pending };
+    const pendingUploads=pending?all.map(u=>this.upload(u.id)!).filter(u=>{
+      const active=["queued","converting","recognizing","retrying"].includes(u.status);
+      const unorganized=!!u.result&&(report?.organizedUploadIds?!report.organizedUploadIds.includes(u.id):!report?.updatedAt||u.created_at>report.updatedAt);
+      return active||unorganized;
+    }):[];
+    const processing=pending?{memo:pendingUploads.some(u=>u.kind==="memo"),subjects:[...new Set(pendingUploads.filter(u=>u.kind==="homework").flatMap(u=>JSON.parse(u.subjects)))],unclassified:pendingUploads.some(u=>u.kind==="homework"&&(!u.result||!JSON.parse(u.subjects).length)),retrying:day?.status==="retrying"}:undefined;
+    return { date, processing, grading: this.grading.summary(date), writtenCompletionEnabled: this.writtenCompletionEnabled, reviewPolicy: this.reviewPolicy, status: day?.status || "empty", note: day?.note || "先上传当天的作业备忘录，再把作业照片交给AI整理。", report, uploads: all.map((u) => this.view(u.id)), dates, quota: { calls: usage?.calls || 0, limit: 60 }, pending };
   }
   close() { this.db.close(); }
 }

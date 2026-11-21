@@ -5,7 +5,11 @@ export function homeworkHomeStatus(snapshot: HomeworkSnapshot | null): { text: s
   if (!snapshot) return { text: "正在读取这一天的记录…", help: false, busy: true };
   if (!snapshot.uploads.length) return { text: "拍下照片，小步来整理。", help: false, busy: false };
   if (snapshot.uploads.some((u) => u.status === "uploading")) return { text: "还有照片没传完，重新选择原来的照片就能继续。", help: false, busy: false };
-  if (snapshot.pending) return { text: "照片已收到，小步正在整理。", help: false, busy: true };
+  if (snapshot.pending) {
+    const scope=snapshot.processing;
+    const text=scope?.retrying?"新照片整理暂未完成，后台会重试；你可以继续交作业。":scope?.memo?"正在更新备忘录，先显示上次清单，可以继续交作业。":scope?.subjects.length?`正在整理新交的${scope.subjects.join("、")}照片，其他作业可以继续交。`:"正在识别新照片，你可以继续交作业。";
+    return {text,help:false,busy:true};
+  }
   if (snapshot.status === "failed" || snapshot.uploads.some((u) => u.status === "failed")) return { text: "有资料没整理好，找小步一起看看。", help: true, busy: false };
   if (!snapshot.uploads.some((u) => u.kind === "memo")) return { text: "作业已收到，补一张备忘录就能对照清单。", help: false, busy: false };
   const report = snapshot.report;
