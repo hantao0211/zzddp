@@ -40,3 +40,5 @@
 @media(max-width:380px){.hw-brand small{display:none}}
 
 .hw-summary-processing{display:flex;align-items:flex-start;gap:7px;color:#815770;font-size:13px;line-height:1.6;margin:10px 0}.hw-summary-processing svg{flex:none;margin-top:3px}.hw-row-updating{display:flex;align-items:center;gap:4px;color:#815770;font-size:11px;line-height:1.5;margin-top:3px}
+
+.hw-upload-target{display:flex;align-items:center;gap:8px;padding:12px;border-radius:12px;background:#f7edf3;color:#80526e;font-weight:600}.hw-upload-target svg{flex-shrink:0}

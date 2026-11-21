@@ -1,3 +1,4 @@
+import { currentUploadTarget, readUploadTarget, resolveUploadTarget } from "./upload-target";
 import { GradingStore } from "./grading-store";
 import { needsWrittenCompletionUpdate } from "../../domain/written-completion";
 import { needsReviewTraceUpdate, type ReviewPolicy } from "../../domain/review-policy";
@@ -34,6 +35,7 @@ export class HomeworkStore {
       CREATE INDEX IF NOT EXISTS clarification_memo ON clarifications(memo_id,entry_index);
       CREATE TABLE IF NOT EXISTS learned_memories (id TEXT PRIMARY KEY, kind TEXT NOT NULL, trigger_text TEXT NOT NULL, trigger_key TEXT NOT NULL, subject TEXT, summary TEXT NOT NULL, source_quote TEXT NOT NULL, source_date TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'active', replaces_id TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
       CREATE INDEX IF NOT EXISTS learned_memory_status ON learned_memories(status,kind,trigger_key);
+      CREATE TABLE IF NOT EXISTS upload_targets (upload_id TEXT PRIMARY KEY REFERENCES uploads(id), payload TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS analysis_cache (key TEXT PRIMARY KEY, result TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS budget (day TEXT PRIMARY KEY, calls INTEGER NOT NULL DEFAULT 0, batches INTEGER NOT NULL DEFAULT 0, bytes INTEGER NOT NULL DEFAULT 0);
       CREATE INDEX IF NOT EXISTS jobs_queue ON jobs(status,next_at,id); CREATE INDEX IF NOT EXISTS uploads_date ON uploads(date);
@@ -52,12 +54,26 @@ export class HomeworkStore {
     const u = this.upload(id); if (!u) throw new HomeworkError(404, "没有找到这份资料。");
     const result = u.result ? u.kind === "memo" ? effectiveMemo(this, u).result : JSON.parse(u.result) : null;
     const issues: UploadView["issues"] = result ? u.kind === "memo" ? result.uncertainties.map((message: string) => ({ pageId: null, message })) : result.pages.flatMap((p: { fileId: string; readable: boolean; subject: string | null; uncertainties: string[] }) => [...(!p.readable ? ["这一页关键内容看不清，请对准整页补拍。"] : []), ...(!p.subject ? ["这一页暂不能确定科目。"] : []), ...p.uncertainties].map((message) => ({ pageId: p.fileId, message }))) : [];
-    return { id: u.id, date: u.date, kind: u.kind, createdAt: u.created_at, status: u.status, note: u.status === "processed" ? u.note.replace("正在对照已上传作业", "可在当天作业查看查缺结果").replace("正在对照当天备忘录查缺", "可在当天作业查看查缺结果") : u.note, subjects: JSON.parse(u.subjects), aiMs: u.ai_ms, issues, files: this.files(id).map((f) => ({ id: f.id, name: f.name, size: f.size, stored: !!f.stored, pages: this.pages(f.id).map((p) => ({ id: p.id, number: p.number })) })) };
+    return { ...(readUploadTarget(this, u.id) ? { target: readUploadTarget(this, u.id) } : {}), id: u.id, date: u.date, kind: u.kind, createdAt: u.created_at, status: u.status, note: u.status === "processed" ? u.note.replace("正在对照已上传作业", "可在当天作业查看查缺结果").replace("正在对照当天备忘录查缺", "可在当天作业查看查缺结果") : u.note, subjects: JSON.parse(u.subjects), aiMs: u.ai_ms, issues, files: this.files(id).map((f) => ({ id: f.id, name: f.name, size: f.size, stored: !!f.stored, pages: this.pages(f.id).map((p) => ({ id: p.id, number: p.number })) })) };
   }
   begin(input: UploadInput) {
+    if (input.targetTaskId && input.kind !== "homework") throw new HomeworkError(400, "备忘录不能指定作业。");
+    const target = input.targetTaskId ? currentUploadTarget(this, input.date, input.targetTaskId) : null;
+    const shown = input.targetTaskId ? this.snapshot(input.date).report?.tasks.find(t => t.id === input.targetTaskId) : null;
+    if (input.targetTaskId && (!target || !shown || shown.subject !== target.subject || shown.title !== target.title || shown.requirement !== target.requirement)) throw new HomeworkError(409, "作业清单已更新，请刷新后从对应作业上传。照片尚未提交。");
     const fingerprint = hash({ date: input.date, kind: input.kind, files: input.files.map(({ size, sha256 }) => ({ size, sha256 })) });
     const old = this.db.prepare("SELECT id FROM uploads WHERE fingerprint=?").get(fingerprint) as { id: string } | undefined;
-    if (old) return this.view(old.id);
+    if (old) {
+      if (target) this.transaction(() => {
+        const saved = readUploadTarget(this, old.id);
+        if (saved && (saved.memoId !== target.memoId || saved.entryIndex !== target.entryIndex || saved.sourceHash !== target.sourceHash)) throw new HomeworkError(409, "这批照片已交给另一项作业，不能重复归到本项。请检查所选照片。");
+        if (!saved) {
+          this.db.prepare("INSERT INTO upload_targets(upload_id,payload) VALUES(?,?)").run(old.id, JSON.stringify(target));
+          if (this.upload(old.id)!.status !== "uploading") this.bump(input.date);
+        }
+      });
+      return this.view(old.id);
+    }
     return this.transaction(() => {
       const size = input.files.reduce((n, f) => n + f.size, 0);
       const day = shanghaiDay(this.now()); this.db.prepare("INSERT OR IGNORE INTO budget(day) VALUES(?)").run(day);
@@ -68,6 +84,7 @@ export class HomeworkStore {
       this.db.prepare("UPDATE budget SET batches=batches+1, bytes=bytes+? WHERE day=?").run(size, day);
       const id = randomUUID();
       this.db.prepare("INSERT INTO uploads(id,fingerprint,date,kind,created_at,status) VALUES(?,?,?,?,?,'uploading')").run(id, fingerprint, input.date, input.kind, new Date(this.now()).toISOString());
+      if (target) this.db.prepare("INSERT INTO upload_targets(upload_id,payload) VALUES(?,?)").run(id, JSON.stringify(target));
       for (const f of input.files) this.db.prepare("INSERT INTO files(id,upload_id,name,size,sha256) VALUES(?,?,?,?,?)").run(randomUUID(), id, f.name, f.size, f.sha256);
       return this.view(id);
     });
@@ -185,7 +202,8 @@ export class HomeworkStore {
       const unorganized=!!u.result&&(report?.organizedUploadIds?!report.organizedUploadIds.includes(u.id):!report?.updatedAt||u.created_at>report.updatedAt);
       return active||unorganized;
     }):[];
-    const processing=pending?{memo:pendingUploads.some(u=>u.kind==="memo"),subjects:[...new Set(pendingUploads.filter(u=>u.kind==="homework").flatMap(u=>JSON.parse(u.subjects)))],unclassified:pendingUploads.some(u=>u.kind==="homework"&&(!u.result||!JSON.parse(u.subjects).length)),retrying:day?.status==="retrying"}:undefined;
+    const scoped=pendingUploads.filter(u=>u.kind==="homework").map(u=>({upload:u,target:resolveUploadTarget(this,u.id)}));
+    const processing=pending?{taskIds:[...new Set(scoped.flatMap(s=>s.target?[s.target.taskId]:[]))],memo:pendingUploads.some(u=>u.kind==="memo"),subjects:[...new Set(scoped.filter(s=>!s.target).flatMap(s=>JSON.parse(s.upload.subjects)))],unclassified:scoped.some(s=>!s.target&&(!s.upload.result||!JSON.parse(s.upload.subjects).length)),retrying:day?.status==="retrying"}:undefined;
     return { date, processing, grading: this.grading.summary(date), writtenCompletionEnabled: this.writtenCompletionEnabled, reviewPolicy: this.reviewPolicy, status: day?.status || "empty", note: day?.note || "先上传当天的作业备忘录，再把作业照片交给AI整理。", report, uploads: all.map((u) => this.view(u.id)), dates, quota: { calls: usage?.calls || 0, limit: 60 }, pending };
   }
   close() { this.db.close(); }

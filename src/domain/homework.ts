@@ -10,8 +10,9 @@ import { DaySchema } from "./calendar";
 export { DaySchema } from "./calendar";
 export const UploadInputSchema = z.object({
   date: DaySchema, kind: z.enum(["memo", "homework"]),
+  targetTaskId: z.string().min(1).max(180).optional(),
   files: z.array(z.object({ name: z.string().min(1).max(200), size: z.number().int().min(1).max(20 * 1024 * 1024), sha256: z.string().regex(/^[a-f0-9]{64}$/) }).strict()).min(1).max(20),
-}).strict().refine((v) => v.files.reduce((n, f) => n + f.size, 0) <= 50 * 1024 * 1024, "一次文件总量不能超过50MB");
+}).strict().refine(v => !v.targetTaskId || v.kind === "homework", "备忘录不能指定作业").refine((v) => v.files.reduce((n, f) => n + f.size, 0) <= 50 * 1024 * 1024, "一次文件总量不能超过50MB");
 export const ExtractedHomeworkSchema = z.object({
   pages: z.array(z.object({
     fileId: z.string(), readable: z.boolean(), subject: SubjectSchema.nullable(),
@@ -38,13 +39,15 @@ export type ExtractedHomework = z.infer<typeof ExtractedHomeworkSchema>;
 export type DailyReport = z.infer<typeof DailyReportSchema>;
 export type RecognizedMemo = z.infer<typeof MemoRecognitionSchema>;
 export type UploadStatus = "uploading" | "queued" | "converting" | "recognizing" | "retrying" | "processed" | "needs_rescan" | "failed";
+export type UploadTarget = Pick<DailyReport["tasks"][number], "subject" | "title" | "requirement" | "format"> & { taskId: string };
 export type UploadView = {
+  target?: UploadTarget | null;
   id: string; date: string; kind: "memo" | "homework"; createdAt: string; status: UploadStatus; note: string;
   subjects: z.infer<typeof SubjectSchema>[]; aiMs: number; issues: { pageId: string | null; message: string }[];
   files: { id: string; name: string; size: number; stored: boolean; pages: { id: string; number: number }[] }[];
 };
 export type HomeworkSnapshot = {
-  processing?: { subjects: z.infer<typeof SubjectSchema>[]; memo: boolean; unclassified: boolean; retrying: boolean };
+  processing?: { taskIds?: string[]; subjects: z.infer<typeof SubjectSchema>[]; memo: boolean; unclassified: boolean; retrying: boolean };
   homeworkReward?: import("./homework-reward").HomeworkRewardStatus;
   date: string; status: string; note: string; report: DailyReport | null; uploads: UploadView[];
   dates: string[]; grading?: GradingSummary; writtenCompletionEnabled?: boolean; reviewPolicy?: ReviewPolicy | null; quota: { calls: number; limit: number }; pending: boolean;

@@ -1,3 +1,4 @@
+import { resolveUploadTarget } from "./upload-target";
 import { createHash } from "node:crypto";
 import { GRADING_VERSION, GradingResultSchema, emptyCounts, type GradingResult, type GradingSummary, type GradingBatchView, type MistakeView } from "../../domain/grading";
 import type { HomeworkStore } from "./store";
@@ -16,7 +17,11 @@ export class GradingStore {
   }
   queueDay(date: string, report: DailyReport | null) {
     if (!this.store.autoGradingEnabled) return;
-    const pages = this.store.uploads(date).filter(u => u.kind === "homework" && u.result).flatMap(u => (JSON.parse(u.result!).pages as { fileId: string; subject: string | null; book: string | null }[]).map(p => ({ ...p, page: this.store.page(p.fileId) })));
+    const pages = this.store.uploads(date).filter(u => u.kind === "homework" && u.result).flatMap(u => (JSON.parse(u.result!).pages as { fileId: string; subject: string | null; book: string | null }[]).map(p => {
+      const target = resolveUploadTarget(this.store, u.id);
+      const assigned = target && report?.tasks.some(t => t.id === target.taskId && t.evidence.some(e => e.fileId === p.fileId));
+      return { ...p, subject: p.subject || (assigned ? target.subject : null), page: this.store.page(p.fileId) };
+    }));
     this.store.db.prepare("UPDATE grading_runs SET active=0 WHERE date=?").run(date);
     const time = new Date(this.store.now()).toISOString();
     for (let index = 0; index < pages.length; index++) {

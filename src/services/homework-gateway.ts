@@ -9,14 +9,14 @@ export async function homeworkRequest<T>(path: string, init: RequestInit = {}): 
 }
 export const getHomework = (date: string) => homeworkRequest<HomeworkSnapshot>(`/state?date=${date}`);
 export const homeworkPost = <T,>(path: string, value: unknown = {}) => homeworkRequest<T>(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(value) });
-export async function uploadHomework(date: string, kind: "memo" | "homework", files: File[], onProgress: (text: string) => void) {
+export async function uploadHomework(date: string, kind: "memo" | "homework", files: File[], onProgress: (text: string) => void, targetTaskId?: string) {
   onProgress("正在检查文件…");
   const metadata = [];
   for (const file of files) {
     const hash = await crypto.subtle.digest("SHA-256", await file.arrayBuffer());
     metadata.push({ name: file.name, size: file.size, sha256: Array.from(new Uint8Array(hash), (b) => b.toString(16).padStart(2, "0")).join("") });
   }
-  const upload = await homeworkPost<UploadView>("/uploads", { date, kind, files: metadata });
+  const upload = await homeworkPost<UploadView>("/uploads", { date, kind, files: metadata, ...(targetTaskId ? { targetTaskId } : {}) });
   if (upload.status !== "uploading") { onProgress("这批资料已保存，无需重复上传。"); return upload; }
   for (let i = 0; i < files.length; i++) {
     onProgress(`正在上传 ${i + 1}/${files.length}：${files[i].name}`);
