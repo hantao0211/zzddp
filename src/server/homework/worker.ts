@@ -44,7 +44,9 @@ export class HomeworkWorker {
   private async cached<T>(key: string, work: () => Promise<T>): Promise<T> {
     const row = this.store.db.prepare("SELECT result FROM analysis_cache WHERE key=?").get(key) as { result: string } | undefined;
     if (row) return JSON.parse(row.result) as T;
-    const result = await work();
+    let result:T;
+    try { result=await work(); }
+    catch(error){console.warn("Homework analysis did not finish:",key.split(":")[0],error instanceof AIServiceError?error.code:error instanceof HomeworkError?`LOCAL_${error.status}`:"UNEXPECTED");throw error;}
     this.store.db.prepare("INSERT OR REPLACE INTO analysis_cache(key,result) VALUES(?,?)").run(key, JSON.stringify(result));
     return result;
   }

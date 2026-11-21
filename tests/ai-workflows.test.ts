@@ -112,3 +112,18 @@ test("AI-generated questions cannot publish until a separate verification passes
 test("learning assistant cannot cite material outside the child context", async () => {
   await assert.rejects(answerTutor(stub([{ answer: "解释", spokenAnswer: "解释", hint: null, followUpQuestion: null, sourceMaterialIds: ["other-child"] }]), { question: "这题怎么做？", materials: [{ id: "own", text: "本人资料" }] }));
 });
+
+
+test("DeepSeek photo association requests a bounded direct response while independent grading retains its reasoning budget",async()=>{
+ const bodies:any[]=[];
+ const ai=new VisionAI({provider:"deepseek",model:"deepseek-flash",apiKey:"synthetic-test-key"},async(_url,init)=>{
+  bodies.push(JSON.parse(String(init?.body)));
+  return Response.json({choices:[{finish_reason:"stop",message:{content:JSON.stringify(memo)}}]});
+ });
+ await ai.run("organize_homework",MemoRecognitionSchema,{});
+ await ai.run("grade_homework",MemoRecognitionSchema,{});
+ assert.deepEqual(bodies[0].thinking,{type:"disabled"});assert.equal(bodies[0].max_tokens,8192);
+ assert.equal(bodies[1].thinking,undefined);assert.equal(bodies[1].max_tokens,16000);
+ const incomplete=new VisionAI({provider:"deepseek",model:"deepseek-flash",apiKey:"synthetic-test-key"},async()=>Response.json({choices:[{finish_reason:"length",message:{content:JSON.stringify(memo)}}]}));
+ await assert.rejects(()=>incomplete.run("organize_homework",MemoRecognitionSchema,{}),(e:unknown)=>e instanceof AIServiceError&&e.code==="INCOMPLETE_RESPONSE");
+});

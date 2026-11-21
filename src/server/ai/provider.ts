@@ -29,7 +29,7 @@ export class VisionAI implements StructuredAI {
       model: this.config.model,
       messages: [{ role: "system", content: AI_SYSTEM_INSTRUCTIONS }, { role: "user", content: [{ type: "text", text: userText }, ...images.map((image) => ({ type: "image_url", image_url: { url: `data:${image.mimeType};base64,${image.base64}` } }))] }],
       response_format: { type: "json_object" }, max_tokens: ["tutor_answer", "reading_review", "reading_dialogue"].includes(task) ? 2048 : task === "homework_dialogue" ? 4096 : ["grade_homework", "verify_homework_grading"].includes(task) ? 16000 : 8192,
-      ...(["tutor_answer", "homework_dialogue", "reading_review", "reading_dialogue"].includes(task) ? { thinking: { type: "disabled" } } : {}),
+      ...(["tutor_answer", "homework_dialogue", "reading_review", "reading_dialogue", "organize_homework"].includes(task) ? { thinking: { type: "disabled" } } : {}),
     } : {
       model: this.config.model, store: false, instructions: AI_SYSTEM_INSTRUCTIONS,
       input: [{ role: "user", content: [{ type: "input_text", text: userText }, ...images.map((image) => ({ type: "input_image", image_url: `data:${image.mimeType};base64,${image.base64}`, detail: "high" }))] }],
