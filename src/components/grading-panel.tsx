@@ -2,9 +2,11 @@
 import { useEffect, useRef, useState } from "react";
 import { homeworkPost, homeworkRequest } from "@/services/homework-gateway";
 import type { GradedQuestion, GradingBatchView, GradingSummary, MistakeView } from "@/domain/grading";
-import { Image, ChevronUp, MessageCircle, PencilLine, Lightbulb, CircleCheck } from "lucide-react";
+import { Image, ChevronUp, MessageCircle, PencilLine, Lightbulb, CircleCheck, Check } from "lucide-react";
 import { StatusIndicator } from "./status-indicator";
 const verdicts = { correct: "正确", wrong: "错误 · 已入错题本", blank: "未作答", uncertain: "AI尚未确认", feedback: "主观题点评" };
+const filterLabels = { correct: "正确", wrong: "错误", blank: "未作答", uncertain: "未确认", feedback: "点评" };
+type GradingFilter = "attention" | "all" | GradedQuestion["verdict"];
 function Photo({ id }: { id: string }) {
   const [open, setOpen] = useState(false);
   return <div className="grade-photo"><button className="text-button" onClick={() => setOpen(!open)}>{open ? <ChevronUp size={17} aria-hidden="true" /> : <Image size={17} aria-hidden="true" />}{open ? "收起原图" : "查看原题照片"}</button>{open && <img src={`/assistant-api/learning/pages/${encodeURIComponent(id)}`} alt="这道题所在的作业原图" />}</div>;
@@ -22,22 +24,27 @@ function QuestionCard({ question: q, date, subject, title, pageId }: { question:
 }
 export function GradingPanel({ date, canManage = true }: { date: string; canManage?: boolean }) {
   const [data, setData] = useState<{ summary: GradingSummary; batches: GradingBatchView[] } | null>(null), [error, setError] = useState("");
-  const [filter, setFilter] = useState("attention"), [retrying, setRetrying] = useState(false);
+  const [filter, setFilter] = useState<GradingFilter>("attention"), [retrying, setRetrying] = useState(false);
   useEffect(() => {
-    let live = true; setData(null); setError("");
+    let live = true; setData(null); setError(""); setFilter("attention");
     const load = async () => { try { const next = await homeworkRequest<{ summary: GradingSummary; batches: GradingBatchView[] }>(`/grading?date=${date}`); if (live) { setData(next); setError(""); } } catch (e) { if (live) setError(e instanceof Error ? e.message : "批改记录暂未读取成功"); } };
     void load(); const timer = setInterval(() => { if (!document.hidden) void load(); }, 4000); return () => { live = false; clearInterval(timer); };
   }, [date]);
+  const isCategory = filter !== "all" && filter !== "attention";
+  const matches = (q: GradedQuestion) => filter === "all" || (filter === "attention" ? q.verdict !== "correct" : q.verdict === filter);
+  const shownCount = data?.batches.reduce((count, batch) => count + (batch.result?.questions.filter(matches).length ?? 0), 0) ?? 0;
   return <section className="card grade-panel" aria-label="批改结果"><h2>批改结果</h2><p className="grade-source">{date.replaceAll("-", "/")} · AI逐题检查，错题自动归档</p>
     {error && <p role="alert" className="form-error">{error}</p>}
     {!data ? <p>正在读取批改记录…</p> : !data.summary.enabled ? <p>自动批改尚未启用。</p> : <>
-      <div className="grade-counts">{(["correct", "wrong", "blank", "uncertain", "feedback"] as const).filter(kind => kind !== "feedback" || data.summary.feedback > 0).map(kind => <StatusIndicator key={kind} kind={kind} className="grade-stat"><span>{{ correct: "正确", wrong: "错误", blank: "未作答", uncertain: "未确认", feedback: "点评" }[kind]}<strong>{data.summary[kind]}</strong></span></StatusIndicator>)}</div>
+      <div className="grade-counts" role="group" aria-label="按批改结果筛选">{(Object.keys(filterLabels) as GradedQuestion["verdict"][]).map(kind => <button type="button" key={kind} className="grade-stat-filter" aria-pressed={filter === kind} aria-label={`${filterLabels[kind]} ${data.summary[kind]}题`} onClick={() => setFilter(kind)}><StatusIndicator kind={kind} className="grade-stat"><span>{filterLabels[kind]}<strong>{data.summary[kind]}</strong></span></StatusIndicator>{filter === kind && <Check className="grade-filter-check" size={16} aria-hidden="true" />}</button>)}</div>
       {!!data.summary.pending && <p className="grade-progress" role="status"><StatusIndicator kind="pending">AI正在批改或等待复核，完成后会自动更新。</StatusIndicator></p>}
       {!!data.summary.incomplete && <p>部分题目还没完整识别，下面只展示已经检查的题。</p>}
       {!!data.summary.failed && <div className="grade-progress"><p>有{data.summary.failed}页批改未完成，原件已保存。</p>{canManage && <button className="button secondary compact" disabled={retrying} onClick={async () => { setRetrying(true); try { await homeworkPost("/grading/retry", { date }); setError(""); } catch (e) { setError(e instanceof Error ? e.message : "暂时不能重试"); } finally { setRetrying(false); } }}>重试批改</button>}<small>{!canManage && "请家长在管理页处理，已有结果仍可查看。"}</small></div>}
-      <div className="tabs grade-filters"><button className={filter === "attention" ? "selected" : ""} onClick={() => setFilter("attention")}>先看需要留意的题</button><button className={filter === "all" ? "selected" : ""} onClick={() => setFilter("all")}>全部题目</button></div>
+      <div className="tabs grade-filters"><button aria-pressed={filter === "attention"} className={filter === "attention" ? "selected" : ""} onClick={() => setFilter("attention")}>先看需要留意的题</button><button aria-pressed={filter === "all"} className={filter === "all" ? "selected" : ""} onClick={() => setFilter("all")}>全部题目</button></div>
       {!data.batches.length && <div><p>还没有批改记录。新上传的书面作业会自动处理；已上传的作业可以直接开始，无需重新上传。</p>{canManage && <button className="button secondary" disabled={retrying} onClick={async () => { setRetrying(true); try { await homeworkPost("/grading/start", { date }); setError(""); } catch (e) { setError(e instanceof Error ? e.message : "暂时无法开始批改"); } finally { setRetrying(false); } }}>批改这一天的作业</button>}</div>}
-      {data.batches.map(batch => <section key={batch.id} className="grade-batch"><h3>{batch.subject} · {batch.title}</h3>{(batch.note || batch.result?.note) && <details className="grade-batch-note" open={batch.status === "failed"}><summary>查看批改说明</summary>{batch.note && <p>{batch.note}</p>}{batch.result?.note && <p>{batch.result.note}</p>}</details>}{batch.result?.questions.filter(q => filter === "all" || q.verdict !== "correct").map(q => <QuestionCard key={q.id} question={q} date={date} subject={batch.subject} title={batch.title} pageId={batch.primaryPageId} />)}{batch.status === "done" && batch.result && !batch.result.questions.length && <p>这页未发现需要逐题批改的作答。</p>}{batch.status === "done" && batch.result?.questions.length && batch.result.questions.every(q => q.verdict === "correct") && filter === "attention" ? <p className="grade-all-correct"><CircleCheck size={22} aria-hidden="true" />已检查的{batch.result.questions.length}题均正确，可切换“全部题目”查看。</p> : null}</section>)}
+      {!!data.batches.length && <p className="grade-filter-summary" role="status">{isCategory ? `只看${filterLabels[filter]} · ${shownCount}题` : filter === "all" ? `全部题目 · ${shownCount}题` : `需要留意 · ${shownCount}题`}</p>}
+      {isCategory && shownCount === 0 && <p className="grade-filter-empty">{filter === "feedback" ? "暂无点评。" : `暂无${filterLabels[filter]}的题目。`}{data.summary.pending > 0 ? "新结果会自动更新。" : ""}</p>}
+      {data.batches.filter(batch => !isCategory || batch.result?.questions.some(matches)).map(batch => <section key={batch.id} className="grade-batch"><h3>{batch.subject} · {batch.title}</h3>{(batch.note || batch.result?.note) && <details className="grade-batch-note" open={batch.status === "failed"}><summary>查看批改说明</summary>{batch.note && <p>{batch.note}</p>}{batch.result?.note && <p>{batch.result.note}</p>}</details>}{batch.result?.questions.filter(matches).map(q => <QuestionCard key={q.id} question={q} date={date} subject={batch.subject} title={batch.title} pageId={batch.primaryPageId} />)}{batch.status === "done" && batch.result && !batch.result.questions.length && <p>这页未发现需要逐题批改的作答。</p>}{batch.status === "done" && batch.result?.questions.length && batch.result.questions.every(q => q.verdict === "correct") && filter === "attention" ? <p className="grade-all-correct"><CircleCheck size={22} aria-hidden="true" />已检查的{batch.result.questions.length}题均正确，可切换“全部题目”查看。</p> : null}</section>)}
       <p className="grade-source">错题经过两次识别与解答核验后自动入本；有分歧的题不直接判错。错因是根据作答提出的分析，主观题给出点评。</p>
     </>}
   </section>;

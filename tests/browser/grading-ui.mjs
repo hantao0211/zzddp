@@ -9,11 +9,12 @@ const browser = await chromium.launch({ headless: true, args: ["--no-sandbox", "
 try {
   const page = await browser.newPage({ viewport: { width: 390, height: 670 }, isMobile: true, hasTouch: true });
   let pending = false, failed = false, photos = 0; const errors = []; page.on("pageerror", e => errors.push(e.message));
-  const counts = { correct: 1, wrong: 1, blank: 1, uncertain: 1, feedback: 1 };
+  const counts = { correct: 2, wrong: 1, blank: 1, uncertain: 1, feedback: 1 };
   const summary = () => ({ ...counts, enabled: true, pages: 1, finished: pending || failed ? 0 : 1, pending: pending ? 1 : 0, failed: failed ? 1 : 0, incomplete: 0, tasks: { "synthetic-task": { ...counts, pending: pending ? 1 : 0, failed: failed ? 1 : 0, incomplete: 0 } } });
   const q = (verdict, i) => ({ id: "synthetic-question-" + i, label: `第${i}题`, sourcePartLabels: [], kind: verdict === "feedback" ? "subjective" : "objective", question: i === 2 ? "2+3等于多少？" : "一道人造的模拟练习题", studentAnswer: i === 2 ? "6" : "模拟作答", expectedAnswer: i === 2 ? "5" : "模拟参考答案", verdict, confidence: verdict === "uncertain" ? "low" : "high", explanation: verdict === "uncertain" ? "两次解答没有取得一致，未直接判错。" : "先算2加2等于4，再加1得到5。", knowledgePoints: ["整数加法"], cause: "计算错误", causeExplanation: "从这次作答看，可能在相加时多算了1，不能据此断定是粗心。", nextStep: "用小棒分两步相加，再检查总数。", evidence: [{ fileId: "synthetic-page", page: 1, excerpt: "模拟作答" }], verification: verdict === "uncertain" ? "uncertain" : verdict === "feedback" ? "subjective" : "agreed" });
   const questions = ["correct", "wrong", "blank", "uncertain", "feedback"].map((s, i) => q(s, i + 1));
-  let selectedDate = "";
+  let selectedDate = "", blankVisible = true, extraWrong = false;
+  const currentQuestions = () => [...questions.filter(q => blankVisible || q.verdict !== "blank"), ...(extraWrong ? [q("wrong", 6)] : [])];
   await page.route("**/assistant-api/**", async route => {
     const url = new URL(route.request().url()), path = url.pathname;
     const json = data => route.fulfill({ contentType: "application/json", body: JSON.stringify(data) });
@@ -25,7 +26,7 @@ try {
       const date = url.searchParams.get("date"); selectedDate = date;
       return json({ date, status: "processed", pending: false, note: "模拟资料", dates: [date], quota: { calls: 1, limit: 60 }, grading: summary(), writtenCompletionEnabled: true, uploads: [{ id: "synthetic-upload", date, kind: "memo", status: "processed", createdAt: "", subjects: ["数学"], note: "", aiMs: 0, issues: [], files: [{ id: "synthetic-file", name: "synthetic.png", size: 1, stored: true, pages: [] }] }], report: { date, memoId: "synthetic-upload", updatedAt: "", familyNotes: [], unclassified: [], unassigned: [], uncertainties: [], tasks: [{ id: "synthetic-task", title: "数学练习", subject: "数学", requirement: "完成模拟练习第12页", format: "written", memoEvidence: [], evidence: [], coverage: "complete", missing: [], reviewActivity: null, writtenCompletion: { version: "written-v2", status: "done", reason: "均有模拟作答", parts: [] } }] } });
     }
-    if (path.endsWith("/learning/grading")) return json({ summary: summary(), batches: [{ id: "synthetic-run", title: "数学练习", subject: "数学", status: pending ? "queued" : failed ? "failed" : "done", note: failed ? "批改未完成，原件保留。" : "", primaryPageId: "synthetic-page", result: pending || failed ? null : { version: "grading-v1", scopeComplete: true, note: "", questions } }] });
+    if (path.endsWith("/learning/grading")) return json({ summary: summary(), batches: [{ id: "synthetic-run", title: "数学练习", subject: "数学", status: pending ? "queued" : failed ? "failed" : "done", note: failed ? "批改未完成，原件保留。" : "", primaryPageId: "synthetic-page", result: pending || failed ? null : { version: "grading-v1", scopeComplete: true, note: "", questions: currentQuestions() } }, { id: "synthetic-english", title: "英语练习", subject: "英语", status: "done", note: "", primaryPageId: "synthetic-english-page", result: { version: "grading-v1", scopeComplete: true, note: "", questions: [q("correct", 7)] } }] });
     if (path.endsWith("/learning/mistakes")) return json({ total: url.searchParams.get("subject") === "英语" ? 0 : 1, items: url.searchParams.get("subject") === "英语" ? [] : [{ id: "synthetic-mistake", date: selectedDate, lastDate: selectedDate, subject: "数学", title: "数学练习", pageId: "synthetic-page", occurrences: 1, question: questions[1] }] });
     if (path.endsWith("/learning/grading/retry")) { failed = false; pending = true; return json({ queued: 1 }); }
     if (path.includes("/learning/pages/")) { photos++; return route.fulfill({ contentType: "image/png", body: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jA5sAAAAASUVORK5CYII=", "base64") }); }
@@ -39,13 +40,47 @@ try {
   assert.equal(await panel.getByText("AI尚未确认", { exact: true }).count(), 1);
   assert.equal(photos, 0, "Original photos load only when requested");
   await panel.getByRole("button", { name: "全部题目", exact: true }).click();
-  assert.equal(await panel.locator(".grade-question").count(), 5);
+  assert.equal(await panel.locator(".grade-question").count(), 6);
+  const categoryButton = label => panel.getByRole("group", { name: "按批改结果筛选" }).getByRole("button", { name: new RegExp("^" + label + " ") });
+  for (const [verdict, label, count] of [["correct", "正确", 2], ["wrong", "错误", 1], ["blank", "未作答", 1], ["uncertain", "未确认", 1], ["feedback", "点评", 1]]) {
+    const button = categoryButton(label); await button.click();
+    assert.equal(await button.getAttribute("aria-pressed"), "true");
+    assert.equal(await panel.locator(".grade-question").count(), count);
+    assert.equal(await panel.locator(".grade-question:not(.grade-verdict-" + verdict + ")").count(), 0);
+    assert.equal(await panel.locator(".grade-batch").count(), verdict === "correct" ? 2 : 1, "Hide unrelated subject headings");
+    assert.equal(await panel.locator('.grade-stat-filter[aria-pressed="true"]').count(), 1);
+  }
+  // Zero results remain selectable, and polling keeps the chosen category.
+  blankVisible = false; counts.blank = 0;
+  await categoryButton("未作答").click();
+  await panel.getByText("暂无未作答的题目。", { exact: true }).waitFor();
+  assert.equal(await panel.locator(".grade-batch").count(), 0);
+  await categoryButton("错误").click();
+  extraWrong = true; counts.wrong = 2;
+  await panel.getByText("只看错误 · 2题", { exact: true }).waitFor();
+  assert.equal(await panel.locator(".grade-question").count(), 2);
+  assert.equal(await categoryButton("错误").getAttribute("aria-pressed"), "true");
+  // Native buttons support keyboard activation as well as touch.
+  await categoryButton("正确").focus(); await page.keyboard.press("Enter");
+  assert.equal(await categoryButton("正确").getAttribute("aria-pressed"), "true");
+  await panel.getByRole("button", { name: "先看需要留意的题", exact: true }).click();
+  assert.equal(await panel.locator(".grade-verdict-correct").count(), 0);
+  assert.equal(await panel.locator('.grade-stat-filter[aria-pressed="true"]').count(), 0);
+  await panel.getByRole("button", { name: "全部题目", exact: true }).click();
+  assert.equal(await panel.locator(".grade-question").count(), 6);
   for (const viewport of [{ width: 320, height: 568 }, { width: 390, height: 670 }, { width: 768, height: 1024 }, { width: 1280, height: 900 }]) {
     await page.setViewportSize(viewport);
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), "No horizontal page overflow");
+    for (const button of await panel.locator(".grade-stat-filter").all()) {
+      const box = await button.boundingBox(); assert.ok(box.width >= 44 && box.height >= 44, "Comfortable touch targets");
+    }
+    await categoryButton("错误").click();
     await page.screenshot({ path: output + `/grading-${viewport.width}.png`, fullPage: true });
   }
   await page.setViewportSize({ width: 390, height: 670 });
+  await page.locator('.hw-date input').fill('2026-11-21');
+  await panel.getByText('2026/11/21 · AI逐题检查，错题自动归档', { exact: true }).waitFor();
+  assert.equal(await panel.getByRole('button', { name: '先看需要留意的题', exact: true }).getAttribute('aria-pressed'), 'true');
   await page.getByRole("button", { name: "错题本", exact: true }).click();
   const book = page.getByRole("region", { name: "错题本", exact: true });
   await book.getByText("可能的错因 · 计算错误", { exact: true }).waitFor();
@@ -65,5 +100,5 @@ try {
   await panel.getByRole("button", { name: "重试批改", exact: true }).click();
   await panel.getByText("AI正在批改或等待复核，完成后会自动更新。", { exact: true }).waitFor();
   assert.deepEqual(errors, []);
-  console.log("GRADING_UI_OK=true daily-progress,all-verdicts,wrong-book,cause,next-step,subject-filter,lazy-private-photo,assistant-prefill,retry,mobile-and-desktop");
+  console.log("GRADING_UI_OK=true daily-progress,category-buttons,zero-category,poll-preserves-filter,keyboard,date-reset,all-verdicts,wrong-book,cause,next-step,subject-filter,lazy-private-photo,assistant-prefill,retry,mobile-and-desktop");
 } finally { await browser.close(); }
