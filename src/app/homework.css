@@ -42,3 +42,7 @@
 .hw-summary-processing{display:flex;align-items:flex-start;gap:7px;color:#815770;font-size:13px;line-height:1.6;margin:10px 0}.hw-summary-processing svg{flex:none;margin-top:3px}.hw-row-updating{display:flex;align-items:center;gap:4px;color:#815770;font-size:11px;line-height:1.5;margin-top:3px}
 
 .hw-upload-target{display:flex;align-items:center;gap:8px;padding:12px;border-radius:12px;background:#f7edf3;color:#80526e;font-weight:600}.hw-upload-target svg{flex-shrink:0}
+
+.grade-failures>h3{display:flex;align-items:center;gap:8px;margin:3px 0 12px;font-size:17px;color:#895b73}.grade-failures>h3 svg{flex-shrink:0}.grade-failure{padding:14px 0;border-top:1px solid #e8dce4;overflow-wrap:anywhere}.grade-failure h4{font-size:15px;margin:0 0 8px}.grade-failure p{margin:6px 0;line-height:1.8}.grade-failure small{display:block;color:#806a79;margin:6px 0}.grade-failure .grade-photo button{display:flex;align-items:center;gap:6px;min-height:44px}
+
+.grade-failures{scroll-margin-top:90px}

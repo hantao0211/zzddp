@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { HomeworkStore } from "../src/server/homework/store";
 import { HomeworkGrader } from "../src/server/homework/grader";
 import { GradingQuestionSchema, reconcileQuestion, equivalentAnswer, readAutoGrading } from "../src/domain/grading";
-import type { StructuredAI } from "../src/server/ai/provider";
+import { AIServiceError, type StructuredAI } from "../src/server/ai/provider";
 const date = "2026-11-17";
 function fixture() {
   const directory = mkdtempSync(join(tmpdir(), "xiaobu-grade-")), store = new HomeworkStore(directory, Date.now, null, false, true);
@@ -119,4 +119,18 @@ test("two targeted independent rechecks can resolve an OCR disagreement without 
   } }), { images: () => [] });
   try { await grader.tick(); assert.equal(focused, 2); assert.equal(peak, 2, "Independent targeted rechecks can run together"); assert.equal(f.store.grading.summary(date).correct, 1); assert.equal(f.store.grading.summary(date).uncertain, 0); assert.equal(f.store.grading.mistakes(null).total, 0); }
   finally { f.close(); }
+});
+
+
+test("grading failure reasons and stages persist, are safe to show, and survive retry and success", async () => {
+  const f = fixture(); try {
+    const grader = new HomeworkGrader(f.store, () => ({ async run() { throw new AIServiceError("INVALID_ENVELOPE", true, "private raw provider text must never appear"); } }), { images: () => [] });
+    await grader.tick();
+    const queued = f.store.grading.results(date).batches[0]; assert.equal(queued.status, "queued"); assert.equal(queued.failure!.code, "INVALID_ENVELOPE"); assert.equal(queued.failure!.stage, "inspection"); assert.match(queued.failure!.reason, /解析/); assert.ok(!JSON.stringify(queued).includes("private raw"));
+    const row = f.store.db.prepare("SELECT * FROM grading_runs LIMIT 1").get() as any; f.store.grading.fail({ ...row, attempts: 3 }, true, false, { code: "INVALID_ENVELOPE", stage: "verification" });
+    const failed = f.store.grading.results(date).batches[0]; assert.equal(failed.status, "failed"); assert.equal(failed.attempts, 3); assert.equal(failed.retryAllowed, true); assert.equal(failed.failure!.stage, "verification");
+    assert.equal(f.store.grading.retry(date), 1); assert.equal(f.store.grading.results(date).batches[0].failure!.code, "INVALID_ENVELOPE", "Keep the last reason while retrying");
+    f.store.grading.save(row, { version: "grading-v2", scopeComplete: true, note: "", questions: [] }); assert.equal(f.store.grading.results(date).batches[0].failure, null);
+    f.store.grading.fail({ ...row, attempts: 6 }, false, false, { code: "NETWORK_ERROR", stage: "inspection" }); assert.equal(f.store.grading.results(date).batches[0].retryAllowed, false);
+  } finally { f.close(); }
 });

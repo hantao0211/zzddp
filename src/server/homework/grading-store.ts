@@ -1,3 +1,4 @@
+import { gradingFailureText, type GradingFailure, type GradingStage } from "../../domain/grading-failure";
 import { resolveUploadTarget } from "./upload-target";
 import { createHash } from "node:crypto";
 import { GRADING_VERSION, GradingResultSchema, emptyCounts, type GradingResult, type GradingSummary, type GradingBatchView, type MistakeView } from "../../domain/grading";
@@ -9,6 +10,7 @@ const digest = (v: unknown) => createHash("sha256").update(JSON.stringify(v)).di
 export class GradingStore {
   constructor(readonly store: HomeworkStore) {
     store.db.exec(`CREATE TABLE IF NOT EXISTS grading_runs(id TEXT PRIMARY KEY,date TEXT NOT NULL,primary_page_id TEXT NOT NULL,source TEXT NOT NULL,active INTEGER NOT NULL DEFAULT 1,status TEXT NOT NULL DEFAULT 'queued',attempts INTEGER NOT NULL DEFAULT 0,next_at INTEGER NOT NULL DEFAULT 0,result TEXT,note TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL,updated_at TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS grading_diagnostics(run_id TEXT PRIMARY KEY REFERENCES grading_runs(id),code TEXT NOT NULL,stage TEXT NOT NULL,attempts INTEGER NOT NULL,failed_at TEXT NOT NULL,source TEXT NOT NULL);
       CREATE INDEX IF NOT EXISTS grading_by_date ON grading_runs(date,active);
       CREATE INDEX IF NOT EXISTS grading_queue ON grading_runs(active,status,next_at);
       CREATE TABLE IF NOT EXISTS grading_mistakes(id TEXT PRIMARY KEY,first_date TEXT NOT NULL,last_date TEXT NOT NULL,subject TEXT NOT NULL,title TEXT NOT NULL,page_id TEXT NOT NULL,payload TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'verified');
@@ -62,10 +64,15 @@ export class GradingStore {
       }
     });
   }
-  fail(run: GradingRun, retry: boolean, budget: boolean) {
+  fail(run: GradingRun, retry: boolean, budget: boolean, diagnostic?: { code: string; stage: GradingStage }) {
     const again = budget || (retry && run.attempts < 3);
     const next = budget ? Date.parse(new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(this.store.now())) + "T00:00:00+08:00") + 86400000 : this.store.now() + (run.attempts === 1 ? 15000 : 60000);
-    this.store.db.prepare("UPDATE grading_runs SET status=?,next_at=?,attempts=?,note=?,updated_at=? WHERE id=?").run(again ? "queued" : "failed", next, budget ? Math.max(0, run.attempts - 1) : run.attempts, budget ? "今天的AI额度已用完，批改会在明天继续，原件已保存。" : again ? "批改暂未完成，后台会自动重试。" : "批改未完成，原件已保存，可以稍后重试。", new Date(this.store.now()).toISOString(), run.id);
+    const failedAt = new Date(this.store.now()).toISOString();
+    const info = diagnostic || { code: budget ? "BUDGET_LIMIT" : "UNKNOWN", stage: "unknown" as const };
+    this.store.transaction(() => {
+      this.store.db.prepare("UPDATE grading_runs SET status=?,next_at=?,attempts=?,note=?,updated_at=? WHERE id=?").run(again ? "queued" : "failed", next, budget ? Math.max(0, run.attempts - 1) : run.attempts, budget ? "今天的AI额度已用完，批改会在明天继续，原件已保存。" : again ? "批改暂未完成，后台会自动重试。" : "批改未完成，原件已保存，可以稍后重试。", failedAt, run.id);
+      this.store.db.prepare("INSERT INTO grading_diagnostics(run_id,code,stage,attempts,failed_at,source) VALUES(?,?,?,?,?,'runtime') ON CONFLICT(run_id) DO UPDATE SET code=excluded.code,stage=excluded.stage,attempts=excluded.attempts,failed_at=excluded.failed_at,source=excluded.source").run(run.id, info.code, info.stage, run.attempts, failedAt);
+    });
   }
   retry(date: string) {
     if (!this.store.autoGradingEnabled) return 0;
@@ -90,7 +97,11 @@ export class GradingStore {
     return summary;
   }
   results(date: string): { summary: GradingSummary; batches: GradingBatchView[] } {
-    return { summary: this.summary(date), batches: (this.store.db.prepare("SELECT * FROM grading_runs WHERE date=? AND active=1 ORDER BY rowid").all(date) as (GradingRun & { primary_page_id: string })[]).map(run => { const source = JSON.parse(run.source) as GradingSource; return { id: run.id, subject: source.subject, title: source.title, status: run.status, note: run.note, primaryPageId: run.primary_page_id, result: run.result ? GradingResultSchema.parse(JSON.parse(run.result)) : null }; }) };
+    return { summary: this.summary(date), batches: (this.store.db.prepare("SELECT * FROM grading_runs WHERE date=? AND active=1 ORDER BY rowid").all(date) as (GradingRun & { primary_page_id: string })[]).map(run => { const source = JSON.parse(run.source) as GradingSource; return { attempts: run.attempts, retryAllowed: run.status === "failed" && run.attempts < 6, failure: run.status === "done" ? null : this.failure(run.id), id: run.id, subject: source.subject, title: source.title, status: run.status, note: run.note, primaryPageId: run.primary_page_id, result: run.result ? GradingResultSchema.parse(JSON.parse(run.result)) : null }; }) };
+  }
+  private failure(runId: string): GradingFailure | null {
+    const row = this.store.db.prepare("SELECT code,stage,failed_at,source FROM grading_diagnostics WHERE run_id=?").get(runId) as { code: string; stage: GradingStage; failed_at: string; source: GradingFailure["source"] } | undefined;
+    return row ? { code: row.code, stage: row.stage, failedAt: row.failed_at, source: row.source, ...gradingFailureText(row.code) } : null;
   }
   mistakes(subject: string | null, offset = 0, limit = 30): { total: number; items: MistakeView[] } {
     const where = "status='verified'" + (subject ? " AND subject=?" : ""); const args = subject ? [subject] : [];

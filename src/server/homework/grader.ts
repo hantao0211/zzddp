@@ -1,3 +1,4 @@
+import type { GradingStage } from "../../domain/grading-failure";
 import { mapParallel } from "../work/concurrency";
 import { HomeworkExecution } from "./execution";
 import { createHash } from "node:crypto";
@@ -12,6 +13,7 @@ export class HomeworkGrader {
   private cached<T>(key: string, work: () => Promise<T>): Promise<T> { return this.execution.cached(key, work); }
   async tick() {
     const run = this.store.grading.claim(); if (!run) return false;
+    let stage: GradingStage = "inspection";
     try {
       const source = JSON.parse(run.source) as GradingSource;
       const images = () => this.images.images(source.pages);
@@ -31,6 +33,7 @@ export class HomeworkGrader {
       const questions = first.questions.map(q => ({ ...q, id: createHash("sha256").update(run.id + ":" + q.label).digest("hex") }));
       let result: GradingResult = { version: GRADING_VERSION, scopeComplete: first.scopeComplete && !source.expectedLabels.length, note: first.note, questions: [] };
       if (questions.length) {
+        stage = "verification";
         const second = await this.cached(`grade-verify:${GRADING_VERSION}:${run.id}`, async () => {
           // No first verdict or proposed reference answer is sent to the second solver.
           const value = await ai.run("verify_homework_grading", GradingVerificationSchema, { source: inputSource, questions: questions.map(q => ({ questionId: q.id, label: q.label, question: q.question, studentAnswer: q.studentAnswer, evidence: q.evidence })) }, images);
@@ -41,6 +44,7 @@ export class HomeworkGrader {
       }
       const pending = result.questions.filter(q => q.verdict === "uncertain");
       if (pending.length) {
+        stage = "recheck";
         const focusInput = { source: { ...inputSource, focus: true }, questions: pending.map(q => ({ questionId: q.id, label: q.label, question: q.question, studentAnswer: q.studentAnswer, evidence: q.evidence })) };
         const recheck = async (stage: string) => this.cached(`grade-focus-${stage}:${GRADING_VERSION}:${run.id}`, async () => {
           const value = await ai.run("verify_homework_grading", GradingVerificationSchema, focusInput, images);
@@ -58,11 +62,13 @@ export class HomeworkGrader {
       const omitted = source.expectedLabels.filter(label => !covered.has(label));
       if (omitted.length) { result.scopeComplete = false; result.note += `${result.note ? "；" : ""}尚未完整覆盖的作答部分：${omitted.join("、")}`; }
       if (!source.assigned) result.questions = result.questions.map(q => q.verdict === "blank" ? { ...q, verdict: "uncertain", verification: "uncertain", explanation: "尚未明确布置范围，不将空白题认定为漏做。" } : q);
+      stage = "saving";
       this.store.grading.save(run, result);
     } catch (error) {
       const budget = error instanceof HomeworkError && error.status === 429;
-      console.warn("Grading did not finish:", error instanceof AIServiceError ? error.code : budget ? "BUDGET_LIMIT" : "LOCAL_ERROR");
-      this.store.grading.fail(run, error instanceof AIServiceError && error.retryable, budget);
+      const code = error instanceof AIServiceError ? error.code : budget ? "BUDGET_LIMIT" : error instanceof HomeworkError && error.status === 409 ? "SUPERSEDED" : "LOCAL_ERROR";
+      console.warn("Grading did not finish:", code, "run=" + run.id, "stage=" + stage);
+      this.store.grading.fail(run, error instanceof AIServiceError && error.retryable, budget, { code, stage });
     }
     return true;
   }

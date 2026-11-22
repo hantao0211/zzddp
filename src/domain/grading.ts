@@ -1,3 +1,4 @@
+import type { GradingFailure } from "./grading-failure";
 import { z } from "zod";
 import { EvidenceSchema } from "./ai-contracts";
 export const GRADING_VERSION = "grading-v2";
@@ -17,7 +18,7 @@ export const GradingResultSchema = z.object({ version: z.enum(["grading-v1", "gr
 export type GradingResult = z.infer<typeof GradingResultSchema>;
 export type GradingCounts = { correct: number; wrong: number; blank: number; uncertain: number; feedback: number };
 export type GradingSummary = GradingCounts & { enabled: boolean; pending: number; failed: number; pages: number; finished: number; incomplete: number; tasks: Record<string, GradingCounts & { pending: number; failed: number; incomplete: number }> };
-export type GradingBatchView = { id: string; title: string; subject: string; status: string; note: string; primaryPageId: string; result: GradingResult | null };
+export type GradingBatchView = { failure?: GradingFailure | null; attempts?: number; retryAllowed?: boolean; id: string; title: string; subject: string; status: string; note: string; primaryPageId: string; result: GradingResult | null };
 export type MistakeView = { id: string; date: string; lastDate: string; subject: string; title: string; pageId: string; occurrences: number; question: GradedQuestion };
 export function readAutoGrading(env: Record<string, string | undefined> = process.env) {
   if (env.ASSISTANT_AUTO_GRADING === undefined || env.ASSISTANT_AUTO_GRADING === "0") return false;
