@@ -1,5 +1,6 @@
 import { TaskCompletions } from "./task-completions";
 import { PagePreviews } from "./page-previews";
+import { inferredReportScope } from "../../domain/inferred-scope";
 import { reviewReportConclusion } from "../../domain/review-conclusion";
 import { DEFAULT_HOMEWORK_DAILY_CALLS, HomeworkQuotaSettingsSchema, type HomeworkQuota } from "../../domain/homework-quota";
 import { currentUploadTarget, readUploadTarget, resolveUploadTarget } from "./upload-target";
@@ -11,7 +12,7 @@ import { DatabaseSync } from "node:sqlite";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { DailyReportSchema, shanghaiDay, type DailyReport, type HomeworkSnapshot, type UploadInput, type UploadView } from "../../domain/homework";
+import { DailyReportSchema, ExtractedHomeworkSchema, shanghaiDay, type DailyReport, type HomeworkSnapshot, type UploadInput, type UploadView } from "../../domain/homework";
 
 export class HomeworkError extends Error { constructor(public status: number, message: string) { super(message); } }
 export type UploadRow = { id: string; date: string; kind: "memo" | "homework"; created_at: string; status: UploadView["status"]; note: string; result: string | null; subjects: string; ai_ms: number };
@@ -236,7 +237,11 @@ export class HomeworkStore {
     const all = this.db.prepare("SELECT id FROM uploads WHERE date=? ORDER BY created_at DESC,rowid DESC").all(date) as { id: string }[];
     const dates = (this.db.prepare("SELECT DISTINCT date FROM uploads ORDER BY date DESC").all() as { date: string }[]).map((r) => r.date);
     const pending = !!this.db.prepare("SELECT id FROM jobs WHERE date=? AND status IN ('queued','running') AND (kind='recognize' OR revision=(SELECT revision FROM days WHERE date=jobs.date)) LIMIT 1").get(date);
-    const report = day?.report ? reviewReportConclusion(DailyReportSchema.parse(JSON.parse(day.report)), this.reviewPolicy) : null;
+    let report = day?.report ? reviewReportConclusion(DailyReportSchema.parse(JSON.parse(day.report)), this.reviewPolicy) : null;
+    if (report) {
+      const pages = this.uploads(date).filter(u=>u.kind==="homework" && u.result).flatMap(u=>ExtractedHomeworkSchema.parse(JSON.parse(u.result!)).pages).filter(p=>{const file=this.file(this.page(p.fileId)?.file_id||"");const owner=file?this.upload(file.upload_id):undefined;return !!file?.stored&&owner?.kind==="homework"&&owner.date===date;});
+      report=inferredReportScope(report,pages);
+    }
     // Read current explanations even before reorganization, without rewriting the saved report.
     const memo = report?.memoId ? this.upload(report.memoId) : undefined;
     if (report && memo?.result) report.familyNotes = effectiveMemo(this, memo).receipts;
