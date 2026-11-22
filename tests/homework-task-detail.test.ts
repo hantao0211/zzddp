@@ -35,3 +35,7 @@ test("specific unanswered parts preserve their own evidence without treating unc
   task.writtenCompletion = { status: "unclear", reason: "第2题未判清", parts: [{ label: "第1题", status: "answered", evidence: ev("first-page") }, { label: "第2题", status: "unclear", evidence: ev("second-page") }] };
   assert.deepEqual(homeworkTaskDetail(s, task).parts.map(p => [p.label, p.status, p.evidence.fileId]), [["第2题", "unclear", "second-page"]]);
 });
+test("selected submission keeps raw image notes available behind details, without presenting notebook identity as a new upload demand",()=>{
+ const s=fixture(),t=s.report!.tasks[0];t.selectedSubmission={version:"selected-destination-v1",pageIds:["first-page","second-page"],note:"按指定作业接收。"};s.uploads[1].issues=[{pageId:"first-page",message:"本子编号未拍到。"}];
+ const d=homeworkTaskDetail(s,t);assert.deepEqual(d.homework.photos[0].issues,[]);assert.deepEqual(d.homework.photos[0].notes,["本子编号未拍到。"]);assert.deepEqual(s.uploads[1].issues,[{pageId:"first-page",message:"本子编号未拍到。"}]);assert.deepEqual(d.concerns,["关键边缘看不清"]);
+});

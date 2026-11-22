@@ -1,3 +1,4 @@
+import { selectedSubmissionReport } from "./selected-submission";
 import { TaskCompletions } from "./task-completions";
 import { PagePreviews } from "./page-previews";
 import { inferredReportScope } from "../../domain/inferred-scope";
@@ -240,7 +241,7 @@ export class HomeworkStore {
     let report = day?.report ? reviewReportConclusion(DailyReportSchema.parse(JSON.parse(day.report)), this.reviewPolicy) : null;
     if (report) {
       const pages = this.uploads(date).filter(u=>u.kind==="homework" && u.result).flatMap(u=>ExtractedHomeworkSchema.parse(JSON.parse(u.result!)).pages).filter(p=>{const file=this.file(this.page(p.fileId)?.file_id||"");const owner=file?this.upload(file.upload_id):undefined;return !!file?.stored&&owner?.kind==="homework"&&owner.date===date;});
-      report=inferredReportScope(report,pages);
+      report=inferredReportScope(selectedSubmissionReport(this,report),pages);
     }
     // Read current explanations even before reorganization, without rewriting the saved report.
     const memo = report?.memoId ? this.upload(report.memoId) : undefined;

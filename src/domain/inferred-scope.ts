@@ -1,9 +1,10 @@
 import type { DailyReport, ExtractedHomework } from "./homework";
 import { taskSubmission } from "./task-submission";
+import { SELECTED_SUBMISSION_POLICY, isCorrectionSignTask } from "./submission-policy";
 import { inferTaskMeaning } from "./inferred-meaning";
 
 type Task = DailyReport["tasks"][number];
-export const SUBMITTED_SCOPE_POLICY = "要求未明确词数、页数或题号时，依据已匹配且清晰的作业推断检查范围，说明推断依据；只检查该范围内实际要求作答的内容。遇到L19等简称，主动结合对应页面课号、课题、题目和页码理解具体含义，不把简称当成无法理解或仅仅忽略；明确区分推断和原文，互相矛盾的线索不能硬凑。不因不知道默写词语总数、L19简称含义，或页面末尾留白而假设还有额外内容、续页；无需让孩子补填这些细节。有明确词数/页码/题号时仍以明确要求为准；确有题目被裁切、看不清、可定位的缺页或空题时具体指出。推断检查范围不代表补造老师的真实要求、标准答案或已掌握知识。";
+export const SUBMITTED_SCOPE_POLICY = "要求未明确词数、页数或题号时，依据已匹配且清晰的作业推断检查范围，说明推断依据；只检查该范围内实际要求作答的内容。遇到L19等简称，主动结合对应页面课号、课题、题目和页码理解具体含义，不把简称当成无法理解或仅仅忽略；明确区分推断和原文，互相矛盾的线索不能硬凑。不因不知道默写词语总数、L19简称含义，或页面末尾留白而假设还有额外内容、续页；无需让孩子补填这些细节。有明确词数/页码/题号时仍以明确要求为准；确有题目被裁切、看不清、可定位的缺页或空题时具体指出。推断检查范围不代表补造老师的真实要求、标准答案或已掌握知识。" + SELECTED_SUBMISSION_POLICY;
 
 /** A lesson identifier is enough context to match a worksheet, but is not a word count or page list. */
 export function mayInferScope(task: Pick<Task,"title"|"requirement"|"format">) {
@@ -21,6 +22,7 @@ export function speculativeScopeConcern(text: string) {
 }
 
 export function inferTaskScope(task: Task, pages: ExtractedHomework["pages"]): Task {
+  if (task.selectedSubmission && isCorrectionSignTask(task)) return task;
   if (!mayInferScope(task) || !task.evidence.length || !task.writtenCompletion?.parts.length) return task;
   const ids = [...new Set(task.evidence.map(e => e.fileId))];
   if (ids.length > 6) return task;

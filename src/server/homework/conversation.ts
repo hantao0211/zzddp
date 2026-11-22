@@ -1,3 +1,4 @@
+import { SELECTED_SUBMISSION_POLICY } from "../../domain/submission-policy";
 import { randomUUID } from "node:crypto";
 import { HomeworkDialogueSchema } from "../../domain/ai-contracts";
 import { ClarificationActionSchema, MemoEditSchema, type MemoEdit, type ClarificationAction, type ClarificationPreview, type ClarificationReceipt, type HomeworkChatContext, type MemoEntry } from "../../domain/clarifications";
@@ -76,6 +77,7 @@ export class HomeworkConversation {
     if (snapshot.report) snapshot.report.familyNotes = context.familyNotes;
     // Recent dialogue is separated from document records so a short answer is not drowned by old uncertainties.
     const dialogueGuide = {
+      submissionPolicy: SELECTED_SUBMISSION_POLICY,
       previousAssistantTurn: input.history.filter((m) => m.role === "assistant").at(-1)?.content || null,
       recentUserStatements: [...input.history.filter((m) => m.role === "user").slice(-3).map((m) => m.content), input.question],
       shortFollowUp: input.history.length > 0 && input.question.length <= 120,

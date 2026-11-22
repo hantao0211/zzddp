@@ -62,10 +62,10 @@ test("a clearly wrong subject is retained with a concrete conflict instead of be
     const state = f.store().snapshot(date); assert.equal(state.pending, false); assert.equal(state.status, "needs_rescan"); assert.ok(state.report!.tasks.every(t => !t.evidence.length)); assert.match(state.report!.unassigned[0].reason, /P74.*数学.*英语/);
   } finally { f.cleanup(); }
 });
-test("model omission preserves explicit destination as uncertain and does not mark work complete", async () => {
+test("model omission cannot undo a readable explicit destination; receipt does not invent completion", async () => {
   const f = fixture(); try {
     f.memo(); await f.drain(); const task = f.store().snapshot(date).report!.tasks[0]; f.setMode("omit"); f.upload("omitted", task.id); await f.drain();
-    const current = f.store().snapshot(date).report!.tasks[0]; assert.equal(current.coverage, "uncertain"); assert.equal(current.evidence.length, 1); assert.match(current.missing.join(" "), /不表示已经做完/);
+    const current = f.store().snapshot(date).report!.tasks[0]; assert.equal(current.coverage, "complete"); assert.equal(current.evidence.length, 1); assert.deepEqual(current.missing, []); assert.ok(current.selectedSubmission); assert.equal(current.writtenCompletion, null);
   } finally { f.cleanup(); }
 });
 test("unknown photographed subject can use the explicit task as context without rewriting raw recognition", async () => {

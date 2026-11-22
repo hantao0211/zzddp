@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { taskSubmission } from "./task-submission";
 import { EvidenceSchema } from "./ai-contracts";
 
 export const WrittenPartSchema = z.object({
@@ -25,8 +26,8 @@ export function readWrittenCompletion(env: Record<string, string | undefined> = 
   if (env.ASSISTANT_WRITTEN_COMPLETION !== "1") throw new Error("Invalid written completion setting");
   return true;
 }
-export function isWrittenTask(task: { format: string }) { return task.format === "written"; }
-export function needsWrittenCompletionUpdate(task: { format: string; writtenCompletion?: { version?: string } | null }, enabled?: boolean) { return !!enabled && isWrittenTask(task) && (!task.writtenCompletion || task.writtenCompletion.version !== WRITTEN_COMPLETION_VERSION); }
+export function isWrittenTask(task: { format: string; title?: string; requirement?: string }) { return task.format === "written" || (task.format === "other" && /订签|订正|签字|签名/u.test(`${task.title||""} ${task.requirement||""}`) && taskSubmission({title:task.title||"",requirement:task.requirement||"",format:task.format}) === "written"); }
+export function needsWrittenCompletionUpdate(task: { format: string; title?: string; requirement?: string; writtenCompletion?: { version?: string } | null }, enabled?: boolean) { return !!enabled && isWrittenTask(task) && (!task.writtenCompletion || task.writtenCompletion.version !== WRITTEN_COMPLETION_VERSION); }
 export function writtenCompletionLabel(value?: WrittenCompletion | null) {
   if (!value) return null;
   return value.status === "done" ? "已做完（未批改）" : value.status === "incomplete" ? value.parts.every(p => p.status === "blank") ? "未做" : "未做完" : value.status === "missing" ? "未找到对应照片" : "AI未判清";
