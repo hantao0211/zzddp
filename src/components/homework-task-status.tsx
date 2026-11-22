@@ -4,14 +4,16 @@ import { CircleHelp, ClipboardList, Download, Image, Maximize2 } from "lucide-re
 import type { HomeworkSnapshot } from "@/domain/homework";
 import type { HomeworkSummaryRow } from "@/domain/homework-summary";
 import { homeworkTaskDetail, type TaskEvidencePhoto } from "@/domain/homework-task-detail";
+import { HomeworkPhoto } from "./homework-photo";
+import { pagePhotoUrl } from "@/services/homework-photo";
 import { TaskCompleteButton } from "./task-complete-button";
 import { StatusIndicator } from "./status-indicator";
 
 function EvidencePhotos({ photos }: { photos: TaskEvidencePhoto[] }) {
   const [expanded, setExpanded] = useState(false);
   return <><div className="task-evidence-photos">{(expanded ? photos : photos.slice(0, 4)).map((photo, i) => <figure key={photo.pageId}>
-    <a className="task-photo-preview" href={`/assistant-api/learning/pages/${encodeURIComponent(photo.pageId)}`} target="_blank" rel="noopener noreferrer" aria-label={`查看照片${i + 1}大图`}><img src={`/assistant-api/learning/pages/${encodeURIComponent(photo.pageId)}`} alt={`照片${i + 1} · ${photo.name} 第${photo.number}页`} loading="lazy" /><span><Maximize2 size={15} aria-hidden="true" />查看大图</span></a>
-    <figcaption><strong>照片{i + 1} · 原件第{photo.number}页</strong>{photo.excerpts.map((text, n) => <p key={n}>{text}</p>)}{photo.issues.map((text, n) => <p className="task-photo-issue" key={n}>{text}</p>)}<a className="text-button" href={`/assistant-api/learning/files/${encodeURIComponent(photo.fileId)}`}><Download size={15} aria-hidden="true" />下载原件</a></figcaption>
+    <a className="task-photo-preview" href={`/assistant-api/learning/pages/${encodeURIComponent(photo.pageId)}`} target="_blank" rel="noopener noreferrer" aria-label={`查看照片${i + 1}大图`}><HomeworkPhoto pageId={photo.pageId} size="thumb" alt={`照片${i + 1} · ${photo.name} 第${photo.number}页`} /><span><Maximize2 size={15} aria-hidden="true" />查看大图</span></a>
+    <figcaption><strong>照片{i + 1} · 原件第{photo.number}页</strong>{photo.excerpts.map((text, n) => <p key={n}>{text}</p>)}{photo.issues.map((text, n) => <p className="task-photo-issue" key={n}>{text}</p>)}<div className="task-photo-downloads"><a className="text-button" href={pagePhotoUrl(photo.pageId,"screen",true)}><Download size={15} aria-hidden="true" />下载图片</a><a className="text-button" aria-label="下载原件" href={`/assistant-api/learning/files/${encodeURIComponent(photo.fileId)}`}>原件</a></div></figcaption>
   </figure>)}</div>{photos.length > 4 && <button className="text-button task-evidence-more" onClick={() => setExpanded(!expanded)}>{expanded ? "收起更多照片" : `展开其余${photos.length - 4}张照片`}</button>}</>;
 }
 export function HomeworkTaskStatus({ snapshot, row, allUploads, saved }: { snapshot: HomeworkSnapshot; row: HomeworkSummaryRow; allUploads: () => void; saved?: () => Promise<void> }) {

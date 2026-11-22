@@ -52,3 +52,5 @@
 @media(max-width:360px){.task-evidence-photos{grid-template-columns:1fr}.task-photo-preview img{height:170px}}
 
 .task-confirm-control{margin-top:7px}.task-confirm-button{display:inline-flex;align-items:center;justify-content:center;gap:5px;background:#f2e1eb;border:1px solid #c795af;color:#70445e;border-radius:10px;min-height:44px;padding:8px 9px;font:inherit;font-size:13px;font-weight:600;cursor:pointer}.task-confirm-undo{min-height:44px;font-size:12px!important;display:flex;align-items:center;gap:4px}.task-confirm-control>small{display:block;color:#9b514a;font-size:12px;line-height:1.5;max-width:160px}.memo-edit-format{margin:14px 0}
+
+.task-photo-downloads,.grade-photo-actions{display:flex;gap:14px;flex-wrap:wrap;align-items:center}.task-photo-downloads .text-button,.grade-photo-actions .text-button{min-height:44px;display:inline-flex;align-items:center;gap:5px}.hw-original figcaption{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}

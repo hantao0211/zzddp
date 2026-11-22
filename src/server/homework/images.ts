@@ -31,7 +31,7 @@ export class ServerImages implements ImagePipeline {
   }
   async convert(file: FileRow) {
     const existing = this.store.pages(file.id);
-    if (existing.length && existing.every((p) => existsSync(join(this.store.directory, "pages", p.id + ".jpg")))) return existing;
+    if (existing.length && existing.every((p) => existsSync(join(this.store.directory, "pages", p.id + ".jpg")))) { this.store.previews.prime(existing); return existing; }
     const temporary = mkdtempSync(join(this.store.directory, "incoming", "convert-"));
     const original = join(this.store.directory, "originals", file.id);
     try {
@@ -57,7 +57,7 @@ export class ServerImages implements ImagePipeline {
         if (statSync(output).size > 2 * 1024 * 1024) throw new HomeworkError(422, "图片内容过大，原件已保存，请分开拍摄页面。");
         pages.push({ id, file_id: file.id, number: i });
       }
-      this.store.setPages(file.id, pages); return pages;
+      this.store.setPages(file.id, pages); this.store.previews.prime(pages); return pages;
     } finally { rmSync(temporary, { recursive: true, force: true }); }
   }
   images(pages: PageRow[]): AIImage[] { return pages.map((p) => ({ fileId: p.id, mimeType: "image/jpeg", base64: readFileSync(join(this.store.directory, "pages", p.id + ".jpg")).toString("base64") })); }

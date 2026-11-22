@@ -90,6 +90,8 @@ try {
   await book.getByText("可能的错因 · 计算错误", { exact: true }).waitFor();
   assert.equal(await book.locator(".grade-question").count(), 1);
   await book.getByRole("button", { name: "查看原题照片", exact: true }).click(); await book.locator("img").waitFor();
+  await book.locator("img").scrollIntoViewIfNeeded();await page.waitForFunction(()=>document.querySelector('.mistake-book img')?.naturalWidth>0||document.querySelector('.grade-photo img')?.naturalWidth>0);
+  assert.ok((await book.locator('img').getAttribute('src')).endsWith('?size=screen'));assert.ok((await book.getByRole('link',{name:'下载图片',exact:true}).getAttribute('href')).endsWith('?size=screen&download=1'));assert.ok((await book.getByRole('link',{name:'查看高清大图',exact:true}).getAttribute('href')).endsWith('/synthetic-page'));
   assert.equal(photos, 1);
   await book.getByRole("button", { name: "收起原图", exact: true }).click();
   await page.screenshot({ path: output + "/mistake-book-mobile.png", fullPage: true });

@@ -1,4 +1,6 @@
 "use client";
+import { HomeworkPhoto } from "./homework-photo";
+import { pagePhotoUrl } from "@/services/homework-photo";
 import { gradingDisplayQuestion } from "@/domain/grading-display";
 import { GRADING_STAGE_LABELS } from "@/domain/grading-failure";
 import { useEffect, useRef, useState } from "react";
@@ -11,7 +13,7 @@ const filterLabels = { correct: "正确", wrong: "错误", blank: "未作答", u
 type GradingFilter = "attention" | "all" | GradedQuestion["verdict"];
 function Photo({ id }: { id: string }) {
   const [open, setOpen] = useState(false);
-  return <div className="grade-photo"><button className="text-button" onClick={() => setOpen(!open)}>{open ? <ChevronUp size={17} aria-hidden="true" /> : <Image size={17} aria-hidden="true" />}{open ? "收起原图" : "查看原题照片"}</button>{open && <img src={`/assistant-api/learning/pages/${encodeURIComponent(id)}`} alt="这道题所在的作业原图" />}</div>;
+  return <div className="grade-photo"><button className="text-button" onClick={() => setOpen(!open)}>{open ? <ChevronUp size={17} aria-hidden="true" /> : <Image size={17} aria-hidden="true" />}{open ? "收起原图" : "查看原题照片"}</button>{open && <><HomeworkPhoto pageId={id} alt="这道题所在的作业原图" /><div className="grade-photo-actions"><a className="text-button" href={pagePhotoUrl(id,"full")} target="_blank" rel="noopener noreferrer">查看高清大图</a><a className="text-button" href={pagePhotoUrl(id,"screen",true)}>下载图片</a></div></>}</div>;
 }
 function QuestionCard({ question, date, subject, title, pageId }: { question: GradedQuestion; date: string; subject: string; title: string; pageId: string }) {
   const q = gradingDisplayQuestion(question);

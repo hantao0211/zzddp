@@ -92,10 +92,18 @@ export class HomeworkHTTP {
         const page = read[1] === "pages" ? this.store.page(read[2]) : undefined;
         const file = this.store.file(page ? page.file_id : read[2]);
         if (!file?.stored || (read[1] === "pages" && !page)) throw new HomeworkError(404, "原件或预览不存在。");
-        const filePath = join(this.store.directory, page ? "pages" : "originals", read[2] + (page ? ".jpg" : ""));
-        const size = statSync(filePath).size;
+        const variant = url.searchParams.get("size") || "full";
+        if (page && !["full", "thumb", "screen"].includes(variant)) throw new HomeworkError(400, "图片尺寸选项无效。");
+        const filePath = page && variant !== "full" ? await this.store.previews.get(page.id, variant as "thumb" | "screen") : join(this.store.directory, page ? "pages" : "originals", read[2] + (page ? ".jpg" : ""));
+        const info = statSync(filePath), size = info.size;
         const name = page ? `page-${page.number}.jpg` : file.name.replace(/[\x00-\x1f\x7f]/g, "");
-        res.writeHead(200, { "Content-Type": page ? "image/jpeg" : file.mime || "application/octet-stream", "Content-Length": size, "Content-Disposition": `${page ? "inline" : "attachment"}; filename*=UTF-8''${encodeURIComponent(name).replace(/['()*]/g, (c) => '%' + c.charCodeAt(0).toString(16))}`, "Content-Security-Policy": "default-src 'none'; sandbox", "Cross-Origin-Resource-Policy": "same-origin" });
+        if (page) {
+          // Revalidation saves bytes but still requires authentication, including after logout.
+          const etag = 'W/"' + createHash("sha256").update(`${filePath}:${size}:${info.mtimeMs}`).digest("hex") + '"';
+          res.setHeader("Cache-Control", "private, no-cache"); res.setHeader("ETag", etag); res.setHeader("Vary", "Cookie");
+          if (req.headers["if-none-match"]?.split(",").some(tag => tag.trim() === "*" || tag.trim().replace(/^W\//, "") === etag.replace(/^W\//, ""))) { res.writeHead(304); res.end(); return; }
+        }
+        res.writeHead(200, { "Content-Type": page ? "image/jpeg" : file.mime || "application/octet-stream", "Content-Length": size, "Content-Disposition": `${page && url.searchParams.get("download") !== "1" ? "inline" : "attachment"}; filename*=UTF-8''${encodeURIComponent(name).replace(/['()*]/g, (c) => '%' + c.charCodeAt(0).toString(16))}`, "Content-Security-Policy": "default-src 'none'; sandbox", "Cross-Origin-Resource-Policy": "same-origin" });
         const stream = createReadStream(filePath); stream.on("error", () => res.destroy()); res.on("close", () => stream.destroy()); stream.pipe(res); return;
       }
       throw new HomeworkError(404, "没有找到这个资料功能。");
