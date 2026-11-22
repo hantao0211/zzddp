@@ -1,4 +1,5 @@
 "use client";
+import { REQUIREMENT_PRESETS, taskSubmission } from "@/domain/task-submission";
 import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, Check, LoaderCircle, Pencil, X } from "lucide-react";
 import type { ClarificationReceipt, HomeworkChatContext, MemoEdit, MemoEntry } from "@/domain/clarifications";
@@ -15,7 +16,7 @@ export function MemoEditor({ date, title, subject, close, saved }: Props) {
   useEffect(() => { const d = dialog.current; d?.showModal(); return () => d?.close(); }, []);
   useEffect(() => {
     const controller = new AbortController();
-    void homeworkRequest<HomeworkChatContext>(`/assistant-api/homework-context?date=${date}`, { signal: controller.signal }).then(value => {
+    void homeworkRequest<HomeworkChatContext>(`/assistant-api/homework-context?date=${date}&requirements=1`, { signal: controller.signal }).then(value => {
       if (controller.signal.aborted) return;
       setContext(value);
       const matches = value.entries.filter(e => e.title === title && (!subject || subject === "待识别" || e.subject === subject));
@@ -43,7 +44,7 @@ export function MemoEditor({ date, title, subject, close, saved }: Props) {
   async function reload() {
     setBusy(true);
     try {
-      const latest = await homeworkRequest<HomeworkChatContext>(`/assistant-api/homework-context?date=${date}`);
+      const latest = await homeworkRequest<HomeworkChatContext>(`/assistant-api/homework-context?date=${date}&requirements=1`);
       setContext(latest); request.current = null;
       if (!latest.entries.some(e => e.entryId === selected)) { setSelected(null); setEntry(null); setError("当天换了新备忘录，请从新清单选择要修改的一项。"); }
       else setError("已读取最新版本，你填写的内容已保留。检查后可以再次保存。");
@@ -62,8 +63,11 @@ export function MemoEditor({ date, title, subject, close, saved }: Props) {
         {context && context.entries.length > 1 && <button type="button" className="text-button memo-edit-back" disabled={busy} onClick={() => { setEntry(null); setSelected(null); }}><ArrowLeft size={16} />换一项</button>}
         <label>科目<select aria-label="作业科目" value={entry.subject || ""} disabled={busy} onChange={e => change({ subject: (e.target.value || null) as MemoEntry["subject"] })}><option value="" disabled={!!original?.subject}>待确认</option>{["语文", "数学", "英语"].map(s => <option key={s}>{s}</option>)}</select></label>
         <label>作业名称<input aria-label="作业名称" value={entry.title} maxLength={150} required disabled={busy} onChange={e => change({ title: e.target.value })} /></label>
+        <p className="hw-secondary">{taskSubmission(entry) === "self" ? "小步判断：通常无需交书面，做好后可直接确认。" : taskSubmission(entry) === "written" ? "这项需要提交书面作业或资料。" : "作业方式还不明确，可以在下方选择。"}</p>
+        <label>选择常用或已有要求<select aria-label="选择已有作业要求" value="" disabled={busy} onChange={e => { const [kind,index]=e.target.value.split(":");if(kind==="preset"){const p=REQUIREMENT_PRESETS[Number(index)];change({requirement:`${entry.title}；${p.text}`,format:p.format});}else{const previous=context?.requirementOptions?.[Number(index)];if(previous)change({requirement:previous.requirement,format:previous.format});} }}><option value="" disabled>选择后填入下方，也可以自己写</option><optgroup label="常用要求">{REQUIREMENT_PRESETS.map((p,i)=><option key={i} value={`preset:${i}`}>{p.label}</option>)}</optgroup><optgroup label="以前用过的要求">{context?.requirementOptions?.map((p,i)=>p.subject===entry.subject?<option key={i} value={`history:${i}`}>{p.requirement.slice(0,70)}</option>:null)}</optgroup></select></label>
+        <p className="hw-secondary">选好后请看一下页码和次数，可在下面直接修改。</p>
         <label>具体要求<textarea aria-label="作业具体要求" rows={3} value={entry.requirement} maxLength={2000} required disabled={busy} onChange={e => change({ requirement: e.target.value })} /></label>
-        <details className="memo-edit-format"><summary>作业形式</summary><label>形式<select aria-label="作业形式" value={entry.format} disabled={busy} onChange={e => change({ format: e.target.value as MemoEntry["format"] })}><option value="written">书面作业</option><option value="oral">口头作业</option><option value="reading">阅读／预习复习</option><option value="other">其他</option></select></label></details>
+        <div className="memo-edit-format"><label>形式<select aria-label="作业形式" value={entry.format} disabled={busy} onChange={e => { const format=e.target.value as MemoEntry["format"];change({format,...(format==="written" && taskSubmission({...entry,format})==="self" ? {requirement:`${entry.requirement}；需提交书面作业。`}: {})}); }}><option value="written">需交书面／作业资料</option><option value="oral">朗读／背诵／口头（可直接完成）</option><option value="reading">阅读／预习复习（可直接完成）</option><option value="other">暂不确定</option></select></label></div>
         {error && <p className="form-error" role="alert">{error}</p>}{conflict && <button type="button" className="button secondary" disabled={busy} onClick={() => void reload()}>读取最新清单，保留我的填写</button>}
         <div className="dialog-footer"><button type="button" className="button secondary" disabled={busy} onClick={close}>取消</button><button className="button primary" disabled={busy || !changed || !entry.title.trim() || !entry.requirement.trim()}>{busy ? <LoaderCircle className="spin" size={18} /> : <Check size={18} />}{busy ? "保存中…" : "保存并重新整理"}</button></div>
       </form>}

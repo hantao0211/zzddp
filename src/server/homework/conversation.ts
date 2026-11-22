@@ -18,12 +18,12 @@ export class HomeworkConversation {
   get memories() { return new LearnedMemories(this.store); }
   constructor(readonly store: HomeworkStore, private pipeline?: Pick<ImagePipeline, "images">) {}
   private memo(date: string) { return this.store.uploads(date).filter((u) => u.kind === "memo").at(-1); }
-  context(date?: string, owner?: string): HomeworkChatContext {
+  context(date?: string, owner?: string, withRequirements = false): HomeworkChatContext {
     const availableDates = (this.store.db.prepare("SELECT DISTINCT date FROM uploads WHERE status!='uploading' ORDER BY date DESC").all() as { date: string }[]).map((r) => r.date);
     const selected = date || availableDates[0] || shanghaiDay(this.store.now());
     const state = this.store.snapshot(selected), memo = this.memo(selected);
     const data = memo?.result ? effectiveMemo(this.store, memo) : undefined;
-    return { date: selected, revision: this.store.revision(selected), availableDates, hasMaterials: state.uploads.some((u) => u.status !== "uploading"), pending: state.pending, status: state.status, note: state.note, taskCount: state.report?.tasks.length || 0, unclassifiedCount: data?.result.assignments.filter((a) => !a.subject).length || 0,
+    return { ...(withRequirements ? {requirementOptions:this.store.completions.requirements()}:{}), date: selected, revision: this.store.revision(selected), availableDates, hasMaterials: state.uploads.some((u) => u.status !== "uploading"), pending: state.pending, status: state.status, note: state.note, taskCount: state.report?.tasks.length || 0, unclassifiedCount: data?.result.assignments.filter((a) => !a.subject).length || 0,
       entries: data?.result.assignments.map((a, i) => ({ ...entryValue(a), entryId: `${memo!.id}:entry:${i}` })) || [], uncertainties: data?.unresolved || [], familyNotes: (data?.receipts || []).map((r) => {
         const note = this.store.db.prepare("SELECT owner,entry_index FROM clarifications WHERE id=?").get(r.id) as { owner: string; entry_index: number };
         const latest = this.store.db.prepare("SELECT id FROM clarifications WHERE memo_id=? AND entry_index=? AND undone_at IS NULL ORDER BY rowid DESC LIMIT 1").get(memo!.id, note.entry_index) as { id: string };
@@ -80,7 +80,7 @@ export class HomeworkConversation {
       recentUserStatements: [...input.history.filter((m) => m.role === "user").slice(-3).map((m) => m.content), input.question],
       shortFollowUp: input.history.length > 0 && input.question.length <= 120,
       currentFacts: context.entries,
-      completionBoundary: this.store.writtenCompletionEnabled ? "书面作业writtenCompletion逐项检查是否作答：done表示布置范围已填写，incomplete表示仍有空题，unclear表示无法判清；不代表答案正确或已批改。预习复习按家庭动笔痕迹口径判断。" : this.store.reviewPolicy?.description || "当前条目与家庭说明只用于解释作业内容/对应关系。材料齐全不证明已掌握或已答对；不要将系统状态疑问改成质疑孩子学得如何。",
+      completionBoundary: this.store.writtenCompletionEnabled ? "书面作业writtenCompletion逐项检查是否作答：done表示布置范围已填写，incomplete表示仍有空题，unclear表示无法判清；不代表答案正确或已批改。非书面作业可以由孩子点击“我完成了”确认，report.tasks[].selfCompletion注明确认人和时间，不是AI验证；预习复习也可按已有痕迹判断。不要求照片齐全来证明非书面作业完成。" : this.store.reviewPolicy?.description || "当前条目与家庭说明只用于解释作业内容/对应关系。材料齐全不证明已掌握或已答对；不要将系统状态疑问改成质疑孩子学得如何。",
       confirmedClarifications: context.familyNotes,
       priority: "先解释当前用户对上一轮的回答；已聊清楚就提出预览，只问一个真正缺失的问题。历史发言不自动当成事实，已确认条目优先，未提及的要求保持未知。",
     };

@@ -21,6 +21,7 @@ export const ExtractedHomeworkSchema = z.object({
   })).min(1).max(10),
 });
 export const HomeworkTaskSchema = z.object({
+  completionToken: z.string().optional(), selfCompletion: z.object({ confirmedAt: z.string(), confirmedBy: z.string(), role: z.enum(["admin", "parent", "child"]) }).optional(),
   id: z.string(), subject: SubjectSchema, title: z.string(), requirement: z.string(),
   format: z.enum(["written", "oral", "reading", "other"]), memoEvidence: z.array(EvidenceSchema),
   coverage: z.enum(["none", "partial", "complete", "uncertain"]),

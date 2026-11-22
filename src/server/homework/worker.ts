@@ -1,3 +1,4 @@
+import { taskSubmission } from "../../domain/task-submission";
 import { reviewReportConclusion } from "../../domain/review-conclusion";
 import { mapParallel } from "../work/concurrency";
 import { HomeworkExecution, HOMEWORK_CONCURRENCY } from "./execution";
@@ -166,7 +167,7 @@ export class HomeworkWorker {
     if (!homework.length) {
       const received = uploads.filter((u) => u.kind === "homework");
       if (received.length) this.store.publish(job, report, "failed", "作业照片已经收到，但页面转换或识别尚未成功。请查看下方资料状态，原件无需重复上传。");
-      else this.store.publish(job, report, memoNeedsRescan ? "needs_rescan" : "processed", memoNeedsRescan ? "已识别部分作业清单，有条目科目不明；原文已保留。可以继续上传作业。" : "作业清单已生成，等待上传作业照片。");
+      else this.store.publish(job, report, memoNeedsRescan ? "needs_rescan" : "processed", memoNeedsRescan ? "已识别部分作业清单，有条目科目不明；原文已保留。可以继续上传作业。" : report.tasks.some(t => taskSubmission(t) === "self") ? "清单已生成；非书面作业做好后可直接确认，其他作业再上传。" : "作业清单已生成，等待上传作业照片。");
       return;
     }
     if (homework.length > 120 || JSON.stringify(homework).length > 300_000) throw new HomeworkError(422, "当天资料量较大，需要扩展分析容量；原件和已识别内容均已保留。");

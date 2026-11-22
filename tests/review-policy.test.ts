@@ -53,8 +53,8 @@ for (const state of ["marked", "blank", "unclear"] as const) test(`review ${stat
     const task = report.tasks[0]; assert.equal(task.coverage, "complete"); assert.equal(task.reviewActivity!.status, state);
     assert.equal(report.uncertainties.length, 0);
     assert.equal(reviewActivityLabel(task), state === "marked" ? "已做（有痕迹）" : state === "blank" ? "未做（无痕迹）" : "AI没看清学习痕迹");
-    if (state === "blank") assert.match(homeworkHomeStatus(f.store.snapshot(date)).text, /未动笔/);
-    if (state === "unclear") assert.equal(homeworkHomeStatus(f.store.snapshot(date)).help, true);
+    if (state === "blank") assert.match(homeworkHomeStatus(f.store.snapshot(date)).text, /我完成了/);
+    if (state === "unclear") assert.equal(homeworkHomeStatus(f.store.snapshot(date)).help, false);
     assert.equal(f.store.upload(f.memo)!.result, rawMemo); assert.equal(f.store.upload(f.homework)!.result, rawHomework);
     assert.equal(readFileSync(join(f.directory, "originals", f.store.files(f.homework)[0].id), "utf8"), "synthetic-original");
     f.store.bump(date); await worker.tick(); assert.equal(inspections, 1); assert.equal(organizations, 1, "Unchanged pages and policy reuse analysis");

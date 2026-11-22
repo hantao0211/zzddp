@@ -1,10 +1,11 @@
+import { taskSubmission } from "./task-submission";
 import { reviewConclusion } from "./review-conclusion";
 import type { HomeworkSnapshot } from "./homework";
 import { needsWrittenCompletionUpdate } from "./written-completion";
 import { needsReviewTraceUpdate, usesReviewTraces } from "./review-policy";
 
 type State = { text: string; tone: "good" | "attention" | "muted" };
-export type HomeworkSummaryRow = { id: string; title: string; subject: string; photo: State; activity: State; photoDetail: string; activityDetail: string; updating?: boolean };
+export type HomeworkSummaryRow = { id: string; title: string; subject: string; photo: State; activity: State; photoDetail: string; activityDetail: string; selfTask?: boolean; completionToken?: string; selfConfirmed?: boolean; updating?: boolean };
 export function homeworkSummary(snapshot: HomeworkSnapshot | null) {
   if (!snapshot?.uploads.length) return null;
   const receipt = (kind: "memo" | "homework") => {
@@ -15,6 +16,10 @@ export function homeworkSummary(snapshot: HomeworkSnapshot | null) {
   const hasPhotos = snapshot.uploads.some(u => u.kind === "homework" && u.files.some(f => f.stored));
   const rows: HomeworkSummaryRow[] = (snapshot.report?.tasks || []).map(original => {
     const task = reviewConclusion(original, snapshot.reviewPolicy);
+    if (taskSubmission(task) === "self") {
+      const confirmed=task.selfCompletion;const marked=task.reviewActivity?.status === "marked";
+      return {id:task.id,title:task.title,subject:task.subject,selfTask:true,updating:false,completionToken:task.completionToken,selfConfirmed:!!confirmed,photo:{text:"照片可选",tone:"good"},activity:{text:confirmed?"已完成":marked?"已做":"待完成",tone:confirmed||marked?"good":"attention"},photoDetail:"这项通常没有书面成果，不要求交照片。已上传的照片仅作补充参考。",activityDetail:confirmed?`${confirmed.confirmedBy}已确认完成。这是使用者的完成记录，不是AI看图验证。`:marked?"已看到学习痕迹，按家庭约定记为已做；也可以自己确认完成。":"做好后点“我完成了”即可，不用为了证明完成而拍照或补写笔记。"};
+    }
     const photo: State = { text: { complete: "已收到", partial: "对应待确认", none: hasPhotos ? "未匹配" : "未交照片", uncertain: task.evidence.length ? "已关联" : "待匹配" }[task.coverage], tone: task.coverage === "complete" ? "good" : "attention" };
     let activity: State = { text: "尚未判断", tone: "muted" };
     if (needsReviewTraceUpdate(task, snapshot.reviewPolicy)) activity = { text: "需重新整理", tone: "attention" };

@@ -109,7 +109,7 @@ export function createAssistantServer(options: Options) {
         const rawDate = new URL(request.url!, options.origin).searchParams.get("date");
         const date = rawDate ? DaySchema.safeParse(rawDate) : undefined;
         if (date && !date.success) throw new HttpError(400, "请选择有效作业日期。");
-        json(response, 200, options.learning.context(date?.data, digest(token))); return;
+        json(response, 200, options.learning.context(date?.data, digest(token), new URL(request.url!, options.origin).searchParams.get("requirements") === "1")); return;
       }
       if (path === "/assistant-api/memories" && request.method === "GET" && options.learning) {
         json(response, 200, { items: options.learning.memories.list() }); return;
@@ -130,7 +130,7 @@ export function createAssistantServer(options: Options) {
         const result = clarificationPath[2] === "confirm" ? options.learning.confirm(clarificationPath[1], digest(token)) : options.learning.undo(clarificationPath[1], digest(token));
         json(response, 200, result); return;
       }
-      if (path.startsWith("/assistant-api/learning/") && options.homework) { await options.homework.handle(request, response); return; }
+      if (path.startsWith("/assistant-api/learning/") && options.homework) { await options.homework.handle(request, response, viewer || undefined); return; }
       if (request.method !== "POST") throw new HttpError(405, "请求方式不支持。");
       if (active >= 2) throw new HttpError(429, "小助手正在回答问题，请稍等一下。");
       active++;

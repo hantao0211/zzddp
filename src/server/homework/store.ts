@@ -1,3 +1,4 @@
+import { TaskCompletions } from "./task-completions";
 import { reviewReportConclusion } from "../../domain/review-conclusion";
 import { DEFAULT_HOMEWORK_DAILY_CALLS, HomeworkQuotaSettingsSchema, type HomeworkQuota } from "../../domain/homework-quota";
 import { currentUploadTarget, readUploadTarget, resolveUploadTarget } from "./upload-target";
@@ -20,6 +21,7 @@ const hash = (v: unknown) => createHash("sha256").update(JSON.stringify(v)).dige
 export class HomeworkStore {
   readonly db: DatabaseSync;
   readonly grading: GradingStore;
+  readonly completions: TaskCompletions;
   constructor(readonly directory: string, readonly now = Date.now, readonly reviewPolicy: ReviewPolicy | null = null, readonly writtenCompletionEnabled = false, readonly autoGradingEnabled = false) {
     mkdirSync(directory, { recursive: true, mode: 0o700 });
     for (const part of ["originals", "pages", "incoming"]) mkdirSync(join(directory, part), { recursive: true, mode: 0o700 });
@@ -46,6 +48,7 @@ export class HomeworkStore {
       CREATE INDEX IF NOT EXISTS jobs_queue ON jobs(status,next_at,id); CREATE INDEX IF NOT EXISTS uploads_date ON uploads(date);
       PRAGMA user_version=1;`);
     this.grading = new GradingStore(this);
+    this.completions = new TaskCompletions(this);
     // Restart recovers interrupted work, without erasing attempts, quotas or originals.
     this.db.exec("UPDATE jobs SET status='queued' WHERE status='running'; UPDATE uploads SET status='queued', note='后台已恢复，等待继续整理。' WHERE status IN ('converting','recognizing');");
     if (!hasQuotaWaits) this.db.prepare("INSERT OR IGNORE INTO homework_quota_waits(job_id) SELECT id FROM jobs WHERE status='queued' AND next_at%86400000=57600000 AND (date IN (SELECT date FROM days WHERE note=?) OR upload_id IN (SELECT id FROM uploads WHERE note=?))").run("今天的AI整理限额已到，原件已保存，明天自动继续。", "今天的AI整理限额已到，原件已保存，明天自动继续。");
@@ -234,6 +237,7 @@ export class HomeworkStore {
     // Read current explanations even before reorganization, without rewriting the saved report.
     const memo = report?.memoId ? this.upload(report.memoId) : undefined;
     if (report && memo?.result) report.familyNotes = effectiveMemo(this, memo).receipts;
+    if (report) report.tasks = report.tasks.map(task => this.completions.view(date, task));
     const pendingUploads=pending?all.map(u=>this.upload(u.id)!).filter(u=>{
       const active=["queued","converting","recognizing","retrying"].includes(u.status);
       const unorganized=!!u.result&&(report?.organizedUploadIds?!report.organizedUploadIds.includes(u.id):!report?.updatedAt||u.created_at>report.updatedAt);

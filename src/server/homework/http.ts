@@ -1,3 +1,5 @@
+import { z } from "zod";
+import type { Viewer } from "../../domain/accounts";
 import { createHash, randomUUID } from "node:crypto";
 import { open, rename, rm, statfs } from "node:fs/promises";
 import { createReadStream, statSync } from "node:fs";
@@ -19,13 +21,18 @@ export class HomeworkHTTP {
   private writing = new Set<string>();
   private active = 0;
   constructor(private store: HomeworkStore, private rewards?: HomeworkRewards) {}
-  async handle(req: IncomingMessage, res: ServerResponse) {
+  async handle(req: IncomingMessage, res: ServerResponse, viewer?: Viewer) {
     const url = new URL(req.url!, "http://internal"), path = url.pathname.replace("/assistant-api/learning", "");
     try {
       if (path === "/state" && req.method === "GET") {
         const date = DaySchema.safeParse(url.searchParams.get("date"));
         if (!date.success) throw new HomeworkError(400, "请选择有效的作业日期。");
         json(res, { ...this.store.snapshot(date.data), ...(this.rewards ? { homeworkReward: this.rewards.status(date.data) } : {}) }); return;
+      }
+      if (path === "/task-completion" && req.method === "POST") {
+        const value=z.object({date:DaySchema,taskId:z.string().min(1).max(180),token:z.string().regex(/^[a-f0-9]{64}$/),completed:z.boolean()}).strict().safeParse(await input(req));
+        if(!value.success)throw new HomeworkError(400,"请从当前作业点击完成按钮。");
+        const v=value.data;const result=this.store.completions.set(v.date,v.taskId,v.token,v.completed,viewer);this.rewards?.tick();json(res,result);return;
       }
       if (path === "/grading" && req.method === "GET") {
         const date = DaySchema.safeParse(url.searchParams.get("date"));

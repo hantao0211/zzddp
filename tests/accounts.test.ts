@@ -256,3 +256,16 @@ test("parents and admins can set persistent homework AI quotas, while children a
     assert.equal((await f.send("admin/limits", "PATCH", { chat: 5000, asr: 30, tts: 40 }, parent.cookie)).status, 403, "Other administrator settings remain restricted");
   } finally { await f.cleanup(); }
 });
+
+test("children can confirm nonwritten work with their server identity; login, origin, current requirements and strict input remain enforced", async()=>{
+ const f=await fixture();try{
+  const admin=await f.bootstrap();await f.send("admin/accounts","POST",{username:"child",name:"模拟孩子",password,role:"child"},admin.cookie);const session=await f.login("child");
+  const u=f.homework.begin({date,kind:"memo",files:[{name:"synthetic.png",size:1,sha256:"b".repeat(64)}]});const file=u.files[0];f.homework.stored(file.id,"image/png");f.homework.setPages(file.id,[{id:file.id+'-p1',file_id:file.id,number:1}]);f.homework.finalize(u.id);const job=f.homework.claim()!;
+  f.homework.recognized(job,{date,readable:true,assignments:[{subject:"语文",title:"复习单元六",requirement:"复习单元六",format:"reading",evidence:[{fileId:file.id+'-p1',page:1,excerpt:"复习单元六"}]}],uncertainties:[]},["语文"],false,0,"");f.homework.db.exec("UPDATE jobs SET status='done'");
+  const {DailyReportSchema}=await import("../src/domain/homework");const report=DailyReportSchema.parse({date,memoId:u.id,updatedAt:"",uncertainties:[],unassigned:[],tasks:[{id:u.id+':task:0',subject:"语文",title:"复习单元六",requirement:"复习单元六",format:"reading",memoEvidence:[],evidence:[],coverage:"none",missing:[]}]});
+  f.homework.publish({id:-1,date,kind:"organize",upload_id:null,revision:f.homework.revision(date),attempts:1},report,"processed","");const task=f.homework.snapshot(date).report!.tasks[0];const input={date,taskId:task.id,token:task.completionToken,completed:true};
+  assert.equal((await f.send('learning/task-completion','POST',input)).status,401);assert.equal((await f.send('learning/task-completion','POST',input,session.cookie,{Origin:'https://other.test'})).status,403);assert.equal((await f.send('learning/task-completion','POST',{...input,actor:'admin'},session.cookie)).status,400);
+  assert.equal((await f.send('learning/task-completion','POST',input,session.cookie)).status,200);assert.equal((await f.send('learning/task-completion','POST',input,session.cookie)).status,200);
+  const state=(await f.send('learning/state?date='+date,'GET',undefined,session.cookie)).data;assert.equal(state.report.tasks[0].selfCompletion.confirmedBy,'模拟孩子');assert.equal(state.report.tasks[0].selfCompletion.role,'child');assert.equal(f.calls(),0);
+ }finally{await f.cleanup();}
+});

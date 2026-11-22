@@ -1,3 +1,5 @@
+import { taskSubmission } from "./task-submission";
+import { homeworkSummary } from "./homework-summary";
 import { reviewReportConclusion } from "./review-conclusion";
 import type { HomeworkSnapshot } from "./homework";
 import { needsReviewTraceUpdate } from "./review-policy";
@@ -15,13 +17,14 @@ export function homeworkHomeStatus(snapshot: HomeworkSnapshot | null): { text: s
   if (!snapshot.uploads.some((u) => u.kind === "memo")) return { text: "作业已收到，补一张备忘录就能对照清单。", help: false, busy: false };
   const report = snapshot.report ? reviewReportConclusion(snapshot.report, snapshot.reviewPolicy) : null;
   if (report?.tasks.some(t => t.writtenCompletion?.status === "incomplete")) return { text: "还有题目没写完，可在详情查看具体题号。", help: true, busy: false };
-  if (report?.tasks.some((t) => t.reviewActivity?.status === "blank")) return { text: "预习复习还有未动笔的内容，做好后再拍照。", help: false, busy: false };
-  if (report?.tasks.some((t) => needsReviewTraceUpdate(t, snapshot.reviewPolicy))) return { text: "部分预习复习仍是旧结果，可在详情重新整理。", help: false, busy: false };
-  if (report?.tasks.length && !report.unclassified.length && !report.unassigned.length && snapshot.status !== "needs_rescan" && !snapshot.uploads.some(u => u.status === "needs_rescan") && report.tasks.every(t => t.coverage === "complete" && (t.reviewActivity?.status === "marked" || t.writtenCompletion?.status === "done"))) {
+  if (report?.tasks.some((t) => taskSubmission(t) !== "self" && t.reviewActivity?.status === "blank")) return { text: "预习复习还有未动笔的内容，做好后再拍照。", help: false, busy: false };
+  if (report?.tasks.some((t) => taskSubmission(t) !== "self" && needsReviewTraceUpdate(t, snapshot.reviewPolicy))) return { text: "部分预习复习仍是旧结果，可在详情重新整理。", help: false, busy: false };
+  if (report?.tasks.length && !report.unclassified.length && !report.unassigned.length && snapshot.status !== "needs_rescan" && !snapshot.uploads.some(u => u.status === "needs_rescan") && homeworkSummary(snapshot)?.rows.every(row => row.photo.tone === "good" && row.activity.tone === "good")) {
     const grade = snapshot.grading;
     const text = !grade?.enabled ? "这一天的作业都已做完，答案对错还没批改。" : grade.pending ? "作业已做完，AI正在批改。" : grade.failed ? "作业已做完，有批改还没完成。" : grade.wrong ? `作业已做完，${grade.wrong}道错题已整理到错题本。` : grade.uncertain ? `作业已做完，有${grade.uncertain}题AI尚未确认。` : grade.finished ? "作业已做完，可以查看逐题批改结果。" : "这一天的作业都已做完。";
     return { text, help: false, busy: false };
   }
+  if (report?.tasks.some(t => taskSubmission(t) === "self" && !t.selfCompletion && t.reviewActivity?.status !== "marked")) return { text: "非书面作业做好后，点“我完成了”即可，不用交照片。", help: false, busy: false };
   if (snapshot.uploads.some((u) => u.status === "needs_rescan") || !report || report.uncertainties.length || report.unclassified.length || report.unassigned.length || report.tasks.some((t) => t.coverage === "uncertain" || t.reviewActivity?.status === "unclear" || t.writtenCompletion?.status === "unclear")) return { text: "有些内容还需要说明。", help: true, busy: false };
   const missing = report.tasks.filter((t) => t.coverage !== "complete").length;
   if (missing) return { text: `还有 ${missing} 项作业的照片未对应清楚，点各项状态查看原因。`, help: false, busy: false };

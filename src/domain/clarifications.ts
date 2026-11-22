@@ -26,5 +26,5 @@ export const ClarificationReceiptSchema = z.object({
   entryId: z.string().optional(), requirement: z.string().optional(), current: z.boolean().optional(), canUndo: z.boolean().optional(),
 });
 export type ClarificationReceipt = z.infer<typeof ClarificationReceiptSchema>;
-export type HomeworkChatContext = { date: string; revision: number; availableDates: string[]; hasMaterials: boolean; pending: boolean; status: string; note: string; taskCount: number; unclassifiedCount: number; entries: (MemoEntry & { entryId: string })[]; uncertainties: { index: number; text: string }[]; familyNotes: ClarificationReceipt[] };
+export type HomeworkChatContext = { requirementOptions?: MemoEntry[]; date: string; revision: number; availableDates: string[]; hasMaterials: boolean; pending: boolean; status: string; note: string; taskCount: number; unclassifiedCount: number; entries: (MemoEntry & { entryId: string })[]; uncertainties: { index: number; text: string }[]; familyNotes: ClarificationReceipt[] };
 export const ContextQuerySchema = z.object({ studyDate: DaySchema.optional() });

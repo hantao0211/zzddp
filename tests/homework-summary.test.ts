@@ -21,11 +21,11 @@ test("overview distinguishes receipt from completion, counts only stored files a
   assert.equal(summary.rows[1].photo.text, "已收到"); assert.equal(summary.rows[1].activity.text, "尚未判断");
   assert.equal(summary.rows[2].subject, "待识别");
   s.report!.tasks[0].reviewActivity = { status: "blank", reason: "模拟空白" };
-  assert.equal(homeworkSummary(s)!.rows[0].activity.text, "未做");
+  assert.equal(homeworkSummary(s)!.rows[0].activity.text, "待完成");
   s.report!.tasks[0].coverage = "partial"; s.report!.tasks[0].reviewActivity = { status: "marked", reason: "只拍到一页" };
   assert.equal(homeworkSummary(s)!.rows[0].activity.text, "已做");
   s.report!.tasks[0].reviewActivity = null;
-  assert.equal(homeworkSummary(s)!.rows[0].activity.text, "需重新整理");
+  assert.equal(homeworkSummary(s)!.rows[0].activity.text, "待完成");
 });
 test("new uploads preserve previous results; dates with no report or no uploads have honest empty states", () => {
   const s = snapshot(); s.pending = true;
@@ -51,6 +51,7 @@ test("photo and completion explanations distinguish not submitted, unmatched, pa
 
 test("partial association never claims a proven missing photo and homepage does not ask for blind supplements", async () => {
   const s = snapshot();
+  s.report!.tasks = s.report!.tasks.filter(t => t.subject === "数学");
   s.report!.tasks.forEach(t => { t.coverage = "partial"; t.reviewActivity = null; t.format = "other"; t.missing = ["本子编号无法辨认"]; });
   const row = homeworkSummary(s)!.rows[0];
   assert.equal(row.photo.text, "对应待确认");

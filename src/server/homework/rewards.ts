@@ -5,7 +5,7 @@ import type { ReadingStore } from "../reading/store";
 /** Recoverable delivery between two private stores. The ledger's unique key is authoritative. */
 export class HomeworkRewards {
   private timer?: ReturnType<typeof setInterval>;
-  private checked = new Map<string, number>();
+  private checked = new Map<string, string>();
   private points?: number;
   readonly startDate: string;
   constructor(private homework: HomeworkStore, private reading: ReadingStore) { this.startDate = reading.enableHomeworkRewards(); }
@@ -16,11 +16,12 @@ export class HomeworkRewards {
     const earned = new Set(this.reading.homeworkRewardDates());
     const days = this.homework.db.prepare("SELECT date,revision FROM days WHERE date>=? AND date<=? AND status='processed'").all(this.startDate, this.reading.today()) as { date: string; revision: number }[];
     for (const day of days) {
-      if (earned.has(day.date) || this.checked.get(day.date) === day.revision) continue;
+      const revision = `${day.revision}:${this.homework.completions.revision(day.date)}`;
+      if (earned.has(day.date) || this.checked.get(day.date) === revision) continue;
       const snapshot = this.homework.snapshot(day.date);
       if (snapshot.pending) continue;
       if (isHomeworkDayComplete(snapshot)) this.reading.creditHomework(day.date, day.revision);
-      this.checked.set(day.date, day.revision);
+      this.checked.set(day.date, revision);
     }
   }
   start() {
