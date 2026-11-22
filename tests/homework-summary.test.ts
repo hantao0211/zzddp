@@ -23,7 +23,7 @@ test("overview distinguishes receipt from completion, counts only stored files a
   s.report!.tasks[0].reviewActivity = { status: "blank", reason: "模拟空白" };
   assert.equal(homeworkSummary(s)!.rows[0].activity.text, "未做");
   s.report!.tasks[0].coverage = "partial"; s.report!.tasks[0].reviewActivity = { status: "marked", reason: "只拍到一页" };
-  assert.equal(homeworkSummary(s)!.rows[0].activity.text, "有痕迹，缺页");
+  assert.equal(homeworkSummary(s)!.rows[0].activity.text, "有痕迹，待确认");
   s.report!.tasks[0].reviewActivity = null;
   assert.equal(homeworkSummary(s)!.rows[0].activity.text, "需重新整理");
 });
@@ -46,4 +46,25 @@ test("photo and completion explanations distinguish not submitted, unmatched, pa
   row = homeworkSummary(s)!.rows[1]; assert.equal(row.photo.text, "未交照片"); assert.equal(row.activity.text, "等照片"); assert.match(row.activityDetail, /不是要求家长/);
   s.report!.tasks[1].coverage = "complete"; row = homeworkSummary(s)!.rows[1]; assert.equal(row.activity.text, "需检查"); assert.match(row.activityDetail, /系统会自动检查/);
   s.pending = true; row = homeworkSummary(s)!.rows[1]; assert.match(row.activityDetail, /系统会自动检查/);
+});
+
+
+test("partial association never claims a proven missing photo and homepage does not ask for blind supplements", async () => {
+  const s = snapshot();
+  s.report!.tasks.forEach(t => { t.coverage = "partial"; t.reviewActivity = null; t.format = "other"; t.missing = ["本子编号无法辨认"]; });
+  const row = homeworkSummary(s)!.rows[0];
+  assert.equal(row.photo.text, "对应待确认");
+  assert.match(row.photoDetail, /不等于需要重新上传/);
+  assert.doesNotMatch(row.photoDetail, /需要补齐/);
+  s.reviewPolicy = null;
+  const { homeworkHomeStatus } = await import("../src/domain/homework-home");
+  assert.match(homeworkHomeStatus(s).text, /点各项状态查看原因/);
+});
+
+
+test("uncertain tasks with linked evidence do not claim the photos have never been associated", () => {
+  const s = snapshot(); const task = s.report!.tasks[1]; task.coverage = "uncertain";
+  task.evidence = [{ fileId: "synthetic-page", page: 1, excerpt: "已交到本项但范围不清" }];
+  assert.match(homeworkSummary(s)!.rows[1].photoDetail, /已关联/);
+  assert.doesNotMatch(homeworkSummary(s)!.rows[1].photoDetail, /AI还没把照片与这一项对应/);
 });

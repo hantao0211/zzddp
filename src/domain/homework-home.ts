@@ -23,6 +23,6 @@ export function homeworkHomeStatus(snapshot: HomeworkSnapshot | null): { text: s
   }
   if (snapshot.uploads.some((u) => u.status === "needs_rescan") || !report || report.uncertainties.length || report.unclassified.length || report.unassigned.length || report.tasks.some((t) => t.coverage === "uncertain" || t.reviewActivity?.status === "unclear" || t.writtenCompletion?.status === "unclear")) return { text: "有些内容还需要说明。", help: true, busy: false };
   const missing = report.tasks.filter((t) => t.coverage !== "complete").length;
-  if (missing) return { text: `还有 ${missing} 项作业材料没收齐，可以继续交作业。`, help: false, busy: false };
+  if (missing) return { text: `还有 ${missing} 项作业的照片未对应清楚，点各项状态查看原因。`, help: false, busy: false };
   return { text: report.tasks.some((t) => t.reviewActivity?.status === "marked") ? "材料已收齐，预习复习也已见痕迹。" : report.tasks.length ? "这一天的作业材料已收齐。" : "备忘录已收到，和小步看看清单吧。", help: !report.tasks.length, busy: false };
 }
