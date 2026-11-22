@@ -184,11 +184,9 @@ export function StudyAssistant({ studyDate, launcherTarget, readingMode = false,
     };
     resize(); viewport?.addEventListener("resize", resize); viewport?.addEventListener("scroll", resize);
     window.addEventListener("resize", resize);
-    const previousOverflow = document.documentElement.style.overflow;
-    document.documentElement.style.overflow = "hidden";
     return () => {
       viewport?.removeEventListener("resize", resize); viewport?.removeEventListener("scroll", resize);
-      window.removeEventListener("resize", resize); document.documentElement.style.overflow = previousOverflow;
+      window.removeEventListener("resize", resize);
     };
   }, [open]);
   useEffect(() => {

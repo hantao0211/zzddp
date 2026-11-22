@@ -2,8 +2,8 @@
 import { useEffect, useState } from "react";
 import type { Viewer } from "@/domain/accounts";
 export const sessionChanged = () => window.dispatchEvent(new Event("xiaobu:session-changed"));
-export async function accountRequest(path: string, value?: unknown, method = "POST") {
-  const response = await fetch(`/assistant-api/${path}`, { credentials: "same-origin", cache: "no-store", ...(value === undefined ? { method } : { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(value) }) });
+export async function accountRequest(path: string, value?: unknown, method = "POST", signal?: AbortSignal) {
+  const response = await fetch(`/assistant-api/${path}`, { credentials: "same-origin", cache: "no-store", signal, ...(value === undefined ? { method } : { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(value) }) });
   const result = await response.json(); if (!response.ok) throw new Error(result.error || "操作未完成，请稍后再试。"); return result;
 }
 export function useViewer() {

@@ -6,6 +6,8 @@ import "./admin.css";
 import "./status.css";
 import "./reading.css";
 import "./study-design.css";
+import "./interactions.css";
+import { AppInteractions } from "@/components/app-interactions";
 
 export const metadata: Metadata = {
   title: "小步学习 · 每一步，都算数",
@@ -15,5 +17,5 @@ export const metadata: Metadata = {
 export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: "#a95476" };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="zh-CN"><body>{children}</body></html>;
+  return <html lang="zh-CN"><body><AppInteractions>{children}</AppInteractions></body></html>;
 }

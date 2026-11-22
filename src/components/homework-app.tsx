@@ -8,6 +8,7 @@ import { reviewActivityLabel, needsReviewTraceUpdate } from "@/domain/review-pol
 import { taskGradingLabel } from "@/domain/grading";
 import { GradingPanel, MistakeBook } from "./grading-panel";
 import { useStudyNavigation } from "./study-navigation";
+import { useStudyRefresh } from "./app-interactions";
 import { StudyShell } from "./study-shell";
 import { HomeCompanion } from "./study-companion";
 import { FamilyNotes } from "./family-notes";
@@ -65,21 +66,24 @@ export function HomeworkApp({ onDemo, onDateChange, active=true }: { onDemo: () 
   const [detailId, setDetailId] = useState<string | null>(null);
   const [legacy, setLegacy] = useState(false);
   const requestId = useRef(0), pendingReads=useRef(0), previousActive=useRef(active);
-  const refresh = useCallback(async (background=false) => {
+  const refresh = useCallback(async (background=false, signal?: AbortSignal) => {
     if(background&&pendingReads.current)return;
     const id = ++requestId.current;
     if (location.protocol !== "https:") { setAuth("insecure"); return; }
     pendingReads.current++;
     try {
-      const result = await getHomework(date);
+      const result = await getHomework(date, signal);
+      signal?.throwIfAborted();
       if (id !== requestId.current) return;
       setSnapshot(result); setAuth("ready"); setError("");
     } catch (e) {
       if (id !== requestId.current) return;
       if (e instanceof HomeworkRequestError && e.status === 401) { setAuth("locked"); setSnapshot(null); }
-      else setError(errorText(e));
+      else setError(signal?.aborted ? "刷新未完成，请稍后重试。" : errorText(e));
+      if (signal) throw e;
     } finally {pendingReads.current--;}
   }, [date]);
+  useStudyRefresh(signal => refresh(false, signal), active);
   useEffect(() => { setSnapshot(null); void refresh(); const timer = setInterval(() => { if (activeRef.current && !document.hidden) void refresh(true); }, 4000); const focus = () => { if(activeRef.current)void refresh(true); }; window.addEventListener("focus", focus); window.addEventListener("xiaobu:homework-updated", focus); window.addEventListener("xiaobu:session-changed", focus); return () => { clearInterval(timer); window.removeEventListener("focus", focus); window.removeEventListener("xiaobu:homework-updated", focus); window.removeEventListener("xiaobu:session-changed", focus); requestId.current++; }; }, [refresh]);
   useEffect(()=>{if(active&&!previousActive.current)void refresh(true);previousActive.current=active;},[active,refresh]);
   useEffect(() => { if (!notice) return; const timer = setTimeout(() => setNotice(""), 8000); return () => clearTimeout(timer); }, [notice]);

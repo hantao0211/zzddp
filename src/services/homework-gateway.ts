@@ -7,7 +7,7 @@ export async function homeworkRequest<T>(path: string, init: RequestInit = {}): 
   if (!response.ok) throw new HomeworkRequestError(response.status, result.error || "请求未完成，请重试。");
   return result as T;
 }
-export const getHomework = (date: string) => homeworkRequest<HomeworkSnapshot>(`/state?date=${date}`);
+export const getHomework = (date: string, signal?: AbortSignal) => homeworkRequest<HomeworkSnapshot>(`/state?date=${date}`, { signal });
 export const homeworkPost = <T,>(path: string, value: unknown = {}) => homeworkRequest<T>(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(value) });
 export async function uploadHomework(date: string, kind: "memo" | "homework", files: File[], onProgress: (text: string) => void, targetTaskId?: string) {
   onProgress("正在检查文件…");
