@@ -19,10 +19,10 @@ function EvidencePhotos({ photos }: { photos: TaskEvidencePhoto[] }) {
 export function HomeworkTaskStatus({ snapshot, row, allUploads, saved }: { snapshot: HomeworkSnapshot; row: HomeworkSummaryRow; allUploads: () => void; saved?: () => Promise<void> }) {
   const task = snapshot.report?.tasks.find(t => t.id === row.id);
   const detail = task ? homeworkTaskDetail(snapshot, task) : null;
-  return <div className="task-status-body"><h3>{row.subject} · {row.title}</h3>
+  return <div className="task-status-body"><h3>{row.subject} · {row.displayTitle||row.title}</h3>{row.displayTitle&&<p className="hw-secondary">备忘录原记：{row.title}</p>}
     <div className="task-status-badges"><StatusIndicator kind={row.selfTask ? "neutral" : row.photo.tone === "good" || row.photo.text === "已关联" ? "received" : "uncertain"}>照片 · {row.photo.text}</StatusIndicator><StatusIndicator kind={row.activity.tone === "good" ? "done" : ["未做", "未做完"].includes(row.activity.text) ? "blank" : "uncertain"}>{row.activity.text}</StatusIndicator></div>
     {row.selfTask && row.completionToken && saved && <TaskCompleteButton row={row} date={snapshot.date} saved={saved} />}
-    {task?.inferredScope&&<section className="task-inferred-scope" aria-label="推断的作业要求"><strong><Sparkles size={17} aria-hidden="true"/>根据作业推断</strong><p>{task.inferredScope.description}</p><details><summary>推断依据</summary><p>{task.inferredScope.note}</p></details></section>}
+    {(task?.inferredScope||task?.inferredMeaning)&&<section className="task-inferred-scope" aria-label="推断的作业要求"><strong><Sparkles size={17} aria-hidden="true"/>根据作业推断</strong>{task?.inferredMeaning&&<p>{task.inferredMeaning.description}</p>}{task?.inferredScope&&<p>{task.inferredScope.description}</p>}<details><summary>推断依据</summary>{task?.inferredMeaning?.evidence.map((e,i)=><p key={i}>页面写有：{e.excerpt}</p>)}{task?.inferredScope&&<p>{task.inferredScope.note}</p>}</details></section>}
     {detail && <details className="task-status-requirement"><summary><ClipboardList size={17} aria-hidden="true" />系统理解的作业要求</summary><p>{detail.requirement}</p></details>}
     <section className="study-status-explanation"><p>{row.photoDetail}</p>
       {!!detail?.concerns.length && <div className="task-status-concerns"><h4><CircleHelp size={19} aria-hidden="true" />AI记录的具体疑点</h4><ul>{detail.concerns.map((text, i) => <li key={i}>{text}</li>)}</ul><p>这是AI的判断依据，不等于确实缺页或作业没做。先看下面对应的照片，不必重复上传。</p></div>}

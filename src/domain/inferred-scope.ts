@@ -1,8 +1,9 @@
 import type { DailyReport, ExtractedHomework } from "./homework";
 import { taskSubmission } from "./task-submission";
+import { inferTaskMeaning } from "./inferred-meaning";
 
 type Task = DailyReport["tasks"][number];
-export const SUBMITTED_SCOPE_POLICY = "要求未明确词数、页数或题号时，依据已匹配且清晰的作业推断检查范围，说明推断依据；只检查该范围内实际要求作答的内容。不因不知道默写词语总数、L19简称含义，或页面末尾留白而假设还有额外内容、续页；无需让孩子补填这些细节。有明确词数/页码/题号时仍以明确要求为准；确有题目被裁切、看不清、可定位的缺页或空题时具体指出。推断检查范围不代表补造老师的真实要求、标准答案或已掌握知识。";
+export const SUBMITTED_SCOPE_POLICY = "要求未明确词数、页数或题号时，依据已匹配且清晰的作业推断检查范围，说明推断依据；只检查该范围内实际要求作答的内容。遇到L19等简称，主动结合对应页面课号、课题、题目和页码理解具体含义，不把简称当成无法理解或仅仅忽略；明确区分推断和原文，互相矛盾的线索不能硬凑。不因不知道默写词语总数、L19简称含义，或页面末尾留白而假设还有额外内容、续页；无需让孩子补填这些细节。有明确词数/页码/题号时仍以明确要求为准；确有题目被裁切、看不清、可定位的缺页或空题时具体指出。推断检查范围不代表补造老师的真实要求、标准答案或已掌握知识。";
 
 /** A lesson identifier is enough context to match a worksheet, but is not a word count or page list. */
 export function mayInferScope(task: Pick<Task,"title"|"requirement"|"format">) {
@@ -33,11 +34,11 @@ export function inferTaskScope(task: Task, pages: ExtractedHomework["pages"]): T
   const status = parts.some(p => p.status === "blank") ? "incomplete" : parts.some(p => p.status === "unclear") ? "unclear" : "done";
   const printed = [...new Set(matched.flatMap(p => p?.printedPage ? [p.printedPage] : []))];
   const description = /家默|默写|听写/u.test(task.title) ? "按已上传照片中的词语默写和订正内容检查。" : `按已上传${printed.length ? `第${printed.join("、")}页` : "照片中"}的作业内容检查。`;
-  const note = /家默|默写|听写/u.test(task.title) ? "备忘录未写明具体词语和数量，已根据对应默写作业推断检查范围，不要求补填总词数。" : "备忘录未写明具体范围或简称含义，已根据对应练习推断；不因页末留白而要求证明没有续页。";
+  const note = /家默|默写|听写/u.test(task.title) ? "备忘录未写明具体词语和数量，已根据对应默写作业推断检查范围，不要求补填总词数。" : task.inferredMeaning ? "课号和课题与简称相符，已理解具体作业内容，并按对应页面检查；不因页末留白而要求证明没有续页。" : "备忘录未写明具体范围或简称含义，已根据对应练习推断；不因页末留白而要求证明没有续页。";
   return {...task,coverage:"complete",missing:[],inferredScope:{version:"submitted-work-v1",description,note,pageIds:ids},writtenCompletion:{...task.writtenCompletion,status,reason:status === "done" ? `按已传作业推断范围，已检查${parts.length}处作答，均有填写；答案对错另看批改。` : status === "incomplete" ? "已按所传作业推断范围，仍有明确空题，具体位置见下方。" : "已按所传作业推断范围，仍有作答看不清，具体位置见下方。"}};
 }
 export function inferredReportScope(report: DailyReport, pages: ExtractedHomework["pages"]): DailyReport {
-  const tasks=report.tasks.map(task=>inferTaskScope(task,pages));
+  const tasks=report.tasks.map(task=>inferTaskScope(inferTaskMeaning(task,pages),pages));
   const resolved=new Set(report.tasks.flatMap((task,i)=>task.missing.filter(s=>!tasks[i].missing.includes(s))));
   return {...report,tasks,uncertainties:report.uncertainties.filter(s=>!resolved.has(s))};
 }

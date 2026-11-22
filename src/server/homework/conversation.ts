@@ -80,7 +80,7 @@ export class HomeworkConversation {
       recentUserStatements: [...input.history.filter((m) => m.role === "user").slice(-3).map((m) => m.content), input.question],
       shortFollowUp: input.history.length > 0 && input.question.length <= 120,
       currentFacts: context.entries,
-      completionBoundary: this.store.writtenCompletionEnabled ? "书面作业writtenCompletion逐项检查是否作答：done表示布置范围已填写，incomplete表示仍有空题，unclear表示无法判清；不代表答案正确或已批改。inferredScope表示从对应作业推断了检查范围，已检查的内容不用再追问总词数或简称，也不要求证明没有续页；缺失要求不等于缺作业。非书面作业可以由孩子点击“我完成了”确认，report.tasks[].selfCompletion注明确认人和时间，不是AI验证；预习复习也可按已有痕迹判断。不要求照片齐全来证明非书面作业完成。" : this.store.reviewPolicy?.description || "当前条目与家庭说明只用于解释作业内容/对应关系。材料齐全不证明已掌握或已答对；不要将系统状态疑问改成质疑孩子学得如何。",
+      completionBoundary: this.store.writtenCompletionEnabled ? "书面作业writtenCompletion逐项检查是否作答：done表示布置范围已填写，incomplete表示仍有空题，unclear表示无法判清；不代表答案正确或已批改。inferredMeaning注明由页面课号/课题支持的简称解释，优先用它说明具体作业，不只忽略简称。inferredScope表示从对应作业推断了检查范围，已检查的内容不用再追问总词数或简称，也不要求证明没有续页；缺失要求不等于缺作业。非书面作业可以由孩子点击“我完成了”确认，report.tasks[].selfCompletion注明确认人和时间，不是AI验证；预习复习也可按已有痕迹判断。不要求照片齐全来证明非书面作业完成。" : this.store.reviewPolicy?.description || "当前条目与家庭说明只用于解释作业内容/对应关系。材料齐全不证明已掌握或已答对；不要将系统状态疑问改成质疑孩子学得如何。",
       confirmedClarifications: context.familyNotes,
       priority: "先解释当前用户对上一轮的回答；已聊清楚就提出预览，只问一个真正缺失的问题。历史发言不自动当成事实，已确认条目优先；可依据已传作业推断的检查范围按inferredScope解释，不能再把已消除的范围疑问变成家庭补交要求，不凭空补造老师要求或标准答案。",
     };

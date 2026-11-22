@@ -11,6 +11,7 @@ try{
  const report=inferredReportScope(DailyReportSchema.parse(JSON.parse(row.report)),pages);
  const tasks=report.tasks.filter(t=>["家默","练L19"].includes(t.title));assert.equal(tasks.length,2);
  for(const task of tasks){assert.ok(task.inferredScope);assert.equal(task.writtenCompletion?.status,"done");}
+ const lesson=tasks.find(t=>t.title==="练L19")!;assert.equal(lesson.inferredMeaning?.number,19);assert.ok(lesson.inferredMeaning?.evidence.length);
  assert.equal((db.prepare("SELECT report FROM days WHERE date=?").get(date) as {report:string}).report,row.report);
- console.log(JSON.stringify({readOnly:true,noImageReads:true,noAI:true,tasks:tasks.map(t=>({title:t.title,coverage:t.coverage,completion:t.writtenCompletion?.status,checkedParts:t.writtenCompletion?.parts.length,inferred:!!t.inferredScope})),rawReportUnchanged:true}));
+ console.log(JSON.stringify({readOnly:true,noImageReads:true,noAI:true,tasks:tasks.map(t=>({title:t.title,displayTitle:t.inferredMeaning?.displayTitle,meaningEvidence:t.inferredMeaning?.evidence.map(e=>e.excerpt),coverage:t.coverage,completion:t.writtenCompletion?.status,checkedParts:t.writtenCompletion?.parts.length,inferred:!!t.inferredScope})),rawReportUnchanged:true}));
 }finally{db.close();}

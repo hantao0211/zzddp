@@ -5,7 +5,7 @@ import { needsWrittenCompletionUpdate } from "./written-completion";
 import { needsReviewTraceUpdate, usesReviewTraces } from "./review-policy";
 
 type State = { text: string; tone: "good" | "attention" | "muted" };
-export type HomeworkSummaryRow = { id: string; title: string; subject: string; photo: State; activity: State; photoDetail: string; activityDetail: string; selfTask?: boolean; completionToken?: string; selfConfirmed?: boolean; updating?: boolean; inferred?:boolean };
+export type HomeworkSummaryRow = { id: string; title: string; subject: string; photo: State; activity: State; photoDetail: string; activityDetail: string; selfTask?: boolean; completionToken?: string; selfConfirmed?: boolean; updating?: boolean; inferred?:boolean; displayTitle?:string };
 export function homeworkSummary(snapshot: HomeworkSnapshot | null) {
   if (!snapshot?.uploads.length) return null;
   const receipt = (kind: "memo" | "homework") => {
@@ -38,7 +38,7 @@ export function homeworkSummary(snapshot: HomeworkSnapshot | null) {
       activityDetail = hasPhotos ? "还没有对应到可检查的照片，所以暂时不能判断有没有做完。先检查清单是否识别正确；正确的照片可能已经上传，无需一律重传。" : "对应的作业照片还没收到，所以系统暂时不能检查是否做完；不是要求家长来核对。";
     }
     const updating=!!snapshot.pending&&!snapshot.processing?.memo&&(!!snapshot.processing?.taskIds?.includes(task.id)||!!snapshot.processing?.subjects.includes(task.subject));
-    return { id: task.id, title: task.title, subject: task.subject, inferred:!!task.inferredScope, photo, activity, photoDetail:photoDetail+(task.missing.some(text=>text.startsWith("这张照片交给"))?" "+task.missing.filter(text=>text.startsWith("这张照片交给")).join(" "):"")+(updating?" 新照片还在整理，当前显示上次结果。":""), activityDetail:activityDetail+(updating?" 新照片还在整理，当前显示上次结果。":""), updating };
+    return { id: task.id, title: task.title, displayTitle:task.inferredMeaning?.displayTitle, subject: task.subject, inferred:!!task.inferredScope||!!task.inferredMeaning, photo, activity, photoDetail:photoDetail+(task.missing.some(text=>text.startsWith("这张照片交给"))?" "+task.missing.filter(text=>text.startsWith("这张照片交给")).join(" "):"")+(updating?" 新照片还在整理，当前显示上次结果。":""), activityDetail:activityDetail+(updating?" 新照片还在整理，当前显示上次结果。":""), updating };
   });
   for (const [index, task] of (snapshot.report?.unclassified || []).entries()) rows.push({ id: `unclassified-${index}`, title: task.title, subject: "待识别", photo: { text: "未对应好", tone: "attention" }, activity: { text: "先确认科目", tone: "muted" }, photoDetail: "这项备忘录的科目还没识别清楚，因此还没对应照片。可以直接修改科目和作业要求。", activityDetail: "先把这项作业的科目和要求说清楚，系统才能对应照片并检查。" });
   return { memo: receipt("memo"), homework: receipt("homework"), rows, empty: snapshot.pending ? "AI正在整理，完成后会显示每项作业。" : !snapshot.uploads.some(u => u.kind === "memo") ? "补一张备忘录，就能列出各项作业。" : "AI还没整理出清单，已上传的照片会保留。" };
