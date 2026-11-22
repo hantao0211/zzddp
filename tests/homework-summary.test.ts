@@ -23,7 +23,7 @@ test("overview distinguishes receipt from completion, counts only stored files a
   s.report!.tasks[0].reviewActivity = { status: "blank", reason: "模拟空白" };
   assert.equal(homeworkSummary(s)!.rows[0].activity.text, "未做");
   s.report!.tasks[0].coverage = "partial"; s.report!.tasks[0].reviewActivity = { status: "marked", reason: "只拍到一页" };
-  assert.equal(homeworkSummary(s)!.rows[0].activity.text, "有痕迹，待确认");
+  assert.equal(homeworkSummary(s)!.rows[0].activity.text, "已做");
   s.report!.tasks[0].reviewActivity = null;
   assert.equal(homeworkSummary(s)!.rows[0].activity.text, "需重新整理");
 });

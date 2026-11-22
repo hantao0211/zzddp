@@ -30,7 +30,7 @@ export function needsReviewTraceUpdate(task: { title: string; requirement: strin
 }
 export function reviewActivityLabel(task: { coverage: string; reviewActivity?: { status: string } | null }) {
   if (!task.reviewActivity) return null;
-  if (task.reviewActivity.status === "marked") return task.coverage === "complete" ? "已做（有痕迹）" : "有痕迹，待补页";
+  if (task.reviewActivity.status === "marked") return "已做（有痕迹）";
   if (task.reviewActivity.status === "blank") return "未做（无痕迹）";
   return task.reviewActivity.status === "missing" ? "未找到对应照片" : "AI没看清学习痕迹";
 }

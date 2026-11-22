@@ -100,3 +100,14 @@ test("reorganize accepts an outdated processed review once, preserving originals
     assert.throws(() => f.store.retryDay(date), /当前规则/);
   } finally { f.cleanup(); }
 });
+
+test("stored unit-review records use existing trace evidence without AI work or rewriting originals and saved reports", () => {
+ const f=fixture();try {
+  const pageId=f.store.pages(f.store.files(f.homework)[0].id)[0].id;
+  const report=DailyReportSchema.parse({date,memoId:f.memo,updatedAt:"",uncertainties:[],unassigned:[],tasks:[{id:"unit-review",subject:"语文",title:"复习单元六",requirement:"复习单元六，未写明具体页码或方式。",format:"other",coverage:"uncertain",missing:["未写明复习页码、课文或方式，无法判断指定范围是否收齐。"],memoEvidence:[],evidence:[{fileId:pageId,page:1,excerpt:"第六单元课文"}],reviewActivity:{status:"marked",reason:"有圈画、注音和旁批"}}]});
+  const saved=JSON.stringify(report);f.store.db.prepare("UPDATE days SET report=?,status='processed' WHERE date=?").run(saved,date);
+  const jobs=f.store.db.prepare('select count(*) as n from jobs').get();const raw=f.store.upload(f.homework)!.result;
+  const snapshot=f.store.snapshot(date);assert.equal(snapshot.report!.tasks[0].coverage,"complete");assert.deepEqual(snapshot.report!.tasks[0].missing,[]);assert.equal(snapshot.report!.tasks[0].reviewActivity?.status,"marked");
+  assert.equal((f.store.db.prepare('select report from days where date=?').get(date) as {report:string}).report,saved);assert.deepEqual(f.store.db.prepare('select count(*) as n from jobs').get(),jobs);assert.equal(f.store.upload(f.homework)!.result,raw);
+ }finally{f.cleanup();}
+});

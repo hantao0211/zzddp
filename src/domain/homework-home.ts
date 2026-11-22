@@ -1,3 +1,4 @@
+import { reviewReportConclusion } from "./review-conclusion";
 import type { HomeworkSnapshot } from "./homework";
 import { needsReviewTraceUpdate } from "./review-policy";
 
@@ -12,7 +13,7 @@ export function homeworkHomeStatus(snapshot: HomeworkSnapshot | null): { text: s
   }
   if (snapshot.status === "failed" || snapshot.uploads.some((u) => u.status === "failed")) return { text: "有资料没整理好，找小步一起看看。", help: true, busy: false };
   if (!snapshot.uploads.some((u) => u.kind === "memo")) return { text: "作业已收到，补一张备忘录就能对照清单。", help: false, busy: false };
-  const report = snapshot.report;
+  const report = snapshot.report ? reviewReportConclusion(snapshot.report, snapshot.reviewPolicy) : null;
   if (report?.tasks.some(t => t.writtenCompletion?.status === "incomplete")) return { text: "还有题目没写完，可在详情查看具体题号。", help: true, busy: false };
   if (report?.tasks.some((t) => t.reviewActivity?.status === "blank")) return { text: "预习复习还有未动笔的内容，做好后再拍照。", help: false, busy: false };
   if (report?.tasks.some((t) => needsReviewTraceUpdate(t, snapshot.reviewPolicy))) return { text: "部分预习复习仍是旧结果，可在详情重新整理。", help: false, busy: false };

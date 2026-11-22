@@ -1,3 +1,4 @@
+import { reviewReportConclusion } from "../../domain/review-conclusion";
 import { mapParallel } from "../work/concurrency";
 import { HomeworkExecution, HOMEWORK_CONCURRENCY } from "./execution";
 import { readUploadTarget, resolveUploadTarget } from "./upload-target";
@@ -321,6 +322,6 @@ export class HomeworkWorker {
       // Original records stay intact. Drop only the old blanket photo-can-never-prove-reading concern.
       report.uncertainties = report.uncertainties.filter((u) => !obsoleteReadingProofConcern(u));
     }
-    this.store.publish(job, report, memoNeedsRescan || blocked.size > 0 || !result.readable || homework.some((p) => !p.readable || !p.subject) ? "needs_rescan" : "processed", memoNeedsRescan ? "作业照片已整理，已对照可识别的备忘录条目查缺；科目不明的条目单独保留。" : this.store.reviewPolicy ? "已对照备忘录整理；预习复习按家庭约定的学习痕迹判断，材料统计与答案对错分开。" : "已对照备忘录整理；材料齐全仅表示已收到相应内容，不代表答案正确或作业已完成。");
+    this.store.publish(job, reviewReportConclusion(report, this.store.reviewPolicy), memoNeedsRescan || blocked.size > 0 || !result.readable || homework.some((p) => !p.readable || !p.subject) ? "needs_rescan" : "processed", memoNeedsRescan ? "作业照片已整理，已对照可识别的备忘录条目查缺；科目不明的条目单独保留。" : this.store.reviewPolicy ? "已对照备忘录整理；预习复习按家庭约定的学习痕迹判断，材料统计与答案对错分开。" : "已对照备忘录整理；材料齐全仅表示已收到相应内容，不代表答案正确或作业已完成。");
   }
 }

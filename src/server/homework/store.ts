@@ -1,3 +1,4 @@
+import { reviewReportConclusion } from "../../domain/review-conclusion";
 import { DEFAULT_HOMEWORK_DAILY_CALLS, HomeworkQuotaSettingsSchema, type HomeworkQuota } from "../../domain/homework-quota";
 import { currentUploadTarget, readUploadTarget, resolveUploadTarget } from "./upload-target";
 import { GradingStore } from "./grading-store";
@@ -229,7 +230,7 @@ export class HomeworkStore {
     const all = this.db.prepare("SELECT id FROM uploads WHERE date=? ORDER BY created_at DESC,rowid DESC").all(date) as { id: string }[];
     const dates = (this.db.prepare("SELECT DISTINCT date FROM uploads ORDER BY date DESC").all() as { date: string }[]).map((r) => r.date);
     const pending = !!this.db.prepare("SELECT id FROM jobs WHERE date=? AND status IN ('queued','running') AND (kind='recognize' OR revision=(SELECT revision FROM days WHERE date=jobs.date)) LIMIT 1").get(date);
-    const report = day?.report ? DailyReportSchema.parse(JSON.parse(day.report)) : null;
+    const report = day?.report ? reviewReportConclusion(DailyReportSchema.parse(JSON.parse(day.report)), this.reviewPolicy) : null;
     // Read current explanations even before reorganization, without rewriting the saved report.
     const memo = report?.memoId ? this.upload(report.memoId) : undefined;
     if (report && memo?.result) report.familyNotes = effectiveMemo(this, memo).receipts;

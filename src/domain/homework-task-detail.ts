@@ -1,3 +1,4 @@
+import { reviewConclusion } from "./review-conclusion";
 import type { DailyReport, HomeworkSnapshot } from "./homework";
 import type { z } from "zod";
 import type { EvidenceSchema } from "./ai-contracts";
@@ -5,7 +6,8 @@ import type { EvidenceSchema } from "./ai-contracts";
 type Evidence = z.infer<typeof EvidenceSchema>;
 export type TaskEvidencePhoto = { pageId: string; fileId: string; name: string; number: number; excerpts: string[]; issues: string[] };
 /** Resolve only real pages from this date and the right kind of upload; never guess a photo by subject. */
-export function homeworkTaskDetail(snapshot: HomeworkSnapshot, task: DailyReport["tasks"][number]) {
+export function homeworkTaskDetail(snapshot: HomeworkSnapshot, original: DailyReport["tasks"][number]) {
+  const task = reviewConclusion(original, snapshot.reviewPolicy);
   function resolve(evidence: Evidence[], kind: "homework" | "memo") {
     const resolved = new Map<string, TaskEvidencePhoto>();
     const unavailable = new Set<string>();

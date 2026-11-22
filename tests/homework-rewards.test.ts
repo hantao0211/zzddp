@@ -39,7 +39,9 @@ test("daily homework reward needs actual completion, not receipt, correctness or
   bad(s => s.report!.tasks[0].writtenCompletion!.status = "incomplete"); bad(s => s.report!.tasks[0].writtenCompletion!.status = "unclear");
   bad(s => delete s.report!.tasks[0].writtenCompletion!.version); bad(s => s.report!.memoId = "old-memo");
   const review = structuredClone(snapshot); review.report!.tasks[0] = { ...review.report!.tasks[0], subject: "语文", title: "预习第19课", format: "reading", writtenCompletion: null, reviewActivity: { status: "marked", reason: "有圈画" } };
-  assert.ok(isHomeworkDayComplete(review)); review.report!.tasks[0].reviewActivity!.status = "blank"; assert.equal(isHomeworkDayComplete(review), false);
+  assert.ok(isHomeworkDayComplete(review));
+  const missingReview = structuredClone(review); missingReview.report!.tasks[0].coverage = "uncertain"; missingReview.report!.tasks[0].missing = ["第77页未拍到"]; assert.equal(isHomeworkDayComplete(missingReview), false, "Visible review marks cannot reward a day with a concrete missing page");
+  review.report!.tasks[0].reviewActivity!.status = "blank"; assert.equal(isHomeworkDayComplete(review), false);
  } finally { f.cleanup(); }
 });
 
