@@ -40,8 +40,8 @@ for (const disagree of [false, true]) test(`grading pipeline ${disagree ? "disag
   const ai: StructuredAI = { async run(task, schema, metadata) {
     if (task === "grade_homework") { assert.deepEqual((metadata as { pages: unknown }).pages, [{ fileId: f.page, page: 1 }]); firstCalls++; return schema.parse({ scopeComplete: true, note: "", questions: [question(f.page)] }); }
     assert.equal(task, "verify_homework_grading"); verifyCalls++;
-    const input = metadata as { questions: { questionId: string; verdict?: unknown; expectedAnswer?: unknown }[] };
-    assert.ok(input.questions.every(q => q.verdict === undefined && q.expectedAnswer === undefined));
+    const input = metadata as { questions: { questionId: string; verdict?: unknown; expectedAnswer?: unknown; studentAnswer?: unknown }[] };
+    assert.ok(input.questions.every(q => q.verdict === undefined && q.expectedAnswer === undefined && q.studentAnswer === undefined && !("evidence" in q) && !("label" in q) && !("question" in q)));
     return schema.parse({ scopeComplete: true, omittedLabels: [], checks: [{ ...question(f.page), questionId: input.questions[0].questionId, verdict: disagree ? (metadata as { source?: { focus?: boolean } }).source?.focus ? "uncertain" : "correct" : "wrong" }] });
   } };
   const grader = new HomeworkGrader(f.store, () => ai, { images: () => [{ fileId: f.page, mimeType: "image/png", base64: "synthetic" }] });
@@ -133,4 +133,19 @@ test("grading failure reasons and stages persist, are safe to show, and survive 
     f.store.grading.save(row, { version: "grading-v2", scopeComplete: true, note: "", questions: [] }); assert.equal(f.store.grading.results(date).batches[0].failure, null);
     f.store.grading.fail({ ...row, attempts: 6 }, false, false, { code: "NETWORK_ERROR", stage: "inspection" }); assert.equal(f.store.grading.results(date).batches[0].retryAllowed, false);
   } finally { f.close(); }
+});
+
+test("a medium-confidence Chinese glyph is not turned into a wrong-book entry by four repeated OCR readings", async () => {
+  const f = fixture(); let calls = 0;
+  const sourceRow = f.store.db.prepare('SELECT id,source FROM grading_runs LIMIT 1').get() as {id:string;source:string};
+  const source = {...JSON.parse(sourceRow.source),subject:"语文",title:"模拟默写"};f.store.db.prepare('UPDATE grading_runs SET source=? WHERE id=?').run(JSON.stringify(source),sourceRow.id);
+  const glyph = {...question(f.page),label:"第9题：当地",question:"第9题词语默写",studentAnswer:"挡地",expectedAnswer:"当地",confidence:"medium",cause:"书写或单位",knowledgePoints:["词语默写"],evidence:[{fileId:f.page,page:1,excerpt:"挡地"}]};
+  const grader = new HomeworkGrader(f.store,()=>({async run(task,schema,metadata){
+    calls++;
+    if(task==="grade_homework")return schema.parse({scopeComplete:true,note:"",questions:[glyph]});
+    const input=metadata as {source:Record<string,unknown>;questions:{questionId:string}[]};
+    assert.ok(!('expectedLabels' in input.source));assert.doesNotMatch(JSON.stringify(input.questions),/挡地|当地|studentAnswer|expectedAnswer|excerpt/);
+    return schema.parse({scopeComplete:true,omittedLabels:[],checks:[{...glyph,confidence:"high",questionId:input.questions[0].questionId}]});
+  }}),{images:()=>[]});
+  try{await grader.tick();assert.equal(calls,4);assert.equal(f.store.grading.summary(date).wrong,0);assert.equal(f.store.grading.summary(date).uncertain,1);assert.equal(f.store.grading.mistakes(null).total,0);}finally{f.close();}
 });

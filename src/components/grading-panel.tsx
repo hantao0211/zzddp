@@ -1,4 +1,5 @@
 "use client";
+import { gradingDisplayQuestion } from "@/domain/grading-display";
 import { GRADING_STAGE_LABELS } from "@/domain/grading-failure";
 import { useEffect, useRef, useState } from "react";
 import { homeworkPost, homeworkRequest } from "@/services/homework-gateway";
@@ -12,15 +13,16 @@ function Photo({ id }: { id: string }) {
   const [open, setOpen] = useState(false);
   return <div className="grade-photo"><button className="text-button" onClick={() => setOpen(!open)}>{open ? <ChevronUp size={17} aria-hidden="true" /> : <Image size={17} aria-hidden="true" />}{open ? "收起原图" : "查看原题照片"}</button>{open && <img src={`/assistant-api/learning/pages/${encodeURIComponent(id)}`} alt="这道题所在的作业原图" />}</div>;
 }
-function QuestionCard({ question: q, date, subject, title, pageId }: { question: GradedQuestion; date: string; subject: string; title: string; pageId: string }) {
+function QuestionCard({ question, date, subject, title, pageId }: { question: GradedQuestion; date: string; subject: string; title: string; pageId: string }) {
+  const q = gradingDisplayQuestion(question);
   return <article className={`grade-question grade-verdict-${q.verdict}`}>
     <div className="grade-question-heading"><h3>{q.label}</h3><StatusIndicator kind={q.verdict} className="grade-verdict-badge">{verdicts[q.verdict]}</StatusIndicator></div>
     <p className="grade-source">{date} · {subject} · {title}</p><p className="grade-stem">{q.question}</p>
-    <dl className="grade-answers"><div><dt><PencilLine aria-hidden="true" />我的答案</dt><dd>{q.studentAnswer || "未填写或未识别清楚"}</dd></div>{q.expectedAnswer && q.verdict !== "uncertain" && <div><dt><Lightbulb aria-hidden="true" />{q.verdict === "feedback" ? "参考思路" : "参考答案"}</dt><dd>{q.expectedAnswer}</dd></div>}</dl>
+    <dl className="grade-answers"><div><dt><PencilLine aria-hidden="true" />{q.verdict === "uncertain" ? "作答待辨清" : "识别到的作答"}</dt><dd>{q.studentAnswer || "未填写或未识别清楚"}</dd></div>{q.expectedAnswer && q.verdict !== "uncertain" && <div><dt><Lightbulb aria-hidden="true" />{q.verdict === "feedback" ? "参考思路" : "参考答案"}</dt><dd>{q.expectedAnswer}</dd></div>}</dl>
     {q.verdict === "correct" ? <details className="grade-explanation"><summary><Lightbulb size={17} aria-hidden="true" />查看解题思路</summary><p>{q.explanation}</p>{!!q.knowledgePoints.length && <p className="grade-source">知识点：{q.knowledgePoints.join("、")}</p>}</details> : <p>{q.explanation}</p>}
     {q.verdict === "wrong" && <div className="grade-cause"><strong>可能的错因 · {q.cause}</strong><p>{q.causeExplanation || "仅凭这一次作答还不能确定原因。"}</p>{q.nextStep && <><strong>下一步怎么做</strong><p>{q.nextStep}</p></>}</div>}
     {q.verdict !== "correct" && !!q.knowledgePoints.length && <p className="grade-source">知识点：{q.knowledgePoints.join("、")}</p>}
-    <div className="grade-question-actions"><Photo id={pageId} /><button className="text-button" onClick={() => window.dispatchEvent(new CustomEvent("xiaobu:ask-homework", { detail: { date, question: `我想讨论${subject}的${q.label}：${q.question.slice(0, 550)}。我的答案是${q.studentAnswer.slice(0, 250)}。请结合批改记录，引导我弄懂这道题。` } }))}><MessageCircle size={17} aria-hidden="true" />让小步帮我弄懂</button></div>
+    <div className="grade-question-actions"><Photo id={pageId} /><button className="text-button" onClick={() => window.dispatchEvent(new CustomEvent("xiaobu:ask-homework", { detail: { date, question: `我想讨论${subject}的${q.label}：${q.question.slice(0, 550)}。${q.verdict === "uncertain" ? "系统尚未辨清我的作答，不要把识读当成我实际写下的字。" : `系统识读到的作答是${q.studentAnswer.slice(0, 250)}。`}请结合批改记录，引导我弄懂这道题。` } }))}><MessageCircle size={17} aria-hidden="true" />让小步帮我弄懂</button></div>
   </article>;
 }
 export function GradingPanel({ date, canManage = true, focusFailures = false }: { date: string; canManage?: boolean; focusFailures?: boolean }) {

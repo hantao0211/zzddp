@@ -13,6 +13,7 @@ try {
   const summary = () => ({ ...counts, enabled: true, pages: 1, finished: pending || failed ? 0 : 1, pending: pending ? 1 : 0, failed: failed ? 1 : 0, incomplete: 0, tasks: { "synthetic-task": { ...counts, pending: pending ? 1 : 0, failed: failed ? 1 : 0, incomplete: 0 } } });
   const q = (verdict, i) => ({ id: "synthetic-question-" + i, label: `第${i}题`, sourcePartLabels: [], kind: verdict === "feedback" ? "subjective" : "objective", question: i === 2 ? "2+3等于多少？" : "一道人造的模拟练习题", studentAnswer: i === 2 ? "6" : "模拟作答", expectedAnswer: i === 2 ? "5" : "模拟参考答案", verdict, confidence: verdict === "uncertain" ? "low" : "high", explanation: verdict === "uncertain" ? "两次解答没有取得一致，未直接判错。" : "先算2加2等于4，再加1得到5。", knowledgePoints: ["整数加法"], cause: "计算错误", causeExplanation: "从这次作答看，可能在相加时多算了1，不能据此断定是粗心。", nextStep: "用小棒分两步相加，再检查总数。", evidence: [{ fileId: "synthetic-page", page: 1, excerpt: "模拟作答" }], verification: verdict === "uncertain" ? "uncertain" : verdict === "feedback" ? "subjective" : "agreed" });
   const questions = ["correct", "wrong", "blank", "uncertain", "feedback"].map((s, i) => q(s, i + 1));
+  questions[1].explanation += " 图片编号（synthetic-page），第2题。";
   let selectedDate = "", blankVisible = true, extraWrong = false;
   const currentQuestions = () => [...questions.filter(q => blankVisible || q.verdict !== "blank"), ...(extraWrong ? [q("wrong", 6)] : [])];
   await page.route("**/assistant-api/**", async route => {
@@ -39,6 +40,9 @@ try {
   assert.equal(await panel.locator(".grade-question").count(), 4);
   assert.equal(await panel.getByText("AI尚未确认", { exact: true }).count(), 1);
   assert.equal(photos, 0, "Original photos load only when requested");
+  assert.equal(await panel.getByText("识别到的作答", { exact: true }).count(), 3);
+  assert.equal(await panel.getByText("作答待辨清", { exact: true }).count(), 1);
+  assert.ok(!(await panel.innerText()).includes("synthetic-page"), "Internal page identifiers are not readable explanations");
   await panel.getByRole("button", { name: "全部题目", exact: true }).click();
   assert.equal(await panel.locator(".grade-question").count(), 6);
   const categoryButton = label => panel.getByRole("group", { name: "按批改结果筛选" }).getByRole("button", { name: new RegExp("^" + label + " ") });

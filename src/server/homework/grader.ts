@@ -1,3 +1,4 @@
+import { blindGradingQuestions, reconcileFocusedQuestion } from "../../domain/grading-verification";
 import type { GradingStage } from "../../domain/grading-failure";
 import { mapParallel } from "../work/concurrency";
 import { HomeworkExecution } from "./execution";
@@ -22,6 +23,7 @@ export class HomeworkGrader {
         if (!current.active) throw new HomeworkError(409, "这页的作业要求已更新，使用新的批改任务继续。");
       });
       const inputSource = { ...source, pages: source.pages.map(p => ({ fileId: p.id, page: p.number })) };
+      const { expectedLabels: _expectedLabels, taskIds: _taskIds, ...verificationSource } = inputSource;
       const first = await this.cached(`grade-first:${GRADING_VERSION}:${run.id}`, async () => {
         const value = await ai.run("grade_homework", GradingInspectionSchema, inputSource, images);
         for (const q of value.questions) {
@@ -34,9 +36,9 @@ export class HomeworkGrader {
       let result: GradingResult = { version: GRADING_VERSION, scopeComplete: first.scopeComplete && !source.expectedLabels.length, note: first.note, questions: [] };
       if (questions.length) {
         stage = "verification";
-        const second = await this.cached(`grade-verify:${GRADING_VERSION}:${run.id}`, async () => {
+        const second = await this.cached(`grade-verify-blind-v2:${GRADING_VERSION}:${run.id}`, async () => {
           // No first verdict or proposed reference answer is sent to the second solver.
-          const value = await ai.run("verify_homework_grading", GradingVerificationSchema, { source: inputSource, questions: questions.map(q => ({ questionId: q.id, label: q.label, question: q.question, studentAnswer: q.studentAnswer, evidence: q.evidence })) }, images);
+          const value = await ai.run("verify_homework_grading", GradingVerificationSchema, { source: verificationSource, questions: blindGradingQuestions(questions) }, images);
           if (value.checks.length !== questions.length || new Set(value.checks.map(q => q.questionId)).size !== questions.length || value.checks.some(c => !questions.some(q => q.id === c.questionId))) throw new AIServiceError("INVALID_GRADING_VERIFICATION", true, "批改复核题目未完整对应。");
           return value;
         });
@@ -45,8 +47,8 @@ export class HomeworkGrader {
       const pending = result.questions.filter(q => q.verdict === "uncertain");
       if (pending.length) {
         stage = "recheck";
-        const focusInput = { source: { ...inputSource, focus: true }, questions: pending.map(q => ({ questionId: q.id, label: q.label, question: q.question, studentAnswer: q.studentAnswer, evidence: q.evidence })) };
-        const recheck = async (stage: string) => this.cached(`grade-focus-${stage}:${GRADING_VERSION}:${run.id}`, async () => {
+        const focusInput = { source: { ...verificationSource, focus: true }, questions: blindGradingQuestions(questions, pending) };
+        const recheck = async (stage: string) => this.cached(`grade-focus-blind-v2-${stage}:${GRADING_VERSION}:${run.id}`, async () => {
           const value = await ai.run("verify_homework_grading", GradingVerificationSchema, focusInput, images);
           if (value.checks.length !== pending.length || new Set(value.checks.map(q => q.questionId)).size !== pending.length || value.checks.some(c => !pending.some(q => q.id === c.questionId))) throw new AIServiceError("INVALID_GRADING_FOCUS", true, "自动复查未完整对应题目。");
           return value;
@@ -55,7 +57,7 @@ export class HomeworkGrader {
         result.questions = result.questions.map(q => {
           if (q.verdict !== "uncertain") return q;
           const a = one.checks.find(c => c.questionId === q.id)!, b = two.checks.find(c => c.questionId === q.id)!;
-          return reconcileQuestion(q.id, { ...q, ...a }, b);
+          return reconcileFocusedQuestion(questions.find(original => original.id === q.id)!, a, b, source.subject);
         });
       }
       const covered = new Set(first.questions.flatMap(q => q.sourcePartLabels));
