@@ -28,7 +28,7 @@ export class AdminHTTP {
         return { date: d.date, status: d.status, note: d.note, tasks: report?.tasks.length || 0, uploads: uploads.n, originals: files.n, grading: store.grading.summary(d.date) };
       }) : [];
       const jobCounts = store?.db.prepare("SELECT status,COUNT(*) AS count FROM jobs GROUP BY status").all() || [];
-      json(response, { viewer, days, jobCounts, homeworkQuota: store?.quota() || null, ...this.sessions.settings(), legacyAccess: this.accounts.legacyAllowed(), service: this.serviceInfo || null, features: { autoGrading: !!store?.autoGradingEnabled, writtenCompletion: !!store?.writtenCompletionEnabled }, memories: this.learning?.memories.list() || [], knowledge: this.learning?.memories.catalog() || { rules: [], corrections: [], history: [] } }); return;
+      json(response, { viewer, days, jobCounts, homeworkQuota: store?.quota() || null, homeworkUsage: store?.usage.summary() || null, ...this.sessions.settings(), legacyAccess: this.accounts.legacyAllowed(), service: this.serviceInfo || null, features: { autoGrading: !!store?.autoGradingEnabled, writtenCompletion: !!store?.writtenCompletionEnabled }, memories: this.learning?.memories.list() || [], knowledge: this.learning?.memories.catalog() || { rules: [], corrections: [], history: [] } }); return;
     }
     if (path === "/assistant-api/admin/homework-quota" && request.method === "PATCH") {
       const parsed = HomeworkQuotaSettingsSchema.safeParse(await body());

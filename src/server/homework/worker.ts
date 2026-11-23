@@ -1,4 +1,5 @@
 import { selectedSubmissionReport } from "./selected-submission";
+import { automaticAttemptLimit } from "../../domain/homework-usage";
 import { isCorrectionSignTask } from "../../domain/selected-submission";
 import { SELECTED_SUBMISSION_POLICY } from "../../domain/submission-policy";
 import { taskSubmission } from "../../domain/task-submission";
@@ -64,7 +65,7 @@ export class HomeworkWorker {
       const budget = error instanceof HomeworkError && error.status === 429;
       const retry = (error instanceof AIServiceError && error.retryable) || (error instanceof HomeworkError && error.status === 503);
       const note = budget ? error.message : error instanceof HomeworkError ? error.message : retry ? "AI整理暂未完成，原件已保留，后台会有限重试。" : "AI未能完成整理，原件已保留，可稍后重试或补拍清晰照片。";
-      this.store.fail(job, note, retry, budget);
+      this.store.fail(job, note, retry, budget, automaticAttemptLimit(error instanceof AIServiceError ? error.code : ""));
     }
     return true;
   }

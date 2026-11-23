@@ -1,4 +1,5 @@
 import { selectedSubmissionReport } from "./selected-submission";
+import { HomeworkUsageLog } from "./usage";
 import { TaskCompletions } from "./task-completions";
 import { PagePreviews } from "./page-previews";
 import { inferredReportScope } from "../../domain/inferred-scope";
@@ -26,6 +27,7 @@ export class HomeworkStore {
   readonly grading: GradingStore;
   readonly completions: TaskCompletions;
   readonly previews: PagePreviews;
+  readonly usage: HomeworkUsageLog;
   constructor(readonly directory: string, readonly now = Date.now, readonly reviewPolicy: ReviewPolicy | null = null, readonly writtenCompletionEnabled = false, readonly autoGradingEnabled = false) {
     mkdirSync(directory, { recursive: true, mode: 0o700 });
     for (const part of ["originals", "pages", "incoming"]) mkdirSync(join(directory, part), { recursive: true, mode: 0o700 });
@@ -51,6 +53,7 @@ export class HomeworkStore {
       CREATE TABLE IF NOT EXISTS budget (day TEXT PRIMARY KEY, calls INTEGER NOT NULL DEFAULT 0, batches INTEGER NOT NULL DEFAULT 0, bytes INTEGER NOT NULL DEFAULT 0);
       CREATE INDEX IF NOT EXISTS jobs_queue ON jobs(status,next_at,id); CREATE INDEX IF NOT EXISTS uploads_date ON uploads(date);
       PRAGMA user_version=1;`);
+    this.usage = new HomeworkUsageLog(this);
     this.grading = new GradingStore(this);
     this.completions = new TaskCompletions(this);
     this.previews = new PagePreviews(directory);
@@ -186,11 +189,11 @@ export class HomeworkStore {
     if (usage.calls >= this.dailyCallLimit()) throw new HomeworkError(429, "今天的AI整理限额已到，原件已保存，明天自动继续。");
     this.db.prepare("UPDATE budget SET calls=calls+1 WHERE day=?").run(day);
   }
-  fail(job: Job, note: string, retry: boolean, budget = false) {
+  fail(job: Job, note: string, retry: boolean, budget = false, attemptLimit = 3) {
     this.transaction(() => {
       if (budget) this.db.prepare("INSERT OR IGNORE INTO homework_quota_waits(job_id) VALUES(?)").run(job.id);
       else this.db.prepare("DELETE FROM homework_quota_waits WHERE job_id=?").run(job.id);
-      const again = budget || (retry && job.attempts < 3);
+      const again = budget || (retry && job.attempts < attemptLimit);
       const nextAt = budget ? new Date(shanghaiDay(this.now()) + "T00:00:00+08:00").getTime() + 86400_000 : this.now() + (job.attempts === 1 ? 15000 : 60000);
       this.db.prepare("UPDATE jobs SET status=?,next_at=?,attempts=? WHERE id=?").run(again ? "queued" : "failed", nextAt, budget ? Math.max(0, job.attempts - 1) : job.attempts, job.id);
       if (!again && retry) note = "多次尝试仍未完成，原件已保留。可稍后重试，或补拍清晰照片。";

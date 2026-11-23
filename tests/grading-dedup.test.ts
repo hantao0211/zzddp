@@ -130,3 +130,43 @@ test("superseded grading results are never restored through the duplicate-photo 
     assert.equal(f.store.grading.reuseCompleted(next), null);
   } finally { f.close(); }
 });
+test("organizing the same photo with new inferred labels/task IDs preserves completed grading with no new requests", async () => {
+  const f = fixture(); try {
+    const first = f.upload([a]);
+    f.store.db.exec("UPDATE grading_runs SET id='before-organization'");
+    const run = f.store.grading.claim()!, source = JSON.parse(run.source);
+    source.taskIds = ["earlier-task-id"]; source.expectedLabels = ["earlier-inferred-label"];
+    f.store.db.prepare("UPDATE grading_runs SET source=? WHERE id=?").run(JSON.stringify(source), run.id);
+    f.store.grading.save({ ...run, source: JSON.stringify(source) }, result(first.pages[0].id));
+    f.store.transaction(() => f.store.grading.queueDay(day, null));
+    assert.equal(f.store.db.prepare("SELECT count(*) n FROM grading_runs").get()!.n, 1);
+    assert.equal(f.store.grading.results(day).batches[0].id, run.id);
+    assert.equal(f.store.grading.summary(day).correct, 1);
+    const grader = new HomeworkGrader(f.store, () => ({ async run() { throw Error("Must reuse the completed work"); } }), { images: () => [] });
+    assert.equal(await grader.tick(), false); assert.equal(f.store.quota().calls, 0);
+  } finally { f.close(); }
+});
+test("organizing changed inferred metadata cannot reset malformed-response retry exhaustion", () => {
+  const f = fixture(); try {
+    f.upload([a]); f.store.db.exec("UPDATE grading_runs SET id='failed-before-organization'");
+    const run = f.store.grading.claim()!, source = JSON.parse(run.source);
+    source.expectedLabels = ["inferred-label"];
+    f.store.db.prepare("UPDATE grading_runs SET source=? WHERE id=?").run(JSON.stringify(source), run.id);
+    f.store.grading.fail({ ...run, attempts: 2 }, true, false, { code: "INVALID_ENVELOPE", stage: "inspection" });
+    f.store.transaction(() => f.store.grading.queueDay(day, null));
+    const kept = f.store.grading.results(day).batches[0];
+    assert.equal(kept.id, run.id); assert.equal(kept.status, "failed"); assert.equal(kept.attempts, 2);
+    assert.equal(f.store.grading.claim(), undefined); assert.equal(f.store.grading.retry(day), 1);
+    assert.equal(f.store.grading.claim()!.attempts, 3);
+  } finally { f.close(); }
+});
+test("a completed result from an obsolete grading policy is not retained through metadata matching", () => {
+  const f = fixture(); try {
+    const first = f.upload([a]); f.store.db.exec("UPDATE grading_runs SET id='obsolete-policy'");
+    const run = f.store.grading.claim()!, value = { ...result(first.pages[0].id), version: "grading-v1" as const };
+    f.store.grading.save(run, value);
+    f.store.transaction(() => f.store.grading.queueDay(day, null));
+    assert.equal(f.store.grading.summary(day).finished, 0); assert.equal(f.store.grading.summary(day).pending, 1);
+    assert.notEqual(f.store.grading.claim()!.id, run.id);
+  } finally { f.close(); }
+});

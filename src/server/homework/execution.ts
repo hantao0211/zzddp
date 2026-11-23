@@ -1,8 +1,9 @@
 import type { z } from "zod";
 import type { AITask } from "../../domain/ai-contracts";
-import type { AIImage, StructuredAI } from "../ai/provider";
+import { validateAIImages, type AIImage, type StructuredAI } from "../ai/provider";
 import { WorkPool } from "../work/concurrency";
 import { HomeworkError, type HomeworkStore, type Job } from "./store";
+import type { CallContext } from "./usage";
 
 export const HOMEWORK_CONCURRENCY = 3;
 export class HomeworkExecution {
@@ -11,15 +12,21 @@ export class HomeworkExecution {
   readonly conversions = new WorkPool(1);
   private pending = new Map<string, Promise<unknown>>();
   constructor(private store: HomeworkStore, private factory: () => StructuredAI) {}
-  forJob(job?: Job, beforeCall?: () => void) {
+  forJob(job?: Job, beforeCall?: () => void, context?: CallContext) {
     const store = this.store, factory = this.factory, calls = this.calls;
     return { run<T>(task: AITask, schema: z.ZodType<T>, metadata: unknown, images: AIImage[] | (() => AIImage[]) = []): Promise<T> {
-      return calls.run(() => {
+      return calls.run(async () => {
         if (job?.kind === "organize" && job.revision !== store.revision(job.date)) throw new HomeworkError(409, "有新资料已收到，使用最新资料继续整理。");
         beforeCall?.();
         // Reserve only after acquiring a slot, immediately before a real provider call.
-        store.reserve();
-        return factory().run(task, schema, metadata, typeof images === "function" ? images() : images);
+        // Local decoding failures must not spend AI quota.
+        const prepared = typeof images === "function" ? images() : images;
+        validateAIImages(prepared);
+        const provider = factory(), id = store.usage.start(task, metadata, job, context);
+        try {
+          const result = await provider.run(task, schema, metadata, prepared);
+          store.usage.finish(id); return result;
+        } catch (error) { store.usage.finish(id, error); throw error; }
       }, job?.kind === "recognize" ? 0 : job?.kind === "organize" ? 1 : 2);
     } };
   }

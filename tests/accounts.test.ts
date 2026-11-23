@@ -248,6 +248,10 @@ test("parents and admins can set persistent homework AI quotas, while children a
     assert.equal((await f.send("admin/homework-quota", "PATCH", { dailyCalls: 150 }, parent.cookie, { Origin: "https://other.test" })).status, 403);
     for (const body of [{ dailyCalls: 0 }, { dailyCalls: 5001 }, { dailyCalls: 1.5 }, { dailyCalls: "150" }, { dailyCalls: 150, extra: true }]) assert.equal((await f.send("admin/homework-quota", "PATCH", body, parent.cookie)).status, 400);
     for (let i = 0; i < 60; i++) f.homework.reserve();
+    const usage = (await f.send("admin/overview", "GET", undefined, parent.cookie)).data.homeworkUsage;
+    assert.equal(usage.total, 60); assert.equal(usage.untracked, 60); assert.equal(usage.tracked, 0);
+    assert.equal((await f.send("admin/overview", "GET", undefined, child.cookie)).status, 403);
+    assert.equal((await f.send("learning/state?date=" + date, "GET", undefined, child.cookie)).data.homeworkUsage, undefined);
     const saved = await f.send("admin/homework-quota", "PATCH", { dailyCalls: 150 }, parent.cookie);
     assert.equal(saved.status, 200); assert.equal(saved.data.limit, 150); assert.equal(saved.data.calls, 60);
     assert.equal((await f.send("learning/state?date=" + date, "GET", undefined, child.cookie)).data.quota.limit, 150);

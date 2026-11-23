@@ -1,4 +1,5 @@
 import { isWrittenTask } from "../../domain/written-completion";
+import { automaticAttemptLimit } from "../../domain/homework-usage";
 import { gradingFailureText, type GradingFailure, type GradingStage } from "../../domain/grading-failure";
 import { resolveUploadTarget } from "./upload-target";
 import { createHash } from "node:crypto";
@@ -92,6 +93,13 @@ export class GradingStore {
       const assigned = target && report?.tasks.some(t => t.id === target.taskId && t.evidence.some(e => e.fileId === p.fileId));
       return { ...p, subject: p.subject || (assigned ? target.subject : null), page: this.store.page(p.fileId) };
     }));
+    // Inferred labels and task IDs may change without changing the work to grade.
+    const previous = this.store.db.prepare("SELECT * FROM grading_runs WHERE date=? AND active=1 ORDER BY rowid").all(date) as (GradingRun & { primary_page_id: string })[];
+    const byContent = new Map(previous.filter(run => {
+      const source = JSON.parse(run.source) as GradingSource;
+      if (run.status === "done" && run.result && JSON.parse(run.result).version !== GRADING_VERSION) return false;
+      return source.pages?.some(p => p.id === source.primaryPageId);
+    }).map(run => [this.contentKey(JSON.parse(run.source)), run]));
     this.store.db.prepare("UPDATE grading_runs SET active=0 WHERE date=?").run(date);
     const time = new Date(this.store.now()).toISOString();
     for (let index = 0; index < pages.length; index++) {
@@ -102,6 +110,11 @@ export class GradingStore {
       const context = [pages[index - 1], primary, pages[index + 1]].filter(p => p?.page && p.subject === primary.subject && (p === primary || p.page!.file_id === primary.page!.file_id));
       const source: GradingSource = { date, title: written.map(t => t.title).join("、") || primary.book || "已上传作业", subject: primary.subject, assigned: !!written.length, requirements: written.map(t => t.inferredScope ? `${t.requirement}；${t.inferredMeaning?.description||""}检查范围根据已传作业推断：${t.inferredScope.description}；${t.inferredScope.note}` : t.requirement), taskIds: written.map(t => t.id), primaryPageId: primary.fileId, pages: context.map(p => p.page!), expectedLabels: written.flatMap(t => t.writtenCompletion?.parts.filter(p => p.evidence.fileId === primary.fileId).map(p => p.label) || []) };
       const id = digest({ version: GRADING_VERSION, source });
+      const existing = byContent.get(this.contentKey(source));
+      if (existing && existing.primary_page_id === source.primaryPageId) {
+        this.store.db.prepare("UPDATE grading_runs SET active=1,source=? WHERE id=?").run(JSON.stringify(source), existing.id);
+        continue;
+      }
       this.store.db.prepare("INSERT INTO grading_runs(id,date,primary_page_id,source,created_at,updated_at) VALUES(?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET active=1").run(id, date, primary.fileId, JSON.stringify(source), time, time);
     }
     this.deduplicate(date);
@@ -135,7 +148,7 @@ export class GradingStore {
     });
   }
   fail(run: GradingRun, retry: boolean, budget: boolean, diagnostic?: { code: string; stage: GradingStage }) {
-    const again = budget || (retry && run.attempts < 3);
+    const again = budget || (retry && run.attempts < automaticAttemptLimit(diagnostic?.code || ""));
     const next = budget ? Date.parse(new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(this.store.now())) + "T00:00:00+08:00") + 86400000 : this.store.now() + (run.attempts === 1 ? 15000 : 60000);
     const failedAt = new Date(this.store.now()).toISOString();
     const info = diagnostic || { code: budget ? "BUDGET_LIMIT" : "UNKNOWN", stage: "unknown" as const };

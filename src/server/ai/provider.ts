@@ -18,11 +18,15 @@ export interface StructuredAI {
   run<T>(task: AITask, schema: z.ZodType<T>, metadata: unknown, images?: AIImage[]): Promise<T>;
 }
 
+export function validateAIImages(images: AIImage[]) {
+    if (images.length > 20 || images.reduce((size, image) => size + image.base64.length, 0) > 24 * 1024 * 1024 || images.some((image) => !image.base64 || image.base64.length > 14 * 1024 * 1024)) throw new AIServiceError("INVALID_IMAGES", false, "图片数量或大小超限，需要先拆分及压缩页面。");
+}
+
 export class VisionAI implements StructuredAI {
   constructor(private config: AIConfiguration, private request: typeof fetch = fetch) {}
 
   async run<T>(task: AITask, schema: z.ZodType<T>, metadata: unknown, images: AIImage[] = []): Promise<T> {
-    if (images.length > 20 || images.reduce((size, image) => size + image.base64.length, 0) > 24 * 1024 * 1024 || images.some((image) => !image.base64 || image.base64.length > 14 * 1024 * 1024)) throw new AIServiceError("INVALID_IMAGES", false, "图片数量或大小超限，需要先拆分及压缩页面。");
+    validateAIImages(images);
     const userText = `${AI_INSTRUCTIONS[task]}\nJSON Schema：${JSON.stringify(z.toJSONSchema(schema))}\n任务数据：${JSON.stringify(metadata)}\n图片顺序：${JSON.stringify(images.map((image) => image.fileId))}`;
     const isDeepSeek = this.config.provider === "deepseek";
     const detailed = ["grade_homework", "verify_homework_grading", "assess_written_completion", "recheck_written_parts"].includes(task);
