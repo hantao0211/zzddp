@@ -12,6 +12,7 @@ try {
   const release = join(temporary, "xiaobu-prototype");
   mkdirSync(release);
   copyFileSync(join(root, "LICENSE"), join(release, "LICENSE"));
+  copyFileSync(join(root, "NOTICE"), join(release, "NOTICE"));
   mkdirSync(join(release, "docs"));
   copyFileSync(join(root, "docs/licensing.md"), join(release, "docs/licensing.md"));
   mkdirSync(join(release, "third-party-licenses"));

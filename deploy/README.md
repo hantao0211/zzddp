@@ -1,6 +1,6 @@
 # 小步学习服务器部署
 
-使用前请阅读随附的 `LICENSE` 与[使用许可说明](https://github.com/hantao0211/zzddp/blob/main/docs/licensing.md)：非商业使用免费；商业使用须满足相关商业项目整体源码公开条件，闭源商业使用不获许可。部署包保留项目许可、使用说明及直接运行依赖的原许可证文本。
+使用前请阅读随附的 `LICENSE`、`NOTICE` 与[使用许可说明](https://github.com/hantao0211/zzddp/blob/main/docs/licensing.md)：项目采用标准 `AGPL-3.0-only`，允许商业使用。分发软件及运行修改后的网络交互版本时，按协议提供该版本的相应源码；随附许可文本不能替代源码提供义务。部署包保留项目许可、声明、使用说明及直接运行依赖的原许可证文本。
 
 当前目标服务器：`14.103.24.55`。目标项目目录：`/home/hantao/work/zzddp`。建议在其中新建 `xiaobu-prototype`，不覆盖既有项目文件。
 
