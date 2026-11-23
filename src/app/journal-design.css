@@ -343,7 +343,8 @@
 .profile-avatar-group + .profile-avatar-group { margin-top: 18px; }
 .profile-avatar-group h3 { font-size: 13px; color: var(--muted); font-weight: 500; margin: 0 0 9px; }
 .profile-avatar-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
-.profile-avatar-choice { display: grid; place-items: center; position: relative; min-width: 0; min-height: 60px; border: 1px solid var(--border); border-radius: 15px; background: var(--journal-paper); cursor: pointer; }
+.profile-avatar-choice { display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; position: relative; padding: 0; min-width: 0; min-height: 60px; border: 1px solid var(--border); border-radius: 15px; background: var(--journal-paper); cursor: pointer; }
+.profile-avatar-choice > .journal-avatar { width: 100%; max-width: 44px; height: auto; aspect-ratio: 1; }
 .profile-avatar-choice:hover { background: var(--accent-soft); }
 .profile-avatar-choice[aria-pressed=true] { border: 2px solid var(--accent); background: var(--accent-soft); }
 .profile-avatar-choice:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
