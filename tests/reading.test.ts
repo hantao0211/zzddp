@@ -7,7 +7,7 @@ import {randomUUID} from "node:crypto";
 import {ReadingStore} from "../src/server/reading/store";
 import {ReadingWorker} from "../src/server/reading/worker";
 import {lookupBooks} from "../src/server/reading/catalog";
-import {streaks,uniquePages,DEFAULT_READING_RULES} from "../src/domain/reading";
+import {streaks,uniquePages,DEFAULT_READING_RULES,nextReadingPages} from "../src/domain/reading";
 import type {Viewer} from "../src/domain/accounts";
 import type {StructuredAI} from "../src/server/ai/provider";
 const child:Viewer={id:"11111111-1111-4111-8111-111111111111",username:"qa-child",name:"模拟孩子",role:"child"};
@@ -53,3 +53,64 @@ test("corrected book identity drops old catalog attribution, while a page-count 
  const input={title:book.title,author:book.author,isbn:book.isbn,publisher:book.publisher,totalPages:201,revision:book.revision};const pages=f.store.editBook(book.id,input,child.id);assert.equal(pages.sourceUrl,catalog.sourceUrl);assert.equal(pages.description,catalog.description);
  const renamed=f.store.editBook(book.id,{...input,title:"更正后的书名",revision:pages.revision},child.id);assert.equal(renamed.sourceUrl,null);assert.equal(renamed.description,"");assert.equal(renamed.catalogId,null);
  }finally{f.cleanup();}});
+
+test("continuation uses the latest dated session per book, including sparse history and rereading",()=>{const f=fixture();try{
+ assert.equal(f.store.book(f.book.id).lastReadPage,null);
+ f.store.save({...f.input(),date:"2026-11-18",startPage:40,endPage:48},child);
+ const latest=f.store.save({...f.input(),date:"2026-11-20",startPage:10,endPage:15},child).log;
+ f.store.save({...f.input(),date:"2026-11-19",startPage:60,endPage:80},child);
+ assert.equal(f.store.book(f.book.id).lastReadPage,15,"Backfills and max page must not replace the latest reading session");
+ assert.equal(f.store.snapshot(child).books[0].lastReadPage,15);
+ f.store.save({...f.input(),id:latest.id,version:latest.version,startPage:10,endPage:18},child);
+ assert.deepEqual(nextReadingPages(f.store.book(f.book.id)),{startPage:19,endPage:19});
+ assert.deepEqual(nextReadingPages({lastReadPage:100,totalPages:100}),{startPage:100,endPage:100});
+ assert.deepEqual(nextReadingPages(),{startPage:1,endPage:1});
+}finally{f.cleanup();}});
+
+test("reward deadlines include the whole Shanghai day and expired requests never spend steps",()=>{const f=fixture();try{
+ f.store.save(f.input(),child);
+ const reward=f.store.saveReward({title:"模拟电影",cost:1,expiresOn:"2026-11-20"},parent.id),id=randomUUID();
+ f.setTime("2026-11-20T23:59:59+08:00");f.store.redeem(id,reward.id,child);assert.equal(f.store.balance(),1);
+ f.setTime("2026-11-21T00:00:00+08:00");
+ f.store.redeem(id,reward.id,child);assert.equal(f.store.balance(),1,"Retry an existing request after expiry without charging twice");
+ assert.throws(()=>f.store.redeem(randomUUID(),reward.id,child),/截止/);
+ assert.equal(f.store.balance(),1);assert.equal(f.store.redemptions().length,1);
+ f.store.decide(id,"approved",parent.id);f.store.decide(id,"rejected",parent.id);assert.equal(f.store.balance(),2);
+ f.store.saveReward({title:reward.title,cost:reward.cost,expiresOn:"2026-11-22"},parent.id,reward.id);
+ f.store.redeem(randomUUID(),reward.id,child);assert.equal(f.store.balance(),1);
+}finally{f.cleanup();}});
+
+test("reward expiry survives restart, can be removed, and legacy rewards remain unlimited",()=>{const f=fixture();try{
+ const old=f.store.saveReward({title:"原有长期奖励",cost:1},parent.id);
+ assert.equal(old.expiresOn,null);
+ const limited=f.store.saveReward({title:"模拟限时活动",cost:1,expiresOn:"2026-12-01"},parent.id);
+ assert.throws(()=>f.store.saveReward({title:"错误日期",cost:1,expiresOn:"2026-02-30"},parent.id));
+ f.store.close();const reopened=new ReadingStore(f.directory,f.store.now);
+ assert.equal(reopened.rewards().find(r=>r.id===limited.id)?.expiresOn,"2026-12-01");
+ assert.equal(reopened.rewards().find(r=>r.id===old.id)?.expiresOn,null);
+ reopened.saveReward({title:limited.title,cost:limited.cost,expiresOn:null},parent.id,limited.id);
+ assert.equal(reopened.rewards().find(r=>r.id===limited.id)?.expiresOn,null);
+ assert.equal((reopened.db.prepare("PRAGMA table_info(rewards)").all()).length,5,"Original reward columns remain compatible");
+ reopened.close();(f.store as any).close=()=>{};
+}finally{f.cleanup();}});
+
+test("approved wishes create dated rewards atomically and retries retain their original decision",()=>{const f=fixture();try{
+ const wish=f.store.submitWish({id:randomUUID(),title:"一起去看电影"},child);
+ const decision={status:"approved",title:wish.title,cost:1,expiresOn:"2026-12-01"};
+ const approved=f.store.decideWish(wish.id,decision,parent);
+ assert.equal(f.store.rewards().find(r=>r.id===approved.rewardId)?.expiresOn,"2026-12-01");
+ assert.equal(f.store.decideWish(wish.id,decision,parent).rewardId,approved.rewardId);
+ assert.throws(()=>f.store.decideWish(wish.id,{...decision,expiresOn:"2026-12-02"},parent),/已处理/);
+ assert.equal(f.store.balance(),0);
+}finally{f.cleanup();}});
+
+test("legacy databases gain only an empty deadline table and retain existing rewards and points",()=>{const f=fixture();try{
+ f.store.save(f.input(),child);f.store.saveReward({title:"原有奖励",cost:2},parent.id);
+ const before=f.store.db.prepare("SELECT * FROM rewards").all(),balance=f.store.balance();
+ f.store.db.exec("DROP TABLE reward_deadlines");f.store.close();
+ const reopened=new ReadingStore(f.directory,f.store.now);
+ assert.deepEqual(reopened.db.prepare("SELECT * FROM rewards").all(),before);
+ assert.equal(reopened.balance(),balance);assert.equal(reopened.rewards()[0].expiresOn,null);
+ assert.equal((reopened.db.prepare("SELECT COUNT(*) AS n FROM reward_deadlines").get() as any).n,0);
+ reopened.close();(f.store as any).close=()=>{};
+}finally{f.cleanup();}});

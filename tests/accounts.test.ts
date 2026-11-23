@@ -337,3 +337,17 @@ test("each family member changes only their own avatar; preferences persist with
   assert.equal(f.calls(),0);
  }finally{await f.cleanup();}
 });
+
+test("reward expiry is parent-controlled and enforced on the authenticated redemption API",async()=>{const f=await fixture();try{
+ const admin=await f.bootstrap();for(const role of ["child","parent"] as const)await f.send("admin/accounts","POST",{username:role,name:"模拟"+role,role,password},admin.cookie);
+ const child=await f.login("child"),parent=await f.login("parent");
+ const book=await f.send("reading/books","POST",{title:"模拟书"},child.cookie);
+ await f.send("reading/logs","POST",{id:randomUUID(),version:0,bookId:book.data.id,date:f.reading.today(),startPage:1,endPage:2,minutes:5,summary:"我读到朋友们一起想办法。"},child.cookie);
+ const reward=await f.send("reading/rewards","POST",{title:"模拟过期电影",cost:1,expiresOn:"2020-01-01"},parent.cookie);assert.equal(reward.status,200);
+ assert.equal((await f.send("reading/rewards/"+reward.data.id,"PATCH",{title:"延期",cost:1,expiresOn:null},child.cookie)).status,403);
+ assert.equal((await f.send("reading/rewards/"+reward.data.id,"PATCH",{title:"延期",cost:1,expiresOn:null},parent.cookie,{Origin:"https://other.test"})).status,403);
+ const denied=await f.send("reading/redemptions","POST",{id:randomUUID(),rewardId:reward.data.id},child.cookie);assert.equal(denied.status,409);
+ assert.equal((await f.send("reading/state","GET",undefined,child.cookie)).data.growth.balance,2);
+ assert.equal((await f.send("reading/rewards/"+reward.data.id,"PATCH",{title:"延期",cost:1,expiresOn:f.reading.today()},parent.cookie)).status,200);
+ assert.equal((await f.send("reading/redemptions","POST",{id:randomUUID(),rewardId:reward.data.id},child.cookie)).status,200);
+}finally{await f.cleanup();}});
