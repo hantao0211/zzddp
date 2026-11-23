@@ -36,7 +36,13 @@
   /* Forms keep their recognizable field boundaries and visible save receipts. */
   .study-shell .reading-streak, .study-shell .reading-points,
   .study-shell .reading-timer { border: 0; }
-  .study-shell .reading-timer { background: var(--theme-warm-soft, #f5efdf); }
+  .study-shell .reading-timer {
+    background: transparent;
+    padding: 0;
+    border-radius: 0;
+    justify-content: flex-start;
+    gap: 8px 16px;
+  }
   .study-shell .reading-timer > .button {
     min-height: 44px;
     padding: 10px 14px;
