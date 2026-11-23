@@ -5,6 +5,7 @@ import {operationLabels,withOperationFeedback,subscribeOperationFeedback,resetOp
 test("feedback announces foreground writes immediately, confirms only server acknowledgement and stays quiet for polling and searches",async()=>{
  const events:(OperationFeedback|null)[]=[],unsubscribe=subscribeOperationFeedback(event=>events.push(event));
  try {
+  assert.match(operationLabels("reading/rewards/synthetic-id","DELETE")!.success,/商品已删除/);
   let finish!:(v:number)=>void;const pending=withOperationFeedback(operationLabels("reading/logs","POST"),()=>new Promise<number>(resolve=>finish=resolve));
   assert.equal(events.length,1);assert.equal(events[0]?.phase,"pending");finish(7);assert.equal(await pending,7);assert.equal(events[1]?.phase,"success");
   for(const [path,method] of [["reading/state","GET"],["reading/lookup","POST"],["/assistant-api/learning/state?date=2026-11-23","GET"],["learning/uploads","POST"],["session","POST"]])assert.equal(operationLabels(path,method),null);

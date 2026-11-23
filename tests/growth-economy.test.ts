@@ -107,3 +107,26 @@ test('only parents can change reward appearance; icon-only endpoint rejects comm
  const r=f.store.saveReward(offer,parent.id),url=`http://127.0.0.1:${(server.address() as any).port}/assistant-api/reading/rewards/${r.id}/icon`;
  assert.equal((await fetch(url,{method:'PATCH'})).status,403);viewer=parent;assert.equal((await fetch(url,{method:'PATCH'})).status,200);assert.equal(f.store.shop.reward(r.id).icon,'star');input={icon:'book',cost:1};assert.equal((await fetch(url,{method:'PATCH'})).status,400);assert.equal(f.store.shop.reward(r.id).cost,10);assert.equal(f.store.shop.reward(r.id).revision,r.revision);
 }finally{server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));f.close();}});
+
+test("manual product deletion hides the offer, preserves contracts and currency, and cannot be revived by stale writes",()=>{const f=fixture();try{
+ const requestId=randomUUID(),input={...offer,monthLimit:null,yearLimit:null,requestId},r=f.store.saveReward(input,parent.id),pending=randomUUID(),approved=randomUUID(),fulfilled=randomUUID();
+ for(const id of [pending,approved,fulfilled])f.store.redeem(id,r.id,child);
+ f.store.decide(approved,"approved",parent.id);f.store.decide(fulfilled,"approved",parent.id);f.store.decide(fulfilled,"fulfilled",parent.id);
+ const rows=(table:string)=>f.store.db.prepare(`SELECT * FROM ${table} ORDER BY rowid`).all(),before=Object.fromEntries(["rewards","reward_policies","reward_policy_versions","reward_deadlines","reward_appearance","redemptions","redemption_contracts","ledger"].map(t=>[t,rows(t)]));
+ assert.throws(()=>f.store.shop.remove(r.id,{revision:r.revision},child),/家长/);assert.throws(()=>f.store.shop.remove(r.id,{revision:"0".repeat(64)},parent),/已更新/);
+ assert.equal(f.store.shop.remove(r.id,{revision:r.revision},parent).deleted,true);assert.equal(f.store.balance(),70);assert.equal(f.store.rewards().length,0);assert.equal(f.store.snapshot(child).rewards.length,0);assert.equal(f.store.snapshot(parent).rewards.length,0);
+ for(const [table,original] of Object.entries(before))assert.deepEqual(rows(table),original,table);
+ assert.equal(f.store.shop.remove(r.id,{revision:r.revision},parent).alreadyDeleted,true);assert.equal((f.store.db.prepare("SELECT count(*) AS n FROM audit WHERE action='delete-reward'").get() as any).n,1);
+ assert.throws(()=>f.store.saveReward(input,parent.id),/已删除/);assert.throws(()=>f.store.saveReward({...input,revision:r.revision,changeReason:"重复商品"},parent.id,r.id),/已删除/);assert.throws(()=>f.store.shop.setIcon(r.id,{icon:"movie"},parent.id),/已删除/);
+ assert.throws(()=>f.store.redeem(randomUUID(),r.id,child),/已删除/);assert.equal(f.store.balance(),70);assert.equal(f.store.shop.history(r.id)[0].cost,10);
+ f.store.redeem(pending,r.id,child);assert.equal(f.store.balance(),70);f.store.decide(pending,"approved",parent.id);f.store.decide(pending,"fulfilled",parent.id);f.store.decide(approved,"rejected",parent.id);f.store.decide(approved,"rejected",parent.id);assert.equal(f.store.balance(),80);assert.equal(f.store.redemptions().filter(v=>v.status==="fulfilled").length,2);
+ const reopened=new ReadingStore(f.store.directory,f.store.now);try{assert.equal(reopened.rewards().length,0);assert.equal(reopened.redemptions().length,3);assert.equal(reopened.balance(),80);}finally{reopened.close();}
+}finally{f.close();}});
+
+test("archived shopping contracts retain their cumulative refund math and deletions free the active product capacity",()=>{const f=fixture();try{
+ const r=f.store.saveReward({title:"模拟购物卡",cost:1,kind:"shopping",rateCents:200,monthlyBudgetCents:10000},parent.id),a=randomUUID(),b=randomUUID();
+ for(const id of [a,b])f.store.redeem(id,r.id,child,{revision:r.revision,amountCents:100});assert.equal(f.store.balance(),99);
+ f.store.shop.remove(r.id,{revision:r.revision},parent);assert.equal(f.store.balance(),99);f.store.decide(a,"rejected",parent.id);assert.equal(f.store.balance(),99);f.store.decide(b,"rejected",parent.id);assert.equal(f.store.balance(),100);
+ for(let i=0;i<100;i++)f.store.saveReward({title:"模拟商品"+i,cost:1},parent.id);assert.throws(()=>f.store.saveReward({title:"超出上限",cost:1},parent.id),/100/);
+ const duplicate=f.store.rewards()[0];f.store.shop.remove(duplicate.id,{revision:duplicate.revision},parent);f.store.saveReward({title:"清理后新商品",cost:1},parent.id);assert.equal(f.store.rewards().length,100);assert.equal((f.store.db.prepare("SELECT count(*) AS n FROM rewards").get() as any).n,102);
+}finally{f.close();}});

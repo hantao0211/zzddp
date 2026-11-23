@@ -3,7 +3,8 @@ import { createHash,randomUUID } from "node:crypto";
 import type { ReadingStore } from "./store";
 import { RewardInputSchema,type Reward,type Redemption } from "../../domain/reading";
 import { OfferPolicySchema,DEFAULT_OFFER_DAYS,addDays,shoppingCost,type RewardContract,type RedemptionInput,type RewardUsage } from "../../domain/growth-economy";
-import type { Viewer } from "../../domain/accounts";
+import {isParent,type Viewer} from "../../domain/accounts";
+import {z} from "zod";
 import { HomeworkError } from "../homework/store";
 const hash=(v:unknown)=>createHash("sha256").update(JSON.stringify(v)).digest("hex");
 type BaseReward={id:string;title:string;description:string;cost:number;active:number;expires_on:string|null};
@@ -14,12 +15,25 @@ const activeStatuses="('pending','approved','fulfilled')";
 
 export class FamilyShop {
  constructor(private store:ReadingStore){store.db.exec(`
+  CREATE TABLE IF NOT EXISTS deleted_rewards(reward_id TEXT PRIMARY KEY,revision TEXT NOT NULL,actor_id TEXT NOT NULL,deleted_at TEXT NOT NULL);
   CREATE TABLE IF NOT EXISTS reward_appearance(reward_id TEXT PRIMARY KEY,icon TEXT NOT NULL);
   CREATE TABLE IF NOT EXISTS reward_policies(reward_id TEXT PRIMARY KEY,version INTEGER NOT NULL);
   CREATE TABLE IF NOT EXISTS reward_policy_versions(reward_id TEXT NOT NULL,version INTEGER NOT NULL,data TEXT NOT NULL,revision TEXT NOT NULL,request_hash TEXT NOT NULL,PRIMARY KEY(reward_id,version));
   CREATE TABLE IF NOT EXISTS redemption_contracts(redemption_id TEXT PRIMARY KEY,reward_id TEXT NOT NULL,version INTEGER NOT NULL,data TEXT NOT NULL,amount_cents INTEGER NOT NULL,period TEXT NOT NULL,approved_on TEXT,use_until TEXT,refunded_points INTEGER);
   CREATE INDEX IF NOT EXISTS redemption_contract_period ON redemption_contracts(reward_id,period);
  `);}
+ private ensureAvailable(id:string){if(this.store.db.prepare("SELECT 1 FROM deleted_rewards WHERE reward_id=?").get(id))throw new HomeworkError(409,"商品已删除，请刷新商城。已兑换的奖励仍按原约定处理。");}
+ remove(id:string,value:unknown,viewer:Viewer){
+  if(!isParent(viewer))throw new HomeworkError(403,"删除商品需要家长处理。");
+  const {revision}=z.object({revision:z.string().regex(/^[a-f0-9]{64}$/)}).strict().parse(value),s=this.store;
+  return s.transaction(()=>{
+   const previous=s.db.prepare("SELECT revision FROM deleted_rewards WHERE reward_id=?").get(id) as {revision:string}|undefined;
+   if(previous){if(previous.revision!==revision)throw new HomeworkError(409,"商品删除时的版本与这次确认不一致，请刷新查看。");return{id,deleted:true,alreadyDeleted:true};}
+   const reward=this.reward(id);if(reward.revision!==revision)throw new HomeworkError(409,"商品已更新，请关闭确认框，刷新后再删除。");
+   s.db.prepare("INSERT INTO deleted_rewards VALUES(?,?,?,?)").run(id,revision,viewer.id,s.time());s.audit(viewer.id,"delete-reward",id);
+   return{id,deleted:true,alreadyDeleted:false};
+  });
+ }
  private version(id:string){return this.store.db.prepare("SELECT v.* FROM reward_policies p JOIN reward_policy_versions v ON p.reward_id=v.reward_id AND p.version=v.version WHERE p.reward_id=?").get(id) as Version|undefined;}
  private base(id:string){return this.store.db.prepare("SELECT r.*,d.expires_on FROM rewards r LEFT JOIN reward_deadlines d ON d.reward_id=r.id WHERE r.id=?").get(id) as BaseReward|undefined;}
  private groupCents(id:string,period:string,version:number){return (this.store.db.prepare(`SELECT COALESCE(SUM(c.amount_cents),0) AS n FROM redemption_contracts c JOIN redemptions r ON r.id=c.redemption_id WHERE c.reward_id=? AND c.period=? AND c.version=? AND r.status IN ${activeStatuses}`).get(id,period,version) as {n:number}).n;}
@@ -38,19 +52,20 @@ export class FamilyShop {
   const appearance=this.store.db.prepare("SELECT icon FROM reward_appearance WHERE reward_id=?").get(id) as {icon:Reward["icon"]}|undefined;
   return{id,...contract,icon:appearance?.icon||defaultRewardIcon(contract.title),revision:stored?.revision||hash(contract),legacy:!stored,usage:this.usage(id,contract.version,contract.monthlyBudgetCents)};
  }
- list():Reward[]{return(this.store.db.prepare("SELECT id FROM rewards ORDER BY rowid DESC").all() as {id:string}[]).map(r=>this.reward(r.id));}
+ list():Reward[]{return(this.store.db.prepare("SELECT r.id FROM rewards r WHERE NOT EXISTS (SELECT 1 FROM deleted_rewards d WHERE d.reward_id=r.id) ORDER BY r.rowid DESC").all() as {id:string}[]).map(r=>this.reward(r.id));}
  history(id:string){this.reward(id);return(this.store.db.prepare("SELECT data FROM reward_policy_versions WHERE reward_id=? ORDER BY version DESC").all(id) as {data:string}[]).map(r=>JSON.parse(r.data) as RewardContract);}
- setIcon(id:string,value:unknown,actor:string){const {icon}=RewardIconInputSchema.parse(value);return this.store.transaction(()=>{this.reward(id);this.store.db.prepare("INSERT INTO reward_appearance VALUES(?,?) ON CONFLICT(reward_id) DO UPDATE SET icon=excluded.icon").run(id,icon);this.store.audit(actor,"change-reward-icon",id);return this.reward(id);});}
+ setIcon(id:string,value:unknown,actor:string){const {icon}=RewardIconInputSchema.parse(value);return this.store.transaction(()=>{this.ensureAvailable(id);this.reward(id);this.store.db.prepare("INSERT INTO reward_appearance VALUES(?,?) ON CONFLICT(reward_id) DO UPDATE SET icon=excluded.icon").run(id,icon);this.store.audit(actor,"change-reward-icon",id);return this.reward(id);});}
  save(value:unknown,actor:string,id?:string){const v=RewardInputSchema.parse(value);return this.store.transaction(()=>this.write(v,actor,id));}
  /** Called inside the wish/setup transaction as well as the normal editor transaction. */
  write(v:ReturnType<typeof RewardInputSchema.parse>,actor:string,id?:string):Reward {
   const s=this.store,key=id||v.requestId||randomUUID(),old=this.base(key)?this.reward(key):undefined,last=this.version(key),fingerprint=hash(v);
+  this.ensureAvailable(key);
   if(id&&!old)throw new HomeworkError(404,"奖励不存在。");
   if(last?.request_hash===fingerprint)return this.reward(key);
   if(old){
    if(v.revision!==old.revision)throw new HomeworkError(409,"商品已更新，请读取最新约定后再保存。你的填写保留。");
    if((!old.expiresOn||old.expiresOn>=s.today())&&!v.changeReason?.trim())throw new HomeworkError(409,"本期约定仍有效；家长可以更正价格或期限，请填写更正原因。已兑换记录保持原约定。");
-  }else if((s.db.prepare("SELECT COUNT(*) AS n FROM rewards").get() as {n:number}).n>=100)throw new HomeworkError(409,"最多设置100项奖励。");
+  }else if((s.db.prepare("SELECT COUNT(*) AS n FROM rewards r WHERE NOT EXISTS (SELECT 1 FROM deleted_rewards d WHERE d.reward_id=r.id)").get() as {n:number}).n>=100)throw new HomeworkError(409,"最多设置100项奖励。");
   const expiresOn=v.expiresOn||addDays(s.today(),v.offerDays-1);
   if(expiresOn<s.today())throw new HomeworkError(400,"新一期的截止日期不能早于今天。");
   if(v.kind==="shopping"&&!v.monthlyBudgetCents)throw new HomeworkError(400,"请设置购物卡的每月金额上限。");
@@ -67,6 +82,7 @@ export class FamilyShop {
  redeem(input:RedemptionInput,viewer:Viewer){this.expire();const s=this.store;return s.transaction(()=>{
   const old=s.db.prepare("SELECT * FROM redemptions WHERE id=?").get(input.id) as RedemptionRow|undefined;
   if(old){const c=s.db.prepare("SELECT amount_cents FROM redemption_contracts WHERE redemption_id=?").get(input.id) as {amount_cents:number}|undefined;if(old.reward_id!==input.rewardId||old.actor!==viewer.id||(c&&c.amount_cents!==(input.amountCents||0)))throw new HomeworkError(409,"兑换请求与原记录不一致。");return{saved:true};}
+  this.ensureAvailable(input.rewardId);
   const r=this.reward(input.rewardId);
   if(!r.active||r.expiresOn&&r.expiresOn<s.today())throw new HomeworkError(409,"本期商品已到期或暂不可兑换，小脚步没有扣除。");
   if(!r.legacy&&input.revision!==r.revision)throw new HomeworkError(409,"商品已有新一期，请先查看本期价格再申请。小脚步没有扣除。");

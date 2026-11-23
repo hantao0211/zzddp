@@ -50,7 +50,7 @@ export class ReadingHTTP{
  if(path==="/homework-rules"&&req.method==="PATCH"){send(res,this.store.setHomeworkRewardRules(await body(),viewer));return;}
  if(path==="/rules"&&req.method==="PATCH"){send(res,this.store.setRules(await body(),viewer.id));return;}
  const rewardIcon=path.match(/^\/rewards\/([a-f0-9-]{36})\/icon$/);if(rewardIcon&&req.method==="PATCH"){send(res,this.store.shop.setIcon(rewardIcon[1],await body(),viewer.id));return;}
- const reward=path.match(/^\/rewards(?:\/([a-f0-9-]{36}))?$/);if(reward&&req.method===(reward[1]?"PATCH":"POST")){send(res,this.store.saveReward(await body(),viewer.id,reward[1]));return;}
+ const reward=path.match(/^\/rewards(?:\/([a-f0-9-]{36}))?$/);if(reward?.[1]&&req.method==="DELETE"){send(res,this.store.shop.remove(reward[1],await body(),viewer));return;}if(reward&&req.method===(reward[1]?"PATCH":"POST")){send(res,this.store.saveReward(await body(),viewer.id,reward[1]));return;}
  const redemption=path.match(/^\/redemptions\/([a-f0-9-]{36})$/);if(redemption&&req.method==="PATCH"){const v=z.object({status:z.enum(["approved","rejected","fulfilled"])}).strict().parse(await body());send(res,this.store.decide(redemption[1],v.status,viewer.id));return;}
  throw new HomeworkError(404,"没有找到这个阅读功能。");
  }catch(e){if(res.headersSent){res.destroy();return;}res.writeHead(e instanceof HomeworkError?e.status:e instanceof z.ZodError?400:503,{"Content-Type":"application/json; charset=utf-8"});res.end(JSON.stringify({...(e instanceof BookEditConflict?{code:e.code}:{}),error:e instanceof HomeworkError?e.message:e instanceof z.ZodError?"请检查必填内容、数字范围和文字长度后重试。":"阅读服务暂时不可用，已有记录保留，请稍后重试。"}));}}

@@ -411,3 +411,17 @@ test("reading history supports bounded pages and a lightweight latest record wit
   const target=first.data.items[0];assert.equal((await f.send("reading/logs/"+target.id,"DELETE",{version:target.version},admin.cookie)).status,200);const remaining=await get("logs?limit=10");assert.equal(remaining.data.total,22);assert.ok(remaining.data.items.every((r:any)=>r.id!==target.id));assert.equal(f.calls(),0);
  }finally{await f.cleanup();}
 });
+
+test("reward deletion is parent-only, same-origin, versioned and idempotent while existing redemption approvals still work",async()=>{const f=await fixture();try{
+ const admin=await f.bootstrap();for(const role of ["parent","child"] as const)await f.send("admin/accounts","POST",{username:role,name:"模拟"+role,role,password},admin.cookie);const parent=await f.login("parent"),child=await f.login("child");
+ f.reading.award("delete-test-balance",f.reading.today(),50,"测试余额","test",admin.data.viewer.id);
+ const requestId=randomUUID(),offer={title:"重复的模拟电影",cost:5,requestId},first=await f.send("reading/rewards","POST",offer,parent.cookie);assert.equal(first.status,200);
+ const r=first.data,path="reading/rewards/"+r.id,quote={revision:r.revision},redeemId=randomUUID();assert.equal((await f.send("reading/redemptions","POST",{id:redeemId,rewardId:r.id,revision:r.revision},child.cookie)).status,200);
+ assert.equal((await f.send(path,"DELETE",quote)).status,401);assert.equal((await f.send(path,"DELETE",quote,child.cookie)).status,403);assert.equal((await f.send(path,"DELETE",quote,parent.cookie,{Origin:"https://other.test"})).status,403);assert.equal((await f.send(path,"DELETE",{},parent.cookie)).status,400);assert.equal((await f.send(path,"DELETE",{...quote,active:false},parent.cookie)).status,400);
+ const corrected=await f.send(path,"PATCH",{...offer,cost:6,revision:r.revision,changeReason:"原价填错"},parent.cookie);assert.equal(corrected.status,200);assert.equal((await f.send(path,"DELETE",quote,parent.cookie)).status,409);
+ const revision={revision:corrected.data.revision},balance=f.reading.balance();assert.equal((await f.send(path,"DELETE",revision,parent.cookie)).status,200);assert.equal((await f.send(path,"DELETE",revision,parent.cookie)).data.alreadyDeleted,true);assert.equal(f.reading.balance(),balance);
+ for(const account of [parent,child])assert.equal((await f.send("reading/state","GET",undefined,account.cookie)).data.rewards.length,0);
+ assert.equal((await f.send(path,"PATCH",{...offer,revision:corrected.data.revision,changeReason:"不应复活"},parent.cookie)).status,409);assert.equal((await f.send("reading/rewards","POST",offer,parent.cookie)).status,409);
+ const staleExchange=await f.send("reading/redemptions","POST",{id:randomUUID(),rewardId:r.id,revision:corrected.data.revision},child.cookie);assert.equal(staleExchange.status,409);assert.match(staleExchange.data.error,/已删除/);assert.equal(f.reading.balance(),balance);
+ assert.equal((await f.send("reading/redemptions/"+redeemId,"PATCH",{status:"approved"},parent.cookie)).status,200);assert.equal((await f.send("reading/redemptions/"+redeemId,"PATCH",{status:"fulfilled"},parent.cookie)).status,200);assert.equal(f.reading.redemptions()[0].cost,5);assert.equal(f.calls(),0);
+}finally{await f.cleanup();}});
