@@ -1,0 +1,140 @@
+/* Main functions share the journal paper; only the items inside get a color. */
+@media screen {
+  .study-shell .reading-main > :is(section.card, details.card),
+  .study-shell .study-reading-main > :is(section.card, details.card) {
+    border: 0;
+    border-top: 1px solid var(--border);
+    border-radius: 0;
+    box-shadow: none;
+    background: transparent;
+    padding: 26px 0;
+    margin: 0;
+    min-width: 0;
+  }
+
+  /* The page heading already supplies the first separator. */
+  .study-shell .reading-heading + :is(section.card, details.card),
+  .study-shell .study-reading-main > .card:first-child {
+    border-top: 0;
+    padding-top: 0;
+  }
+
+  .study-shell .reading-main > #family-reward-shop { border-top: 0; }
+
+  .study-shell .reading-main .reading-section-heading { margin-bottom: 18px; }
+  .study-shell .reading-main .card > h2,
+  .study-shell .reading-main .card > summary {
+    font-size: 19px;
+    font-weight: 600;
+    color: var(--ink);
+  }
+  .study-shell .reading-main .card > summary { padding-block: 4px; }
+  .study-shell .reading-main .card > h2 > svg,
+  .study-shell .reading-section-heading h2 > svg,
+  .study-shell .reading-main .card > summary > svg { color: var(--accent); }
+
+  /* Forms keep their recognizable field boundaries and visible save receipts. */
+  .study-shell .reading-streak, .study-shell .reading-points,
+  .study-shell .reading-timer { border: 0; }
+  .study-shell .reading-timer { background: var(--theme-warm-soft, #f5efdf); }
+
+  /* Books and reading feedback are objects on the page, not nested panels. */
+  .study-shell .reading-books { gap: 14px; padding-top: 18px; }
+  .study-shell .reading-books > article {
+    border: 0;
+    border-radius: 14px;
+    padding: 18px;
+    background: var(--theme-green-soft, #eaf0e2);
+  }
+  .study-shell .reading-books > article:nth-child(2n) { background: var(--theme-purple-soft, #eee7f2); }
+  .study-shell .reading-books .reading-cover { background: var(--journal-paper); }
+  .study-shell .reading-record:first-of-type { border-top: 0; margin-top: 0; padding-top: 4px; }
+  .study-shell .reading-feedback {
+    border: 0;
+    border-radius: 12px;
+    background: var(--theme-green-soft, #edf3e7);
+  }
+
+  /* A growth overview has one hierarchy, including its expanded sections. */
+  .study-shell .reading-growth-details > .card {
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    padding: 22px 0 0;
+    margin: 0;
+    box-shadow: none;
+  }
+  .study-shell .reading-growth-details[open] > summary { margin-bottom: 18px; }
+  .study-shell .reading-stats > .card {
+    border: 0;
+    border-radius: 14px;
+    padding: 18px 12px;
+    margin: 0;
+    background: var(--theme-warm-soft, #f5edda);
+  }
+  .study-shell .reading-stats > .card:nth-child(2) { background: var(--theme-green-soft, #e8efdf); }
+  .study-shell .reading-stats > .card:nth-child(3) { background: var(--theme-rose-soft, #f7e7e9); }
+  .study-shell .reading-stats > .card:nth-child(4) { background: var(--theme-purple-soft, #eee7f2); }
+  .study-shell .reading-milestones > span {
+    border: 0;
+    background: var(--theme-warm-soft, #f5efdf);
+  }
+  .study-shell .reading-milestones > .reached { background: var(--theme-green-soft, #e8efdf); }
+
+  .study-shell .growth-activities .economy-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+  .study-shell .growth-activities .economy-grid > article {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    border: 0;
+    border-radius: 14px;
+    padding: 18px;
+    background: var(--theme-green-soft, #e8efdf);
+  }
+  .study-shell .growth-activities .economy-grid > article:nth-child(4n + 2) { background: var(--theme-warm-soft, #f5edda); }
+  .study-shell .growth-activities .economy-grid > article:nth-child(4n + 3) { background: var(--theme-rose-soft, #f7e7e9); }
+  .study-shell .growth-activities .economy-grid > article:nth-child(4n) { background: var(--theme-purple-soft, #eee7f2); }
+  .study-shell .growth-activities .economy-grid > article > svg { color: var(--journal-green); }
+  .study-shell .growth-activities .economy-grid h3 { margin: 10px 0 6px; }
+  .study-shell .growth-activities .economy-grid p { margin-bottom: 16px; }
+  .study-shell .growth-activities .activity-reward { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+  .study-shell .growth-activities .activity-frequency { white-space: nowrap; font-size: 12px; color: var(--muted); }
+  .study-shell .growth-activities .economy-grid .button {
+    width: 100%;
+    margin-top: auto;
+    background: var(--journal-paper);
+    border-color: transparent;
+  }
+
+  /* The compact shop retains two tiles per phone row and full details on tap. */
+  .study-shell .reading-main .reading-rewards.mall-grid > article {
+    border: 0;
+    border-radius: 15px;
+    background: var(--theme-warm-soft, #f5edda);
+  }
+  .study-shell .reading-main .reading-rewards.mall-grid > article:nth-child(4n + 2) { background: var(--theme-green-soft, #e8efdf); }
+  .study-shell .reading-main .reading-rewards.mall-grid > article:nth-child(4n + 3) { background: var(--theme-rose-soft, #f7e7e9); }
+  .study-shell .reading-main .reading-rewards.mall-grid > article:nth-child(4n) { background: var(--theme-purple-soft, #eee7f2); }
+  .study-shell .mall-item-heading .mall-item-icon { background: var(--journal-paper); }
+  .study-shell .reading-wish-row {
+    border: 0;
+    border-radius: 12px;
+    padding: 16px 18px;
+    margin-top: 14px;
+    background: var(--theme-rose-soft, #f7e7e9);
+  }
+
+  @media (max-width: 600px) {
+    .study-shell .reading-main > :is(section.card, details.card),
+    .study-shell .study-reading-main > :is(section.card, details.card) { padding-block: 22px; }
+    .study-shell .reading-heading + :is(section.card, details.card),
+    .study-shell .study-reading-main > .card:first-child { padding-top: 0; }
+    .study-shell .reading-main .card > h2,
+    .study-shell .reading-main .card > summary { font-size: 18px; }
+    .study-shell .reading-books > article { padding: 16px; }
+    .study-shell .growth-activities .economy-grid { gap: 10px; }
+    .study-shell .growth-activities .economy-grid > article { padding: 15px 12px; }
+    .study-shell .growth-activities .economy-grid h3 { font-size: 16px; }
+    .study-shell .reading-wish-row { padding: 15px; }
+  }
+}

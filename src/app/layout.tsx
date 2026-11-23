@@ -11,6 +11,7 @@ import "./interactions.css";
 import "./growth-economy.css";
 import "./practice.css";
 import "./theme.css";
+import "./journal-sections.css";
 import { AppInteractions } from "@/components/app-interactions";
 
 export const metadata: Metadata = {
