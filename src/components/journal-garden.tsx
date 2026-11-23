@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Flower2, Star, Sun } from "lucide-react";
+import { useEffect, useId, useRef, useState } from "react";
+import { Flower2, Pencil, Star, Sun } from "lucide-react";
 
 const stickers = [
   { id: "flower", label: "花朵", Icon: Flower2 },
@@ -33,27 +33,50 @@ function JournalStickerPicker({ sticker, onChoose }: { sticker: JournalSticker; 
 }
 
 export function JournalGarden({ hint, sticker, onChoose }: { hint: string; sticker: JournalSticker; onChoose: (next: JournalSticker) => void }) {
+  const [open, setOpen] = useState(false);
+  const tools = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const pickerId = useId();
+  useEffect(() => {
+    if (!open) return;
+    const outside = (event: PointerEvent) => {
+      if (event.target instanceof Node && !tools.current?.contains(event.target)) setOpen(false);
+    };
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") { setOpen(false); trigger.current?.focus(); }
+    };
+    document.addEventListener("pointerdown", outside);
+    document.addEventListener("keydown", escape);
+    return () => {
+      document.removeEventListener("pointerdown", outside);
+      document.removeEventListener("keydown", escape);
+    };
+  }, [open]);
   const selected = stickers.find(item => item.id === sticker)!;
   const Icon = selected.Icon;
   return <section className="journal-garden" aria-label="手帐花园">
-    <span className="journal-tape-label">今天也在长大</span>
     <div className="journal-garden-copy">
-      <span className="journal-eyebrow"><Sun size={16} aria-hidden="true" />新的一页，开始啦</span>
-      <h2>让小小的努力，<br />开出自己的花。</h2>
       <p className="study-next-step">{hint}</p>
     </div>
-    <div className="journal-garden-decoration" role="img" aria-label={`花盆贴着${selected.label}贴纸`}>
-      <div className="journal-flower" aria-hidden="true">
+    <div className="journal-garden-tools" ref={tools} onBlur={event => {
+      if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false);
+    }}>
+      <button type="button" className="journal-garden-trigger" ref={trigger} aria-label="装饰我的花盆" title="装饰我的花盆" aria-expanded={open} aria-controls={pickerId} onClick={() => setOpen(!open)}>
+        <span className="journal-garden-decoration" role="img" aria-label={`花盆贴着${selected.label}贴纸`}>
+      <span className="journal-flower" aria-hidden="true">
         <span className="journal-ground" /><span className="journal-stem" />
         {[1, 2, 3, 4, 5].map(n => <span className={`journal-petal p${n}`} key={n} />)}
         <span className="journal-flower-center" /><span className="journal-leaf" /><span className="journal-leaf l2" />
         <span className="journal-book-stack" /><span className="journal-book-stack s2" />
         <span className="journal-pot" /><span className="journal-pot-label"><Icon size={16} /></span>
+      </span>
+        </span>
+        <Pencil className="journal-garden-edit" size={13} aria-hidden="true" />
+      </button>
+      <div id={pickerId} className="journal-garden-picker" hidden={!open}>
+        <p>装饰我的花盆</p>
+        <JournalStickerPicker sticker={sticker} onChoose={next => { onChoose(next); setOpen(false); trigger.current?.focus(); }} />
       </div>
-    </div>
-    <div className="journal-garden-tools">
-      <span>装饰我的花盆</span>
-      <JournalStickerPicker sticker={sticker} onChoose={onChoose} />
     </div>
   </section>;
 }
