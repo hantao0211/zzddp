@@ -292,7 +292,10 @@
 
 /* Empty days stay part of the journal, with a shared family calendar. */
 .hw-empty-progress .hw-summary-heading { align-items: center; }
-.hw-day-badge { color: var(--muted); font-size: 13px; white-space: nowrap; }
+.hw-summary-heading .hw-day-toggle { display: inline-flex; flex-direction: row; align-items: center; gap: 7px; min-height: 44px; margin: 0; color: var(--muted); font-size: 13px; white-space: nowrap; cursor: pointer; }
+.hw-summary-heading .hw-day-toggle input { flex: 0 0 18px; width: 18px; height: 18px; min-height: 0; padding: 0; margin: 0; accent-color: var(--accent); cursor: pointer; }
+.hw-day-toggle:has(input:disabled) { cursor: default; }
+.hw-day-toggle input:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
 .hw-empty-progress-body { display: flex; gap: 13px; padding: 20px 0 12px; align-items: flex-start; color: var(--muted); }
 .hw-empty-progress-body > svg { flex-shrink: 0; margin-top: 2px; color: var(--accent); }
 .hw-empty-progress-body h3 { color: var(--ink); margin: 0 0 7px; font-size: 17px; }

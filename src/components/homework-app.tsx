@@ -71,8 +71,9 @@ export function HomeworkApp({ onDemo, onDateChange, active=true }: { onDemo: () 
   const [daySettingsOpen, setDaySettingsOpen] = useState(false);
   const [dayPlanBusy, setDayPlanBusy] = useState(false);
   const [dayPlanError, setDayPlanError] = useState("");
+  const [dayPlanChoice, setDayPlanChoice] = useState<{ context: string; noHomework: boolean } | null>(null);
   const [undoEdit, setUndoEdit] = useState<string | null>(null);
-  useEffect(() => { setMemoEdit(null); setRowStatusId(null); setUndoEdit(null); setDaySettingsOpen(false); setDayPlanError(""); }, [date, viewer?.id]);
+  useEffect(() => { setMemoEdit(null); setRowStatusId(null); setUndoEdit(null); setDaySettingsOpen(false); setDayPlanError(""); setDayPlanChoice(null); }, [date, viewer?.id]);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [legacy, setLegacy] = useState(false);
   const requestId = useRef(0), pendingReads=useRef(0), previousActive=useRef(active);
@@ -105,14 +106,21 @@ export function HomeworkApp({ onDemo, onDateChange, active=true }: { onDemo: () 
   const snapshot = savedSnapshot?.date === date ? savedSnapshot : null;
   const homeStatus = homeworkHomeStatus(snapshot);
   const summary = homeworkSummary(snapshot);
-  const dayPlan = snapshot?.dayPlan || resolveHomeworkDayPlan(date, [1], null, !!snapshot?.uploads.length);
+  const savedDayPlan = snapshot?.dayPlan || resolveHomeworkDayPlan(date, [1], null, !!snapshot?.uploads.length);
+  const dayPlan = dayPlanChoice?.context === dayPlanContext.current ? { ...savedDayPlan, noHomework: dayPlanChoice.noHomework } : savedDayPlan;
   async function saveDayPlan(value: { date: string; noHomework?: boolean | null; weekdays?: number[] }) {
     if (dayPlanBusy) return;
     const context = dayPlanContext.current;
     setDayPlanBusy(true); setDayPlanError("");
-    try { await homeworkPost("/day-plan", value); if (context !== dayPlanContext.current) return; await refresh(); setDaySettingsOpen(false); }
+    if (value.weekdays === undefined && typeof value.noHomework === "boolean") setDayPlanChoice({ context, noHomework: value.noHomework });
+    try {
+      const updated = await homeworkPost<typeof savedDayPlan>("/day-plan", value);
+      if (context !== dayPlanContext.current) return;
+      setSnapshot(current => current?.date === value.date ? { ...current, dayPlan: updated } : current);
+      await refresh(); setDaySettingsOpen(false);
+    }
     catch (e) { if (context === dayPlanContext.current) setDayPlanError(errorText(e)); }
-    finally { setDayPlanBusy(false); }
+    finally { setDayPlanChoice(null); setDayPlanBusy(false); }
   }
   const rowStatus = summary?.rows.find(row => row.id === rowStatusId) || null;
   useEffect(() => { if (snapshot?.homeworkReward?.earned) window.dispatchEvent(new Event("xiaobu:growth-updated")); }, [date, snapshot?.homeworkReward?.earned]);
@@ -134,7 +142,7 @@ export function HomeworkApp({ onDemo, onDateChange, active=true }: { onDemo: () 
         {!detailsOpen ? <section className={`hw-simple-home ${summary ? "hw-home-with-summary" : ""}`} aria-label="交作业首页">
           <div className="hw-heading hw-simple-heading"><div><h1>我的小步手帐</h1></div><label className="hw-date journal-date"><span>作业日期</span><input type="date" value={date} onChange={(e) => { if (e.target.value) { setDate(e.target.value); setDetailId(null); setMemoEdit(null); setRowStatusId(null); } }} /></label></div>
           <JournalGarden sticker={journal.sticker} onChoose={journal.choose} hint={snapshot && dayPlan.noHomework ? "今天没有作业，留点时间给喜欢的事。" : "今天的作业，小步陪你整理。"} />
-          <div className="study-home-grid"><div className="study-home-main"><div className="hw-upload-actions hw-primary-actions"><button onClick={() => chooseUpload("homework")} className="study-primary-upload"><span><Camera size={25} aria-hidden="true"/></span><div><strong>交作业</strong><small>照片、扫描件都可以</small></div></button><button onClick={() => chooseUpload("memo")}><span><ClipboardList size={25} aria-hidden="true"/></span><div><strong>拍备忘录</strong><small>记下今天要做什么</small></div></button></div>
+          <div className="study-home-grid"><div className="study-home-main">{(!snapshot || !dayPlan.noHomework) && <div className="hw-upload-actions hw-primary-actions"><button onClick={() => chooseUpload("homework")} className="study-primary-upload"><span><Camera size={25} aria-hidden="true"/></span><div><strong>交作业</strong><small>照片、扫描件都可以</small></div></button><button onClick={() => chooseUpload("memo")}><span><ClipboardList size={25} aria-hidden="true"/></span><div><strong>拍备忘录</strong><small>记下今天要做什么</small></div></button></div>}
           {summary && <section className="hw-home-summary" aria-label="作业概况">
             <div className="hw-summary-heading"><h2>作业进展</h2><div>{summary.rows.length > 0 && <span>共{summary.rows.length}项 · {summary.rows.filter(row => row.activity.tone === "good").length}项已完成</span>}<button className="text-button study-edit-list" onClick={() => setMemoEdit({})}><Pencil size={15} aria-hidden="true" />修改清单</button></div></div>
             {snapshot?.pending&&snapshot.report&&<p className="hw-summary-processing" role="status"><LoaderCircle size={15} className="spin" aria-hidden="true"/><span>{snapshot.memoEdits?.length ? "清单已更新，小步正在按新要求重新检查。" : `${snapshot.processing?.memo ? "新备忘录" : "新照片"}在后台整理，下面保留上次结果，可继续交作业。`}</span></p>}
@@ -143,11 +151,10 @@ export function HomeworkApp({ onDemo, onDateChange, active=true }: { onDemo: () 
             {summary.rows.length ? <><table><colgroup><col className="journal-col-task"/><col className="journal-col-photo"/><col className="journal-col-completion"/></colgroup><thead><tr><th scope="col">作业</th><th scope="col">照片</th><th scope="col">完成情况</th></tr></thead><tbody>{(allTasksVisible ? summary.rows : summary.rows.slice(0, 3)).map(row => <tr key={row.id}><th scope="row"><span className="study-task-title"><span title={`${row.subject} · ${row.displayTitle||row.title}`}>{row.subject} · {row.displayTitle||row.title}</span><button className="study-edit-task" aria-label={`修改${row.title}`} title="修改这项作业" onClick={() => setMemoEdit({ title: row.title, subject: row.subject })}><Pencil size={14} aria-hidden="true" /></button></span></th><td className={`hw-summary-${row.photo.tone}`} aria-label={row.photo.text}><button className="study-status-detail" aria-haspopup="dialog" aria-label={`查看${row.title}的照片情况`} onClick={() => setRowStatusId(row.id)}><StatusIndicator kind={row.selfTask && !row.photoCount ? "neutral" : row.photo.text === "整理中" ? "pending" : row.photo.tone === "good" || row.photo.text === "已关联" ? "received" : row.photo.text === "对应待确认" ? "partial" : row.photo.text === "待匹配" ? "uncertain" : "missing"}>{row.photo.text}</StatusIndicator></button>{!row.updating&&row.photo.text!=="整理中"&&row.photo.tone!=="good"&&<button className="study-row-upload" onClick={()=>chooseUpload("homework",row)} aria-label={`为${row.title}上传作业`}>去上传</button>}</td><td className={`hw-summary-${row.activity.tone}`} aria-label={row.activity.text}><button className="study-status-detail" aria-haspopup="dialog" aria-label={`查看${row.title}的完成情况`} onClick={() => setRowStatusId(row.id)}><StatusIndicator kind={["整理中", "重新检查中"].includes(row.activity.text) ? "pending" : row.activity.tone === "good" ? "done" : ["未做", "未做完"].includes(row.activity.text) ? "blank" : "uncertain"}>{row.selfConfirmed ? <span className="task-manual-label">已完成（手动）</span> : row.activity.text}</StatusIndicator></button>{row.selfTask && !row.selfConfirmed && row.completionToken && <TaskCompleteButton row={row} date={date} saved={() => refresh()} /> }{row.updating&&<small className="hw-row-updating"><LoaderCircle size={13} className="spin" aria-hidden="true"/>{row.memoEdited ? "按新要求检查中" : "新照片整理中"}</small>}</td></tr>)}</tbody></table><div className="journal-list-footer">{summary.rows.length > 3 && <button className="text-button journal-expand-tasks" aria-expanded={allTasksVisible} onClick={() => setAllTasksVisible(value => !value)}>{allTasksVisible ? "收起作业" : `展开其余${summary.rows.length - 3}项作业`}</button>}<button className="hw-details-link" onClick={() => showDetails(true)}><FolderOpen size={16} aria-hidden="true" />查看详情</button></div></> : <p className="hw-summary-empty">{summary.empty}</p>}
           </section>}
           {!summary && <section className="hw-home-summary hw-empty-progress" aria-label="作业概况">
-            <div className="hw-summary-heading"><h2>作业进展</h2><span className="hw-day-badge">{!snapshot ? "读取中" : dayPlan.noHomework ? "无作业日" : "待上传"}</span></div>
+            <div className="hw-summary-heading"><h2>作业进展</h2><label className="hw-day-toggle"><input type="checkbox" aria-label="无作业日" checked={dayPlan.noHomework} disabled={!snapshot || dayPlanBusy} onChange={event => void saveDayPlan({ date, noHomework: event.target.checked })} /><span>无作业日</span>{dayPlanBusy && <LoaderCircle size={14} className="spin" aria-label="保存中" />}</label></div>
             <div className={`hw-empty-progress-body ${snapshot && dayPlan.noHomework ? "is-day-off" : ""}`} role="status">
               {!snapshot ? <LoaderCircle size={25} className="spin" aria-hidden="true" /> : dayPlan.noHomework ? <Sprout size={28} aria-hidden="true" /> : <Upload size={26} aria-hidden="true" />}
               <div><h3>{!snapshot ? "正在读取这一天的记录…" : dayPlan.noHomework ? "今天是无作业日" : "作业待上传"}</h3><p>{!snapshot ? "稍等一下，马上就好。" : dayPlan.noHomework ? "好好休息，也可以读一段喜欢的故事。" : "还没有收到这一天的资料，可以先拍备忘录，或直接交作业。"}</p>
-                {snapshot && <button className="text-button" disabled={dayPlanBusy} onClick={() => void saveDayPlan({ date, noHomework: !dayPlan.noHomework })}>{dayPlanBusy ? "保存中…" : dayPlan.noHomework ? "今天有作业，改一下" : "今天没有作业"}</button>}
               </div>
             </div>
           </section>}
