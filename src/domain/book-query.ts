@@ -20,3 +20,13 @@ export function parseBookQuery(input: string): {kind: "isbn" | "title"; value: s
   }
   return {kind: "title", value: text};
 }
+
+export function isBookCollection(title:string):boolean {
+  return /(?:全|共)\s*[一二三四五六七八九十百\d]+\s*册|套装|全集|盒装/.test(title);
+}
+export function isbn13(value:string):string {
+  if(value.length!==10)return value;
+  const prefix="978"+value.slice(0,9);
+  const sum=[...prefix].reduce((n,c,i)=>n+Number(c)*(i%2?3:1),0);
+  return prefix+String((10-sum%10)%10);
+}

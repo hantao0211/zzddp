@@ -24,7 +24,7 @@ test("title fallback never combines version metadata across editions or accepts 
 });
 test("no matches and total service failure remain distinct, responses are bounded",async()=>{
  assert.deepEqual(await lookupBooks("模拟书名",async()=>response({items:[],docs:[]})),[]);
- let calls=0;await assert.rejects(lookupBooks("模拟书名",async()=>{calls++;throw Error("offline");}),/Catalog unavailable/);assert.equal(calls,2);
+ let calls=0;await assert.rejects(lookupBooks("模拟书名",async()=>{calls++;throw Error("offline");}),/Catalog unavailable/);assert.equal(calls,3);
  assert.deepEqual(await lookupBooks("模拟书名",async input=>String(input).includes("googleapis")?response({items:[]}):new Response("broken JSON")),[]);
  await assert.rejects(lookupBooks("模拟书名",async()=>new Response("x".repeat(512001))),/Catalog unavailable/);
 });

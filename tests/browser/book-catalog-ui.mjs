@@ -22,6 +22,7 @@ try{
    lookups.push(req.postDataJSON());await new Promise(r=>setTimeout(r,200));
    if(mode==='unavailable')return send({items:[],status:mode,note:'暂时连不上图书资料服务，已尝试备用来源。可稍后重试，或直接填写下方书名添加。'});
    if(mode==='not_found')return send({items:[],status:mode,note:'暂没查到这本书，试试完整书名，或直接填写下方书名添加。'});
+   if(mode==='collection')return send({items:[{id:'xinhua_110000100000001',title:'模拟故事（全七册）',author:'模拟作者',isbn:'9787000000001',publisher:'模拟出版社',totalPages:3084,description:'',sourceUrl:'https://item.xhsd.com/items/110000100000001'}],status:'found',note:'选一本填入，再核对版本。'});
    return send({items:[{id:'ol_work_OL123W',title:'模拟查到的书',author:'模拟作者',isbn:'',publisher:'',totalPages:null,description:'',sourceUrl:'https://openlibrary.org/works/OL123W'}],status:'found',note:'选一本填入，再核对版本；留空的信息可以自己补充。'});
   }
   if(path.endsWith('/reading/books')&&req.method()==='POST'){created.push(req.postDataJSON());return send({...book,...req.postDataJSON()});}
@@ -33,9 +34,10 @@ try{
  await query.fill('模拟书名');await dialog.getByRole('button',{name:'查找',exact:true}).click();await dialog.getByRole('button',{name:'正在查找…',exact:true}).waitFor();assert.equal(await dialog.getByRole('button',{name:'加入我的书架',exact:true}).isDisabled(),false);await dialog.getByRole('status').filter({hasText:'已尝试备用来源'}).waitFor();
  mode='not_found';await dialog.getByRole('button',{name:'查找',exact:true}).click();await dialog.getByRole('status').filter({hasText:'暂没查到'}).waitFor();
  mode='found';await dialog.getByRole('button',{name:'查找',exact:true}).click();await dialog.locator('.reading-search-results button').click();assert.equal(await dialog.getByLabel('书名',{exact:true}).inputValue(),'模拟查到的书');assert.equal(await dialog.getByLabel('总页数（选填）',{exact:true}).inputValue(),'');
+ mode='collection';await query.fill('9787000000001');await dialog.getByRole('button',{name:'查找',exact:true}).click();await dialog.locator('.reading-search-results button').click();await dialog.getByRole('status').filter({hasText:'这是套装书目'}).waitFor();assert.equal(await dialog.getByLabel('总页数（选填）',{exact:true}).inputValue(),'');
  for(const width of [320,390,768,1280]){await page.setViewportSize({width,height:900});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await page.screenshot({path:output+`/catalog-${width}.png`});}
  // A failed subsequent search clears previous results, keeps the selected/manual book draft.
- mode='unavailable';await query.fill('其他模拟书名');await dialog.getByRole('button',{name:'查找',exact:true}).click();await dialog.getByRole('status').filter({hasText:'已尝试备用来源'}).waitFor();assert.equal(await dialog.getByLabel('书名',{exact:true}).inputValue(),'模拟查到的书');
- await dialog.getByLabel('书名',{exact:true}).fill('手动填写的模拟书名');await dialog.getByRole('button',{name:'加入我的书架',exact:true}).click();await dialog.waitFor({state:'hidden'});assert.equal(created.length,1);assert.equal(created[0].title,'手动填写的模拟书名');assert.equal(created[0].catalogId,null);assert.equal(lookups.length,4);assert.deepEqual(errors,[]);
- console.log('BOOK_CATALOG_UI_OK=true invalid-isbn-no-request,distinct-outage-and-empty-feedback,retry,loading-state,select-result,manual-add-after-outage,320-390-768-1280');
+ mode='unavailable';await query.fill('其他模拟书名');await dialog.getByRole('button',{name:'查找',exact:true}).click();await dialog.getByRole('status').filter({hasText:'已尝试备用来源'}).waitFor();assert.equal(await dialog.getByLabel('书名',{exact:true}).inputValue(),'模拟故事（全七册）');
+ await dialog.getByLabel('书名',{exact:true}).fill('手动填写的模拟书名');await dialog.getByRole('button',{name:'加入我的书架',exact:true}).click();await dialog.waitFor({state:'hidden'});assert.equal(created.length,1);assert.equal(created[0].title,'手动填写的模拟书名');assert.equal(created[0].catalogId,null);assert.equal(lookups.length,5);assert.deepEqual(errors,[]);
+ console.log('BOOK_CATALOG_UI_OK=true invalid-isbn-no-request,distinct-outage-and-empty-feedback,retry,loading-state,select-result,collection-note-and-no-set-page-count,manual-add-after-outage,320-390-768-1280');
 }finally{await browser.close();}

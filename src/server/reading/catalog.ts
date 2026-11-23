@@ -1,6 +1,8 @@
 import {z} from "zod";
 import type {CatalogBook} from "../../domain/reading";
-import {parseBookQuery} from "../../domain/book-query";
+import {catalogText} from "./catalog-response";
+import {lookupXinhua} from "./catalog-xinhua";
+import {parseBookQuery,isbn13} from "../../domain/book-query";
 
 // Fixed public catalog origins only. Never send family records, images or model credentials.
 const text = z.string().catch("");
@@ -9,17 +11,12 @@ const googleData = z.object({items:z.array(z.object({id:text,volumeInfo:z.object
 const openSearchData = z.object({docs:z.array(z.object({key:text,title:text,author_name:names}))});
 const openBook = z.object({title:text,authors:z.array(z.object({name:text})).catch([]),publishers:z.array(z.object({name:text})).catch([]),number_of_pages:z.number().nullish()});
 const pageCount = (n:unknown) => typeof n === "number" && Number.isInteger(n) && n > 0 && n <= 20000 ? n : null;
-async function json(url:string, request:typeof fetch) {
-  const response = await request(url,{signal:AbortSignal.timeout(4000),redirect:"error",headers:{Accept:"application/json","User-Agent":"XiaobuLearning/1.0 (low-volume book metadata lookup)"}});
-  if (!response.ok) throw new Error("Catalog unavailable");
-  // Bound remote JSON before parsing, including providers which ignore maxResults.
-  const reader=response.body?.getReader();if(!reader)throw new Error("Empty catalog response");
-  const chunks:Uint8Array[]=[];let bytes=0;
-  try{for(;;){const part=await reader.read();if(part.done)break;bytes+=part.value.length;if(bytes>512000)throw new Error("Catalog response too large");chunks.push(part.value);}}finally{await reader.cancel();reader.releaseLock();}
-  return JSON.parse(Buffer.concat(chunks).toString("utf8")) as unknown;
-}
+const json=async(url:string,request:typeof fetch)=>JSON.parse(await catalogText(url,request)) as unknown;
 export async function lookupBooks(query:string,request:typeof fetch=fetch):Promise<CatalogBook[]>{
   const parsed=parseBookQuery(query);let succeeded=false;
+  if((parsed.kind==="isbn"&&isbn13(parsed.value).startsWith("9787"))||(parsed.kind==="title"&&/\p{Script=Han}/u.test(parsed.value))){
+    try{const items=await lookupXinhua(parsed,request);succeeded=true;if(items.length)return items;}catch{/* Public Chinese catalog unavailable; retain independent fallbacks. */}
+  }
   try {
     const q=parsed.kind==="isbn"?"isbn:"+parsed.value:'intitle:"'+parsed.value.replace(/["\\]/g," ")+'"';
     const data=googleData.parse(await json("https://www.googleapis.com/books/v1/volumes?"+new URLSearchParams({q,maxResults:"6",printType:"books"}),request));
