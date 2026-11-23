@@ -236,3 +236,27 @@
 @media screen and (max-width: 360px) {
   .study-shell .study-brand-mobile { font-size: 18px; }
 }
+
+/* The learning stage belongs to the growth title, alongside its balance. */
+@media screen {
+  .study-shell .growth-heading { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
+  .study-shell .growth-heading > .growth-heading-copy { min-width: 0; }
+  .student-profile-summary { display: inline-flex; align-items: center; gap: 5px; position: relative; min-width: 0; max-width: 100%; min-height: 28px; padding: 4px 0; margin-top: 2px; border: 0; background: transparent; color: var(--muted); font-size: 12px; line-height: 1.5; text-align: start; }
+  .student-profile-summary::after { content: ""; position: absolute; inset: -8px 0; }
+  .student-profile-summary > svg { flex-shrink: 0; }
+  .student-profile-summary > span { white-space: nowrap; }
+  .student-profile-summary:hover { color: var(--accent); }
+  .student-profile-summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+  .student-profile-dialog { width: min(520px, calc(100vw - 24px)); }
+  .student-profile-dialog[open] { display: flex; flex-direction: column; overflow: hidden; }
+  .student-profile-dialog > header { flex-shrink: 0; }
+  .student-profile-dialog .icon-button { width: 44px; height: 44px; flex-shrink: 0; }
+  .student-profile-dialog .reading-dialog-body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+  .student-profile-dialog p { font-size: 14px; overflow-wrap: anywhere; }
+  .student-profile-dialog section { margin: 20px 0; }
+  .student-profile-dialog h3 { margin: 0 0 5px; font-size: 16px; }
+}
+
+@media screen and (max-width: 360px) {
+  .study-shell .growth-heading .reading-points .reading-token > span > small { display: block; margin-left: 0; font-size: 11px; line-height: 1.4; }
+}
