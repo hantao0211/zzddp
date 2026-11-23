@@ -26,7 +26,7 @@ export function readWrittenCompletion(env: Record<string, string | undefined> = 
   if (env.ASSISTANT_WRITTEN_COMPLETION !== "1") throw new Error("Invalid written completion setting");
   return true;
 }
-export function isWrittenTask(task: { format: string; title?: string; requirement?: string }) { return task.format === "written" || (task.format === "other" && /订签|订正|签字|签名/u.test(`${task.title||""} ${task.requirement||""}`) && taskSubmission({title:task.title||"",requirement:task.requirement||"",format:task.format}) === "written"); }
+export function isWrittenTask(task: { format: string; title?: string; requirement?: string }) { return task.format === "written" || (task.format === "other" && taskSubmission({title:task.title||"",requirement:task.requirement||"",format:task.format}) === "written"); }
 export function needsWrittenCompletionUpdate(task: { format: string; title?: string; requirement?: string; writtenCompletion?: { version?: string } | null }, enabled?: boolean) { return !!enabled && isWrittenTask(task) && (!task.writtenCompletion || task.writtenCompletion.version !== WRITTEN_COMPLETION_VERSION); }
 export function writtenCompletionLabel(value?: WrittenCompletion | null) {
   if (!value) return null;

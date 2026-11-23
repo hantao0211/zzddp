@@ -214,3 +214,20 @@ test("a second edit and undo project the correct applied version without borrowi
   assert.equal(changed.subject,"语文");assert.equal(changed.coverage,"none");assert.deepEqual(changed.evidence,[]);
  }finally{f.cleanup();}
 });
+
+test("a two-page 16-word dictation marked other gets a completion check from the existing photos",async()=>{
+ const f=fixture(true);try{
+  const memo=f.seed("memo",null,"memo"),first=f.seed("homework","英语","dictation-first"),second=f.seed("homework","英语","dictation-second");
+  const raw=JSON.parse(f.store.upload(memo.uploadId)!.result!);const entry=raw.assignments.find((a:any)=>a.subject==="英语");entry.title="课外默写单词16个";entry.requirement="默写16个单词并订正";entry.format="other";
+  f.store.db.prepare("UPDATE uploads SET result=? WHERE id=?").run(JSON.stringify(raw),memo.uploadId);
+  const extracts=[first,second].map(u=>f.store.upload(u.uploadId)!.result);
+  const run=f.ai.run.bind(f.ai);f.ai.run=async(task,schema,input,images=[])=>{
+   if(task!=="assess_written_completion")return run(task,schema,input,images);
+   assert.equal((input as any).title,entry.title);assert.deepEqual(images.map(p=>p.fileId),[first.pageId,second.pageId]);
+   return schema.parse({scopeComplete:true,reason:"两张照片各8个词，16项均有作答",parts:images.flatMap(p=>Array.from({length:8},(_,i)=>({label:`第${i+1}个词`,status:"answered",evidence:{fileId:p.fileId,page:1,excerpt:"模拟已写单词"}})))});
+  };
+  await f.drain();const state=f.store.snapshot(date),task=state.report!.tasks.find(t=>t.title===entry.title)!;
+  assert.equal(task.format,"other","Keep the original OCR category intact");assert.equal(task.writtenCompletion?.status,"done");assert.equal(task.writtenCompletion?.parts.length,16);assert.equal(homeworkSummary(state)!.rows.find(r=>r.id===task.id)!.activity.text,"已做完");
+  assert.deepEqual([first,second].map(u=>f.store.upload(u.uploadId)!.result),extracts);
+ }finally{f.cleanup();}
+});

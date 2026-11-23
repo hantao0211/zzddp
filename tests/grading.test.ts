@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { HomeworkStore } from "../src/server/homework/store";
 import { HomeworkGrader } from "../src/server/homework/grader";
+import { DailyReportSchema } from "../src/domain/homework";
 import { GradingQuestionSchema, reconcileQuestion, equivalentAnswer, readAutoGrading } from "../src/domain/grading";
 import { AIServiceError, type StructuredAI } from "../src/server/ai/provider";
 const date = "2026-11-17";
@@ -148,4 +149,17 @@ test("a medium-confidence Chinese glyph is not turned into a wrong-book entry by
     return schema.parse({scopeComplete:true,omittedLabels:[],checks:[{...glyph,confidence:"high",questionId:input.questions[0].questionId}]});
   }}),{images:()=>[]});
   try{await grader.tick();assert.equal(calls,4);assert.equal(f.store.grading.summary(date).wrong,0);assert.equal(f.store.grading.summary(date).uncertain,1);assert.equal(f.store.grading.mistakes(null).total,0);}finally{f.close();}
+});
+
+test("explicit dictation labeled other is queued for grading instead of silently excluded",()=>{
+ const f=fixture();try{
+  f.store.db.exec("DELETE FROM grading_runs");
+  const task={id:"memo:task:0",subject:"英语",title:"课外默写单词16个",requirement:"默写16个单词并订正",format:"other",coverage:"complete",missing:[],evidence:[{fileId:f.page,page:1,excerpt:"模拟16项已填写"}],memoEvidence:[],writtenCompletion:null};
+  const report=DailyReportSchema.parse({date,memoId:"memo",updatedAt:"",tasks:[task],unclassified:[],uncertainties:[],unassigned:[]});
+  f.store.transaction(()=>f.store.grading.queueDay(date,report));
+  const run=f.store.grading.claim()!;assert.ok(run);const source=JSON.parse(run.source);assert.equal(source.assigned,true);assert.deepEqual(source.taskIds,[task.id]);assert.deepEqual(source.requirements,[task.requirement]);
+  f.store.db.prepare("UPDATE grading_runs SET status='done'").run();
+  report.tasks[0]={...report.tasks[0],title:"口头背诵",requirement:"背诵课文，无需书面"};
+  f.store.transaction(()=>f.store.grading.queueDay(date,report));assert.equal(f.store.grading.claim(),undefined,"Nonwritten work must still stay out of image grading");
+ }finally{f.close();}
 });

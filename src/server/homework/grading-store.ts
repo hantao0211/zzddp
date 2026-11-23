@@ -1,3 +1,4 @@
+import { isWrittenTask } from "../../domain/written-completion";
 import { gradingFailureText, type GradingFailure, type GradingStage } from "../../domain/grading-failure";
 import { resolveUploadTarget } from "./upload-target";
 import { createHash } from "node:crypto";
@@ -30,7 +31,7 @@ export class GradingStore {
     for (let index = 0; index < pages.length; index++) {
       const primary = pages[index]; if (!primary.page || !primary.subject) continue;
       const related = report?.tasks.filter(t => t.evidence.some(e => e.fileId === primary.fileId)) || [];
-      const written = related.filter(t => t.format === "written");
+      const written = related.filter(isWrittenTask);
       if (related.length && !written.length) continue;
       const context = [pages[index - 1], primary, pages[index + 1]].filter(p => p?.page && p.subject === primary.subject && (p === primary || p.page!.file_id === primary.page!.file_id));
       const source: GradingSource = { date, title: written.map(t => t.title).join("、") || primary.book || "已上传作业", subject: primary.subject, assigned: !!written.length, requirements: written.map(t => t.inferredScope ? `${t.requirement}；${t.inferredMeaning?.description||""}检查范围根据已传作业推断：${t.inferredScope.description}；${t.inferredScope.note}` : t.requirement), taskIds: written.map(t => t.id), primaryPageId: primary.fileId, pages: context.map(p => p.page!), expectedLabels: written.flatMap(t => t.writtenCompletion?.parts.filter(p => p.evidence.fileId === primary.fileId).map(p => p.label) || []) };

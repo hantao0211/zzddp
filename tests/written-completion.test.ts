@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { HomeworkStore } from "../src/server/homework/store";
 import { HomeworkWorker } from "../src/server/homework/worker";
-import { WrittenInspectionSchema, evaluateWrittenInspection, readWrittenCompletion } from "../src/domain/written-completion";
+import { WrittenInspectionSchema, evaluateWrittenInspection, readWrittenCompletion, isWrittenTask, needsWrittenCompletionUpdate } from "../src/domain/written-completion";
 import { homeworkHomeStatus } from "../src/domain/homework-home";
 import { homeworkSummary } from "../src/domain/homework-summary";
 const date = "2026-11-17";
@@ -51,4 +51,11 @@ for (const state of ["answered", "blank", "unclear", "resolved"] as const) test(
     const oldJob = { id: -1, revision: store.revision(date), date, upload_id: null, kind: "organize" as const, attempts: 1 };
     store.publish(oldJob, old, "processed", "Synthetic old report"); store.retryDay(date); assert.equal(store.snapshot(date).pending, true);
   } finally { worker.stop(); store.close(); rmSync(directory, { recursive: true, force: true }); }
+});
+
+test("handwritten dictation and other explicit paper work cannot be skipped because OCR labeled them other",()=>{
+ for(const title of ["课外默写单词16个","家默","抄写词语两遍","作文","2#本订签"]){
+  const task={title,requirement:"按当天要求完成",format:"other"};assert.equal(isWrittenTask(task),true,title);assert.equal(needsWrittenCompletionUpdate({...task,writtenCompletion:null},true),true,title);
+ }
+ for(const title of ["看不清的事项","整理书包","口头背诵课文"]){assert.equal(isWrittenTask({title,requirement:"按当天要求完成",format:"other"}),false,title);}
 });
