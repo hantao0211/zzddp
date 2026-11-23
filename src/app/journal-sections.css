@@ -58,6 +58,17 @@
   .study-shell .reading-history-filters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
   .study-shell .reading-history-filters label { min-width: 0; }
   .reading-history-specific-date { grid-column: 1 / -1; }
+  .reading-history-entry { border-top: 1px solid var(--border); }
+  .reading-history-entry > summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; list-style: none; padding: 14px 0; }
+  .reading-history-entry > summary::-webkit-details-marker { display: none; }
+  .reading-history-entry > summary > span { display: grid; gap: 4px; min-width: 0; }
+  .reading-history-entry > summary strong { font-size: 15px; font-weight: 600; }
+  .reading-history-entry > summary small { font-size: 12px; color: var(--muted); }
+  .reading-history-entry > summary > svg { flex-shrink: 0; color: var(--accent); }
+  .reading-history-entry[open] > summary > svg { transform: rotate(90deg); }
+  .reading-history-entry > .reading-record { margin: 0; padding: 0 0 18px; border: 0; }
+  .reading-history-pages { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; padding-top: 16px; }
+
 
   /* A growth overview has one hierarchy, including its expanded sections. */
   .study-shell .reading-growth-details > .card {

@@ -394,3 +394,20 @@ test("reading deletion requires login and same-origin; history and direct lookup
   assert.equal((await f.send('reading/logs','POST',input,parent.cookie)).status,409);
  }finally{await f.cleanup();}
 });
+
+
+test("reading history supports bounded pages and a lightweight latest record without changing full statistics", async () => {
+ const f=await fixture();try{
+  const admin=await f.bootstrap(),book=await f.send("reading/books","POST",{title:"分页测试书",totalPages:100},admin.cookie),today=f.reading.today(),yesterday=new Date(Date.parse(today+"T00:00:00Z")-86400000).toISOString().slice(0,10);
+  for(let i=0;i<23;i++)f.reading.save({id:randomUUID(),version:0,bookId:book.data.id,date:i<12?today:yesterday,startPage:i+1,endPage:i+1,minutes:1,summary:`第${i}次虚构阅读。`},admin.data.viewer);
+  assert.equal((await f.send("reading/logs?limit=10")).status,401);
+  const get=async(query:string)=>(await f.send("reading/"+query,"GET",undefined,admin.cookie));
+  const all=await get("logs"),first=await get("logs?limit=10"),second=await get("logs?limit=10&offset=10"),last=await get("logs?limit=10&offset=20");
+  assert.equal(all.data.items.length,23);assert.equal(first.data.total,23);assert.equal(first.data.items.length,10);assert.equal(second.data.items.length,10);assert.equal(last.data.items.length,3);
+  assert.deepEqual([...first.data.items,...second.data.items,...last.data.items].map((r:any)=>r.id),all.data.items.map((r:any)=>r.id));
+  const filtered=await get(`logs?limit=10&date=${today}&bookId=${book.data.id}`);assert.equal(filtered.data.total,12);assert.equal(filtered.data.items.length,10);assert.ok(filtered.data.items.every((r:any)=>r.date===today&&r.bookId===book.data.id));
+  const full=await get("state"),light=await get("state?logLimit=1");assert.equal(full.data.logs.length,23);assert.equal(light.data.logs.length,1);assert.equal(light.data.logs[0].id,first.data.items[0].id);assert.equal(light.data.hasMore,true);assert.deepEqual(light.data.stats,full.data.stats);assert.deepEqual(light.data.books,full.data.books);
+  for(const limit of ["0","101","1.5","bad",""]){assert.equal((await get("logs?limit="+limit)).status,400);assert.equal((await get("state?logLimit="+limit)).status,400);}
+  const target=first.data.items[0];assert.equal((await f.send("reading/logs/"+target.id,"DELETE",{version:target.version},admin.cookie)).status,200);const remaining=await get("logs?limit=10");assert.equal(remaining.data.total,22);assert.ok(remaining.data.items.every((r:any)=>r.id!==target.id));assert.equal(f.calls(),0);
+ }finally{await f.cleanup();}
+});
