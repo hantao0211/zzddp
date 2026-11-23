@@ -1,3 +1,4 @@
+import { AvatarIdSchema, defaultAvatar, type AvatarId } from "../../domain/avatars";
 import { DatabaseSync } from "node:sqlite";
 import { randomBytes, randomUUID, scrypt, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
@@ -8,7 +9,7 @@ import { digest } from "./store";
 import { HomeworkError } from "../homework/store";
 const derive = promisify(scrypt);
 type UserRow = { id: string; username: string; username_key: string; name: string; role: Viewer["role"]; password_hash: string; active: number; created_at: string };
-const view = (r: UserRow): Viewer => ({ id: r.id, username: r.username, name: r.name, role: r.role });
+
 async function passwordHash(password: string) { const salt = randomBytes(16).toString("hex"); return salt + ":" + (await derive(password, salt, 32) as Buffer).toString("hex"); }
 export class Accounts {
   readonly db: DatabaseSync;
@@ -19,6 +20,7 @@ export class Accounts {
     this.db.exec(`PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA busy_timeout=5000;
       CREATE TABLE IF NOT EXISTS accounts(id TEXT PRIMARY KEY,username TEXT NOT NULL,username_key TEXT NOT NULL UNIQUE,name TEXT NOT NULL,role TEXT NOT NULL CHECK(role IN ('admin','parent','child')),password_hash TEXT NOT NULL,active INTEGER NOT NULL DEFAULT 1,created_at TEXT NOT NULL,updated_at TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY,value TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS account_avatars(account_id TEXT PRIMARY KEY REFERENCES accounts(id),avatar TEXT NOT NULL,updated_at TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS account_audit(id TEXT PRIMARY KEY,actor TEXT NOT NULL,action TEXT NOT NULL,target TEXT NOT NULL,created_at TEXT NOT NULL);`);
     this.setupFile = join(directory, "parent-setup-code");
     if (this.needsSetup()) {
@@ -31,16 +33,28 @@ export class Accounts {
       }
     } else if (existsSync(this.setupFile)) unlinkSync(this.setupFile);
   }
+  private view(row: UserRow): Viewer {
+    const saved = this.db.prepare("SELECT avatar FROM account_avatars WHERE account_id=?").get(row.id) as { avatar: string } | undefined;
+    const parsed = AvatarIdSchema.safeParse(saved?.avatar);
+    return { id: row.id, username: row.username, name: row.name, role: row.role, avatar: parsed.success ? parsed.data : defaultAvatar(row.name, row.role) };
+  }
+  setAvatar(id: string, avatar: AvatarId) {
+    const parsed = AvatarIdSchema.safeParse(avatar);
+    if (!parsed.success) throw new HomeworkError(400, "请选择列表里的表情。");
+    if (!this.profile(id)) throw new HomeworkError(401, "请用自己的独立账号登录后选择表情。");
+    this.db.prepare("INSERT INTO account_avatars(account_id,avatar,updated_at) VALUES(?,?,?) ON CONFLICT(account_id) DO UPDATE SET avatar=excluded.avatar,updated_at=excluded.updated_at").run(id, parsed.data, new Date(this.now()).toISOString());
+    return this.profile(id)!;
+  }
   needsSetup() { return (this.db.prepare("SELECT COUNT(*) AS n FROM accounts").get() as { n: number }).n === 0; }
   private setting(key: string) { return (this.db.prepare("SELECT value FROM settings WHERE key=?").get(key) as { value: string } | undefined)?.value; }
   legacyAllowed() { return this.setting("legacy_access") !== "off"; }
-  profile(id: string): Viewer | null { const row = this.db.prepare("SELECT * FROM accounts WHERE id=? AND active=1").get(id) as UserRow | undefined; return row ? view(row) : null; }
-  list() { return (this.db.prepare("SELECT * FROM accounts ORDER BY created_at,rowid").all() as UserRow[]).map(r => ({ ...view(r), active: !!r.active, createdAt: r.created_at })); }
+  profile(id: string): Viewer | null { const row = this.db.prepare("SELECT * FROM accounts WHERE id=? AND active=1").get(id) as UserRow | undefined; return row ? this.view(row) : null; }
+  list() { return (this.db.prepare("SELECT * FROM accounts ORDER BY created_at,rowid").all() as UserRow[]).map(r => ({ ...this.view(r), active: !!r.active, createdAt: r.created_at })); }
   async login(username: string, password: string) {
     const row = this.db.prepare("SELECT * FROM accounts WHERE username_key=?").get(username.toLowerCase()) as UserRow | undefined;
     const [salt, expected] = (row?.password_hash || "00".repeat(16) + ":" + "00".repeat(32)).split(":");
     const actual = await derive(password, salt, 32) as Buffer;
-    return row?.active && timingSafeEqual(actual, Buffer.from(expected, "hex")) ? view(row) : null;
+    return row?.active && timingSafeEqual(actual, Buffer.from(expected, "hex")) ? this.view(row) : null;
   }
   private audit(actor: string, action: string, target: string) { this.db.prepare("INSERT INTO account_audit VALUES(?,?,?,?,?)").run(randomUUID(), actor, action, target, new Date(this.now()).toISOString()); }
   private insert(input: { username: string; name: string; role: Viewer["role"] }, hash: string, actor: string) {

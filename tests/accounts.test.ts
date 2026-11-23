@@ -314,3 +314,26 @@ test("children and parents share no-homework settings; login, same origin and st
   assert.equal(f.calls(),0);
  }finally{await f.cleanup();}
 });
+
+test("each family member changes only their own avatar; preferences persist without role, password or session changes", async () => {
+ const f=await fixture();try {
+  assert.equal((await f.send("profile/avatar","PATCH",{avatar:"rabbit"})).status,401);
+  const admin=await f.bootstrap();
+  for(const role of ["child","parent"] as const)await f.send("admin/accounts","POST",{username:role,name:role==='parent'?"妈妈":"模拟孩子",role,password},admin.cookie);
+  const child=await f.login("child"),parent=await f.login("parent");
+  const oldChild=f.accounts.profile(child.data.viewer.id)!,oldParent=f.accounts.profile(parent.data.viewer.id)!;
+  assert.equal(oldParent.avatar,"mom");assert.equal(oldChild.avatar,"rabbit");
+  assert.equal((await f.send("profile/avatar","PATCH",{avatar:"cat"},child.cookie,{Origin:"https://other.test"})).status,403);
+  for(const input of [{avatar:"unknown"},{avatar:"<svg onload=alert(1)>"},{avatar:"cat",id:parent.data.viewer.id},{avatar:"cat",role:"admin"}])assert.equal((await f.send("profile/avatar","PATCH",input,child.cookie)).status,400);
+  const result=await f.send("profile/avatar","PATCH",{avatar:"cat"},child.cookie);assert.equal(result.status,200);assert.equal(result.data.id,oldChild.id);assert.equal(result.data.role,"child");assert.equal(result.data.avatar,"cat");
+  assert.equal(f.accounts.profile(oldParent.id)!.avatar,"mom");
+  assert.equal((await f.send("profile/avatar","PATCH",{avatar:"flower"},parent.cookie)).data.avatar,"flower");
+  assert.equal((await f.send("profile/avatar","PATCH",{avatar:"cool"},admin.cookie)).data.avatar,"cool");
+  const reopened=new Accounts(f.directory);try{assert.equal(reopened.profile(oldChild.id)!.avatar,"cat");assert.equal((await reopened.login("child",password))!.avatar,"cat");assert.equal(reopened.profile(oldParent.id)!.avatar,"flower");}finally{reopened.close();}
+  const status=await f.send("status","GET",undefined,child.cookie);assert.equal(status.data.authenticated,true);assert.equal(status.data.viewer.avatar,"cat");
+  assert.equal((await f.send("reading/state","GET",undefined,child.cookie)).data.viewer.avatar,"cat");
+  assert.equal((await f.send("admin/overview","GET",undefined,child.cookie)).status,403);
+  const legacy=await f.send("session","POST",{code});assert.equal((await f.send("profile/avatar","PATCH",{avatar:"cat"},legacy.cookie)).status,400);
+  assert.equal(f.calls(),0);
+ }finally{await f.cleanup();}
+});

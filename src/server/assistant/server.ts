@@ -1,3 +1,4 @@
+import { AvatarUpdateSchema } from "../../domain/avatars";
 import type { ReadingHTTP } from "../reading/http";
 import { HomeworkError } from "../homework/store";
 import type { HomeworkConversation } from "../homework/conversation";
@@ -96,6 +97,12 @@ export function createAssistantServer(options: Options) {
         } finally { logins--; }
       }
       if (!authenticated) throw new HttpError(401, "请先登录学习账号。");
+      if (path === "/assistant-api/profile/avatar" && request.method === "PATCH") {
+        if (!options.accounts || !viewer || viewer.legacy) throw new HttpError(400, "请用自己的独立账号登录后选择表情。");
+        const input = AvatarUpdateSchema.safeParse(await jsonBody(request, 1024));
+        if (!input.success) throw new HttpError(400, "请选择列表里的表情。");
+        json(response, 200, options.accounts.setAvatar(viewer.id, input.data.avatar)); return;
+      }
       if (path.startsWith("/assistant-api/reading/") && options.reading && viewer) { await options.reading.handle(request, response, viewer, () => jsonBody(request, 3_000_000)); return; }
       if (path.startsWith("/assistant-api/admin/") && admin && viewer) { await admin.handle(request, response, path, viewer, () => jsonBody(request, 4096)); return; }
       if (options.accounts && !isParent(viewer) && (path.match(/^\/assistant-api\/memories\/[a-f0-9-]{36}\/revoke$/) || path.match(/^\/assistant-api\/learning\/(?:retry-day|grading\/(?:start|retry)|uploads\/[a-f0-9-]{36}\/date)$/)) && request.method !== "GET") throw new HttpError(403, "这是家长管理操作，请让家长到管理页处理。日常上传和小助手仍可使用。");

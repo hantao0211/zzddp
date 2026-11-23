@@ -8,7 +8,13 @@ export async function accountRequest(path: string, value?: unknown, method = "PO
 }
 export function useViewer() {
   const [state, setState] = useState<{ viewer: Viewer | null; accounts: boolean }>({ viewer: null, accounts: false });
-  useEffect(() => { let active = true; const refresh = () => { void accountRequest("status", undefined, "GET").then(r => { if (active) setState({ viewer: r.viewer || null, accounts: r.accounts === true }); }).catch(() => {}); }; refresh(); window.addEventListener("xiaobu:session-changed", refresh); window.addEventListener("focus", refresh); return () => { active = false; window.removeEventListener("xiaobu:session-changed", refresh); window.removeEventListener("focus", refresh); }; }, []);
+  useEffect(() => {
+    let active = true, sequence = 0;
+    const refresh = () => { const id = ++sequence; void accountRequest("status", undefined, "GET").then(r => { if (active && id === sequence) setState({ viewer: r.viewer || null, accounts: r.accounts === true }); }).catch(() => {}); };
+    const profile = (event: Event) => { const viewer = (event as CustomEvent<Viewer>).detail; if (!viewer?.id) return; sequence++; if (active) setState(current => current.viewer?.id === viewer.id ? { ...current, viewer } : current); };
+    refresh(); window.addEventListener("xiaobu:session-changed", refresh); window.addEventListener("focus", refresh); window.addEventListener("xiaobu:profile-updated", profile);
+    return () => { active = false; window.removeEventListener("xiaobu:session-changed", refresh); window.removeEventListener("focus", refresh); window.removeEventListener("xiaobu:profile-updated", profile); };
+  }, []);
   return state;
 }
 export function AccountLogin({ onSignedIn, legacy = false }: { onSignedIn: () => void; legacy?: boolean }) {

@@ -1,7 +1,7 @@
 import { z } from "zod";
 export const RoleSchema = z.enum(["admin", "parent", "child"]);
 export type Role = z.infer<typeof RoleSchema>;
-export type Viewer = { id: string; username: string; name: string; role: Role; legacy?: boolean };
+export type Viewer = { id: string; username: string; name: string; role: Role; avatar?: import("./avatars").AvatarId; legacy?: boolean };
 export const ROLE_LABELS: Record<Role, string> = { admin: "家庭管理员", parent: "家长", child: "孩子" };
 export const UsernameSchema = z.string().trim().min(2).max(32).regex(/^[A-Za-z0-9_.-]+$/);
 export const PasswordSchema = z.string().min(8).max(128);
