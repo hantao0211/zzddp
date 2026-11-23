@@ -2,13 +2,16 @@ import { isWrittenTask } from "../../domain/written-completion";
 import { gradingFailureText, type GradingFailure, type GradingStage } from "../../domain/grading-failure";
 import { resolveUploadTarget } from "./upload-target";
 import { createHash } from "node:crypto";
+import { readFileSync, statSync } from "node:fs";
+import { join } from "node:path";
 import { GRADING_VERSION, GradingResultSchema, emptyCounts, type GradingResult, type GradingSummary, type GradingBatchView, type MistakeView } from "../../domain/grading";
 import type { HomeworkStore } from "./store";
 import type { DailyReport } from "../../domain/homework";
 export type GradingSource = { date: string; title: string; subject: string; assigned: boolean; requirements: string[]; taskIds: string[]; primaryPageId: string; pages: { id: string; file_id: string; number: number }[]; expectedLabels: string[] };
-export type GradingRun = { id: string; source: string; status: string; attempts: number; result: string | null; note: string };
+export type GradingRun = { id: string; primary_page_id?: string; source: string; status: string; attempts: number; result: string | null; note: string };
 const digest = (v: unknown) => createHash("sha256").update(JSON.stringify(v)).digest("hex");
 export class GradingStore {
+  private pageHashes = new Map<string, { stamp: string; hash: string }>();
   constructor(readonly store: HomeworkStore) {
     store.db.exec(`CREATE TABLE IF NOT EXISTS grading_runs(id TEXT PRIMARY KEY,date TEXT NOT NULL,primary_page_id TEXT NOT NULL,source TEXT NOT NULL,active INTEGER NOT NULL DEFAULT 1,status TEXT NOT NULL DEFAULT 'queued',attempts INTEGER NOT NULL DEFAULT 0,next_at INTEGER NOT NULL DEFAULT 0,result TEXT,note TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL,updated_at TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS grading_diagnostics(run_id TEXT PRIMARY KEY REFERENCES grading_runs(id),code TEXT NOT NULL,stage TEXT NOT NULL,attempts INTEGER NOT NULL,failed_at TEXT NOT NULL,source TEXT NOT NULL);
@@ -18,6 +21,69 @@ export class GradingStore {
       CREATE TABLE IF NOT EXISTS grading_mistakes(id TEXT PRIMARY KEY,first_date TEXT NOT NULL,last_date TEXT NOT NULL,subject TEXT NOT NULL,title TEXT NOT NULL,page_id TEXT NOT NULL,payload TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'verified');
       CREATE TABLE IF NOT EXISTS grading_occurrences(mistake_id TEXT NOT NULL REFERENCES grading_mistakes(id),run_id TEXT NOT NULL REFERENCES grading_runs(id),question_id TEXT NOT NULL,PRIMARY KEY(mistake_id,run_id,question_id));`);
     store.db.exec("UPDATE grading_runs SET status='queued' WHERE status='running'");
+    for (const row of store.db.prepare("SELECT DISTINCT date FROM grading_runs WHERE active=1").all() as { date: string }[]) this.deduplicate(row.date);
+  }
+  private pageKey(page: GradingSource["pages"][number]): string {
+    const path = join(this.store.directory, "pages", page.id + ".jpg");
+    try {
+      const stat = statSync(path), stamp = `${stat.size}:${stat.mtimeMs}`;
+      let saved = this.pageHashes.get(page.id);
+      if (!saved || saved.stamp !== stamp) { saved = { stamp, hash: createHash("sha256").update(readFileSync(path)).digest("hex") }; this.pageHashes.set(page.id, saved); }
+      return `rendered:${saved.hash}:${page.number}`;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      const file = this.store.file(page.file_id);
+      return file ? `original:${file.sha256}:${page.number}` : `unknown:${page.id}`;
+    }
+  }
+  private contentKey(source: GradingSource, fallback = "unknown"): string {
+    if (!source.pages?.some(page => page.id === source.primaryPageId)) return `unresolved:${source.primaryPageId || fallback}`;
+    const normalize = (text: string) => text.normalize("NFKC").replace(/\s+/g, " ").trim();
+    return digest({ version: GRADING_VERSION, subject: source.subject, title: normalize(source.title), assigned: source.assigned,
+      requirements: source.requirements.map(normalize).sort(),
+      primary: source.pages.filter(p => p.id === source.primaryPageId).map(p => this.pageKey(p)), pages: source.pages.map(p => this.pageKey(p)) });
+  }
+  /** Keep history and originals; only equivalent active work is folded into one run. */
+  private deduplicate(date: string) {
+    this.store.db.exec("SAVEPOINT grading_deduplicate");
+    try {
+      const groups = new Map<string, (GradingRun & { active: number })[]>();
+      for (const run of this.store.db.prepare("SELECT * FROM grading_runs WHERE date=? AND active=1 ORDER BY rowid").all(date) as (GradingRun & { active: number })[]) {
+        const source = JSON.parse(run.source) as GradingSource;
+        if (!source.pages?.some(p => p.id === source.primaryPageId)) continue;
+        const key = this.contentKey(source), group = groups.get(key) || []; group.push(run); groups.set(key, group);
+      }
+      const rank = (run: GradingRun) => run.status === "done" && run.result && JSON.parse(run.result).version === GRADING_VERSION ? 0 : run.status === "running" ? 1 : run.status === "failed" ? 2 : run.status === "queued" ? 3 : 4;
+      const quality = (run: GradingRun) => { const result = run.result ? JSON.parse(run.result) as GradingResult : null; return result ? (result.scopeComplete ? 1000 : 0) + result.questions.length : 0; };
+      for (const group of groups.values()) {
+        const active = group.filter(run => run.active); if (!active.length || group.length < 2) continue;
+        const keep = [...group].sort((a, b) => rank(a) - rank(b) || quality(b) - quality(a))[0];
+        const source = JSON.parse(keep.source) as GradingSource;
+        source.taskIds = [...new Set(active.flatMap(run => (JSON.parse(run.source) as GradingSource).taskIds))];
+        this.store.db.prepare("UPDATE grading_runs SET active=1,source=? WHERE id=?").run(JSON.stringify(source), keep.id);
+        for (const run of active) if (run.id !== keep.id) {
+          this.store.db.prepare("UPDATE grading_runs SET active=0 WHERE id=?").run(run.id);
+          if (keep.status === "done" && keep.result && JSON.parse(keep.result).scopeComplete) this.store.db.prepare("UPDATE grading_mistakes SET status='duplicate' WHERE id IN (SELECT mistake_id FROM grading_occurrences WHERE run_id=?) AND NOT EXISTS (SELECT 1 FROM grading_occurrences o JOIN grading_runs r ON r.id=o.run_id WHERE o.mistake_id=grading_mistakes.id AND r.active=1)").run(run.id);
+        }
+      }
+      this.store.db.exec("RELEASE grading_deduplicate");
+    } catch (error) {
+      this.store.db.exec("ROLLBACK TO grading_deduplicate; RELEASE grading_deduplicate");
+      throw error;
+    }
+  }
+  reuseCompleted(run: GradingRun): GradingResult | null {
+    const source = JSON.parse(run.source) as GradingSource;
+    if (!source.pages?.some(page => page.id === source.primaryPageId)) return null;
+    const key = this.contentKey(source);
+    for (const saved of this.store.db.prepare("SELECT source,result FROM grading_runs WHERE active=1 AND status='done' AND result IS NOT NULL ORDER BY rowid DESC").all() as { source: string; result: string }[]) {
+      const previous = JSON.parse(saved.source) as GradingSource; if (this.contentKey(previous) !== key) continue;
+      const result = GradingResultSchema.parse(JSON.parse(saved.result)); if (result.version !== GRADING_VERSION) continue;
+      const remap = new Map(previous.pages.map((page, i) => [page.id, source.pages[i]]));
+      if (result.questions.some(q => q.evidence.some(e => !remap.has(e.fileId)))) continue;
+      return { ...result, questions: result.questions.map(q => ({ ...q, id: createHash("sha256").update(run.id + ":" + q.label).digest("hex"), evidence: q.evidence.map(e => ({ ...e, fileId: remap.get(e.fileId)!.id, page: e.page === null ? null : remap.get(e.fileId)!.number })) })) };
+    }
+    return null;
   }
   queueDay(date: string, report: DailyReport | null) {
     if (!this.store.autoGradingEnabled) return;
@@ -38,11 +104,13 @@ export class GradingStore {
       const id = digest({ version: GRADING_VERSION, source });
       this.store.db.prepare("INSERT INTO grading_runs(id,date,primary_page_id,source,created_at,updated_at) VALUES(?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET active=1").run(id, date, primary.fileId, JSON.stringify(source), time, time);
     }
+    this.deduplicate(date);
   }
   claim(): GradingRun | undefined {
     if (!this.store.autoGradingEnabled) return;
     return this.store.transaction(() => {
-      const run = this.store.db.prepare("SELECT g.* FROM grading_runs g WHERE g.active=1 AND g.status='queued' AND g.next_at<=? AND NOT EXISTS (SELECT 1 FROM grading_runs busy WHERE busy.primary_page_id=g.primary_page_id AND busy.status='running') ORDER BY g.created_at,g.rowid LIMIT 1").get(this.store.now()) as GradingRun | undefined;
+      const busy = new Set((this.store.db.prepare("SELECT source,primary_page_id FROM grading_runs WHERE status='running'").all() as { source: string; primary_page_id: string }[]).map(row => this.contentKey(JSON.parse(row.source), row.primary_page_id)));
+      const run = (this.store.db.prepare("SELECT g.* FROM grading_runs g WHERE g.active=1 AND g.status='queued' AND g.next_at<=? AND NOT EXISTS (SELECT 1 FROM grading_runs busy WHERE busy.primary_page_id=g.primary_page_id AND busy.status='running') ORDER BY g.created_at,g.rowid").all(this.store.now()) as GradingRun[]).find(candidate => !busy.has(this.contentKey(JSON.parse(candidate.source), candidate.primary_page_id || candidate.id)));
       if (!run) return;
       this.store.db.prepare("UPDATE grading_runs SET status='running',attempts=attempts+1,updated_at=? WHERE id=?").run(new Date(this.store.now()).toISOString(), run.id);
       return { ...run, attempts: run.attempts + 1 };

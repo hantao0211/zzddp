@@ -23,7 +23,7 @@ export function homeworkHomeStatus(snapshot: HomeworkSnapshot | null): { text: s
   if (report?.tasks.some((t) => taskSubmission(t) !== "self" && needsReviewTraceUpdate(t, snapshot.reviewPolicy))) return { text: "部分预习复习仍是旧结果，可在详情重新整理。", help: false, busy: false };
   if (report?.tasks.length && !report.unclassified.length && !report.unassigned.length && snapshot.status !== "needs_rescan" && !snapshot.uploads.some(u => u.status === "needs_rescan") && homeworkSummary(snapshot)?.rows.every(row => row.photo.tone === "good" && row.activity.tone === "good")) {
     const grade = snapshot.grading;
-    const text = !grade?.enabled ? "这一天的作业都已做完，答案对错还没批改。" : grade.pending ? "作业已做完，AI正在批改。" : grade.failed ? "作业已做完，有批改还没完成。" : grade.wrong ? `作业已做完，${grade.wrong}道错题已整理到错题本。` : grade.uncertain ? `作业已做完，有${grade.uncertain}题AI尚未确认。` : grade.finished ? "作业已做完，可以查看逐题批改结果。" : "这一天的作业都已做完。";
+    const text = !grade?.enabled ? "这一天的作业都已做完，答案对错还没批改。" : grade.pending ? `作业已做完，还有${grade.pending}页待批改。` : grade.failed ? "作业已做完，有批改还没完成。" : grade.wrong ? `作业已做完，${grade.wrong}道错题已整理到错题本。` : grade.uncertain ? `作业已做完，有${grade.uncertain}题AI尚未确认。` : grade.finished ? "作业已做完，可以查看逐题批改结果。" : "这一天的作业都已做完。";
     return { text, help: false, busy: false };
   }
   if (report?.tasks.some(t => taskSubmission(t) === "self" && !t.selfCompletion && t.reviewActivity?.status !== "marked")) return { text: "非书面作业做好后，点“我完成了”即可，不用交照片。", help: false, busy: false };

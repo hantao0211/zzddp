@@ -17,6 +17,8 @@ export class HomeworkGrader {
     let stage: GradingStage = "inspection";
     try {
       const source = JSON.parse(run.source) as GradingSource;
+      const reused = this.store.grading.reuseCompleted(run);
+      if (reused) { this.store.grading.save(run, reused); return true; }
       const images = () => this.images.images(source.pages);
       const ai = this.execution.forJob(undefined, () => {
         const current = this.store.db.prepare("SELECT active FROM grading_runs WHERE id=?").get(run.id) as { active: number };

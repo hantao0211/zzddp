@@ -8,7 +8,7 @@ assert.ok(base?.endsWith(":3443")); await mkdir(output, { recursive: true });
 const browser = await chromium.launch({ headless: true, args: ["--no-sandbox", "--host-resolver-rules=MAP 14.103.24.55 127.0.0.1"] });
 try {
   const page = await browser.newPage({ viewport: { width: 390, height: 670 }, isMobile: true, hasTouch: true });
-  let pending = false, failed = false, photos = 0, child = false; const errors = []; page.on("pageerror", e => errors.push(e.message));
+  let pending = false, failed = false, photos = 0, child = false, quotaPaused = false; const errors = []; page.on("pageerror", e => errors.push(e.message));
   const counts = { correct: 2, wrong: 1, blank: 1, uncertain: 1, feedback: 1 };
   const summary = () => ({ ...counts, enabled: true, pages: 1, finished: pending || failed ? 0 : 1, pending: pending ? 1 : 0, failed: failed ? 1 : 0, incomplete: 0, tasks: { "synthetic-task": { ...counts, pending: pending ? 1 : 0, failed: failed ? 1 : 0, incomplete: 0 } } });
   const q = (verdict, i) => ({ id: "synthetic-question-" + i, label: `第${i}题`, sourcePartLabels: [], kind: verdict === "feedback" ? "subjective" : "objective", question: i === 2 ? "2+3等于多少？" : "一道人造的模拟练习题", studentAnswer: i === 2 ? "6" : "模拟作答", expectedAnswer: i === 2 ? "5" : "模拟参考答案", verdict, confidence: verdict === "uncertain" ? "low" : "high", explanation: verdict === "uncertain" ? "两次解答没有取得一致，未直接判错。" : "先算2加2等于4，再加1得到5。", knowledgePoints: ["整数加法"], cause: "计算错误", causeExplanation: "从这次作答看，可能在相加时多算了1，不能据此断定是粗心。", nextStep: "用小棒分两步相加，再检查总数。", evidence: [{ fileId: "synthetic-page", page: 1, excerpt: "模拟作答" }], verification: verdict === "uncertain" ? "uncertain" : verdict === "feedback" ? "subjective" : "agreed" });
@@ -27,7 +27,7 @@ try {
       const date = url.searchParams.get("date"); selectedDate = date;
       return json({ date, status: "processed", pending: false, note: "模拟资料", dates: [date], quota: { calls: 1, limit: 60 }, grading: summary(), writtenCompletionEnabled: true, uploads: [{ id: "synthetic-upload", date, kind: "memo", status: "processed", createdAt: "", subjects: ["数学"], note: "", aiMs: 0, issues: [], files: [{ id: "synthetic-file", name: "synthetic.png", size: 1, stored: true, pages: [] }] }], report: { date, memoId: "synthetic-upload", updatedAt: "", familyNotes: [], unclassified: [], unassigned: [], uncertainties: [], tasks: [{ id: "synthetic-task", title: "数学练习", subject: "数学", requirement: "完成模拟练习第12页", format: "written", memoEvidence: [], evidence: [], coverage: "complete", missing: [], reviewActivity: null, writtenCompletion: { version: "written-v2", status: "done", reason: "均有模拟作答", parts: [] } }] } });
     }
-    if (path.endsWith("/learning/grading")) return json({ summary: summary(), batches: [{ id: "synthetic-run", title: "数学练习", subject: "数学", attempts: failed ? 3 : 1, retryAllowed: failed, failure: failed ? { code: "INVALID_ENVELOPE", stage: "verification", failedAt: "2026-11-21T14:58:51.833Z", source: "runtime", reason: "AI返回的内容未能正常解析，没能读到可用的批改回复。", nextStep: "原件已保存，不用重新上传。可以请家长重试。" } : null, status: pending ? "queued" : failed ? "failed" : "done", note: failed ? "批改未完成，原件保留。" : "", primaryPageId: "synthetic-page", result: pending || failed ? null : { version: "grading-v1", scopeComplete: true, note: "", questions: currentQuestions() } }, { id: "synthetic-english", title: "英语练习", subject: "英语", status: "done", note: "", primaryPageId: "synthetic-english-page", result: { version: "grading-v1", scopeComplete: true, note: "", questions: [q("correct", 7)] } }] });
+    if (path.endsWith("/learning/grading")) return json({ summary: summary(), batches: [{ id: "synthetic-run", title: "数学练习", subject: "数学", attempts: failed ? 3 : 1, retryAllowed: failed, failure: failed ? { code: "INVALID_ENVELOPE", stage: "verification", failedAt: "2026-11-21T14:58:51.833Z", source: "runtime", reason: "AI返回的内容未能正常解析，没能读到可用的批改回复。", nextStep: "原件已保存，不用重新上传。可以请家长重试。" } : null, status: pending ? "queued" : failed ? "failed" : "done", note: pending && quotaPaused ? "今天的AI额度已用完，批改会在明天继续，原件已保存。" : failed ? "批改未完成，原件保留。" : "", primaryPageId: "synthetic-page", result: pending || failed ? null : { version: "grading-v1", scopeComplete: true, note: "", questions: currentQuestions() } }, { id: "synthetic-english", title: "英语练习", subject: "英语", status: "done", note: "", primaryPageId: "synthetic-english-page", result: { version: "grading-v1", scopeComplete: true, note: "", questions: [q("correct", 7)] } }] });
     if (path.endsWith("/learning/mistakes")) return json({ total: url.searchParams.get("subject") === "英语" ? 0 : 1, items: url.searchParams.get("subject") === "英语" ? [] : [{ id: "synthetic-mistake", date: selectedDate, lastDate: selectedDate, subject: "数学", title: "数学练习", pageId: "synthetic-page", occurrences: 1, question: questions[1] }] });
     if (path.endsWith("/learning/grading/retry")) { failed = false; pending = true; return json({ queued: 1 }); }
     if (path.includes("/learning/pages/")) { photos++; return route.fulfill({ contentType: "image/png", body: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jA5sAAAAASUVORK5CYII=", "base64") }); }
@@ -120,7 +120,11 @@ try {
   assert.ok(await failures.locator("img").evaluate(img => img.naturalWidth > 0));
   await failures.getByRole("button", { name: "收起原图", exact: true }).click();
   await failures.getByRole("button", { name: "重试批改", exact: true }).click();
-  await panel.getByText("AI正在批改或等待复核，完成后会自动更新。", { exact: true }).waitFor();
+  await panel.getByText("1页排队或等待重试。完成后会自动更新。", { exact: true }).waitFor();
+  quotaPaused = true;
+  await panel.getByText("1页因AI额度用完而暂停，额度恢复后自动继续。原件已保存，不用重新上传。", { exact: true }).waitFor();
+  assert.equal(await panel.getByText("AI正在批改或等待复核，完成后会自动更新。", { exact: true }).count(), 0);
+  await page.screenshot({ path: output + "/grading-quota-paused.png", fullPage: true });
   child = true; failed = true; pending = false;
   await page.goto(base, { waitUntil: "networkidle" }); await page.getByRole("button", { name: "查看未完成原因", exact: true }).click();
   await failures.getByText("AI返回的内容未能正常解析，没能读到可用的批改回复。", { exact: true }).waitFor();
