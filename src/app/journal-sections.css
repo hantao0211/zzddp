@@ -12,7 +12,7 @@
     min-width: 0;
   }
 
-  /* The page heading already supplies the first separator. */
+  /* The first function starts on open paper, without an extra top rule. */
   .study-shell .reading-heading + :is(section.card, details.card),
   .study-shell .study-reading-main > .card:first-child {
     border-top: 0;
@@ -258,12 +258,12 @@
   .study-shell .study-page-heading .reading-points .reading-token > span > small { display: block; margin-left: 0; font-size: 11px; line-height: 1.4; }
 }
 
-/* Shared first rows: identical baselines, one icon note, and the same separator. */
+/* Shared first rows: identical baselines and one icon note, followed by open space. */
 @media screen {
   .study-shell .study-page-heading {
     display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center;
-    gap: 12px; padding: 5px 0 18px; margin: 0 0 22px;
-    border-bottom: 1px solid var(--border);
+    gap: 12px; padding: 5px 0 0; margin: 0 0 16px;
+    border-bottom: 0;
   }
   .study-shell .study-page-heading > div { min-width: 0; }
   .study-page-heading-copy { display: grid; gap: 2px; }
@@ -278,4 +278,27 @@
   .study-shell .study-page-heading .journal-date { display: block; margin: 0; }
   .study-page-heading-aside .reading-points { line-height: 1.2; }
   .study-page-heading + .journal-garden { margin-top: 0; }
+}
+
+/* First section titles share the action row's 44px height, even without an action. */
+@media screen {
+  .study-shell .reading-main .reading-checkin > .reading-section-heading,
+  .study-shell .reading-main > :is(.growth-activities, [id="family-reward-shop"]) > h2 {
+    min-height: 44px; margin: 0 0 18px;
+  }
+  .study-shell .reading-main .reading-checkin > .reading-section-heading { flex-wrap: nowrap; gap: 12px; }
+  .study-shell .reading-main .reading-checkin > .reading-section-heading > h2,
+  .study-shell .reading-main > :is(.growth-activities, [id="family-reward-shop"]) > h2 {
+    display: flex; align-items: center; gap: 8px; min-height: 44px;
+    font-size: 19px; font-weight: 600; line-height: 1.5;
+  }
+  .study-shell .reading-main .reading-checkin > .reading-section-heading > h2 { margin: 0; }
+  .study-shell .reading-main .reading-checkin > .reading-section-heading > h2 > svg,
+  .study-shell .reading-main > :is(.growth-activities, [id="family-reward-shop"]) > h2 > svg {
+    display: block; flex-shrink: 0; width: 22px; height: 22px;
+  }
+}
+@media screen and (max-width: 600px) {
+  .study-shell .reading-main .reading-checkin > .reading-section-heading > h2,
+  .study-shell .reading-main > :is(.growth-activities, [id="family-reward-shop"]) > h2 { font-size: 18px; }
 }

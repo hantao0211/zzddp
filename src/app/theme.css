@@ -101,6 +101,16 @@ input:is([type=checkbox], [type=radio]), progress { accent-color: var(--accent);
   .journal-stickers button:nth-child(2) { color: var(--theme-warm-text); }
   .journal-stickers button:nth-child(3) { color: var(--theme-purple-text); }
   .journal-pot { background: var(--action-bg); }
+  /* Illustration colors stay botanical at night; panel colors are intentionally darker. */
+  .journal-garden .journal-petal { background: #dfa5b6; }
+  .journal-garden .journal-flower-center { background: #e8ca8d; }
+  .journal-garden .journal-stem { background: #7e9f83; }
+  .journal-garden .journal-leaf { background: #91b494; }
+  .journal-garden .journal-book-stack { background: #d6b87e; border-left-color: #dba4b4; }
+  .journal-garden .journal-book-stack.s2 { background: #96aa8c; border-left-color: #708b74; }
+  .journal-garden .journal-tape-label { background: #d6bd8b; color: #493a3d; }
+  .journal-garden .journal-pot-label { background: #fff4ec; color: #9a465b; }
+  .journal-garden .journal-ground { background: #130f132e; }
   .study-workspace::before { background: radial-gradient(circle, #756354 1.7px, transparent 2px) 0 0 / 4px 22px; }
   :is(.reading-dialog, .hw-dialog, .assistant-dialog, .dialog)::backdrop { background: #0009; }
 
