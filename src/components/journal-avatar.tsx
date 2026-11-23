@@ -31,7 +31,15 @@ function Family({ id }: { id: AvatarId }) {
     front = <><Glasses /><path d="M31 48q5-7 9-2 5-5 9 2-4 5-9 0-5 5-9 0" fill={hairColor} /></>;
   } else if (id === "dad") {
     back = <path d="M17 34c-7-14 3-24 15-22 9-7 27-3 31 8l-2 17-7-5-27-8-4 12Z" fill={hairColor} />;
-    front = <><path d="M20 29c10-1 17-5 20-11 4 6 10 9 20 10l-4-13-32 1Z" fill={hairColor} /><path d="m27 33 7-1m12 0 7 1" {...line} /><path d="M35 47q5-4 10 0" stroke={hairColor} strokeWidth="2.8" strokeLinecap="round" /></>;
+    front = <>
+      <path d="M18 27C17 15 25 7 38 7s24 8 24 22l-18-4Z" fill={sage} />
+      <circle cx="38" cy="7" r="2" fill={leaf} />
+      <path d="M38 9c7 3 11 9 11 16" stroke={leaf} strokeWidth="1.3" strokeLinecap="round" opacity=".65" />
+      <path d="m27 19 3-5 4 5" stroke={paper} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M18 26c14-5 31-4 44 0l9 5c2 2-5 4-11 3l-17-6c-9-1-17 0-25 1Z" fill={leaf} />
+      <path d="m27 33 7-1m12 0 7 1" {...line} />
+      <path d="M35 47q5-4 10 0" stroke={hairColor} strokeWidth="2.8" strokeLinecap="round" />
+    </>;
   } else {
     back = <path d="M17 35c-5-12 3-23 12-22 9-8 26-5 31 5l3 16Z" fill={hairColor} />;
     front = <path d="M19 29c9 0 13-2 18-8-1 5 4 9 10 9l-2-7c5 5 9 6 15 6l-3-14-28-3-10 9Z" fill={hairColor} />;
