@@ -1,0 +1,107 @@
+/* Shared action roles; contextual timer/activity colors are defined afterwards. */
+@media screen {
+  :root {
+    --button-primary-bg: var(--action-bg);
+    --button-primary-hover: var(--action-hover-bg);
+    --button-on-solid: #fffdf7;
+    --button-secondary-bg: #eee4d9;
+    --button-secondary-hover: #e4d5c5;
+    --button-secondary-ink: #5d4b43;
+    --button-secondary-border: #d6c6b6;
+    --button-tool-bg: #f6e3e6;
+    --button-tool-ink: #963a50;
+    --button-danger-bg: #9b3f4d;
+    --button-danger-hover: #833440;
+    --button-disabled-bg: #eae2d8;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --button-secondary-bg: #46363e;
+      --button-secondary-hover: #55414c;
+      --button-secondary-ink: #f0dce3;
+      --button-secondary-border: #725865;
+      --button-tool-bg: #432b36;
+      --button-tool-ink: #f1a6bc;
+      --button-disabled-bg: #393136;
+    }
+  }
+
+  :is(.study-shell, .reading-dialog, .hw-dialog, .assistant-dialog, .dialog, .study-tutorial, .admin-app, .account-login) .button.primary {
+    background: var(--button-primary-bg);
+    color: var(--button-on-solid);
+    border-color: transparent;
+  }
+  :is(.study-shell, .reading-dialog, .hw-dialog, .assistant-dialog, .dialog, .study-tutorial, .admin-app, .account-login) .button.primary:enabled:hover {
+    background: var(--button-primary-hover);
+  }
+  :is(.study-shell, .reading-dialog, .hw-dialog, .assistant-dialog, .dialog, .study-tutorial, .admin-app, .account-login) .button.secondary {
+    background: var(--button-secondary-bg);
+    color: var(--button-secondary-ink);
+    border-color: var(--button-secondary-border);
+  }
+  :is(.study-shell, .reading-dialog, .hw-dialog, .assistant-dialog, .dialog, .study-tutorial, .admin-app, .account-login) .button.secondary:enabled:hover {
+    background: var(--button-secondary-hover);
+  }
+  :is(.reading-dialog, .hw-dialog, .dialog) .button.danger {
+    background: var(--button-danger-bg);
+    color: var(--button-on-solid);
+  }
+  :is(.reading-dialog, .hw-dialog, .dialog) .button.danger:enabled:hover { background: var(--button-danger-hover); }
+  :is(.study-shell, .reading-dialog, .hw-dialog, .assistant-dialog, .dialog, .study-tutorial, .admin-app, .account-login) .button:is(.primary, .secondary):disabled {
+    background: var(--button-disabled-bg);
+    border-color: transparent;
+    color: var(--muted);
+    opacity: 1;
+  }
+  :is(.study-shell, .reading-dialog, .hw-dialog, .assistant-dialog, .dialog, .study-tutorial, .admin-app, .account-login) .button:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+  }
+  .study-topbar :is(.study-chat-button, .study-help, .study-refresh-button, .study-parent-mobile) {
+    background: var(--button-tool-bg);
+    color: var(--button-tool-ink);
+    border-color: transparent;
+  }
+  .study-topbar :is(.study-chat-button, .study-help, .study-refresh-button, .study-parent-mobile):enabled:hover {
+    background: var(--button-secondary-hover);
+  }
+  .assistant-intro button {
+    background: var(--button-tool-bg);
+    color: var(--button-tool-ink);
+    border-color: transparent;
+  }
+
+  /* The rabbit keeps its identity; the small bubble explains what tapping does. */
+  .study-chat-button > .study-chat-avatar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    width: 34px;
+    height: 34px;
+    flex-shrink: 0;
+  }
+  .study-chat-avatar > .study-chat-mark {
+    position: absolute;
+    right: -3px;
+    bottom: -1px;
+    display: grid;
+    place-items: center;
+    width: 20px;
+    height: 20px;
+    border: 2px solid var(--button-tool-bg);
+    border-radius: 50%;
+    background: var(--button-primary-bg);
+    color: var(--button-on-solid);
+    pointer-events: none;
+  }
+  .study-chat-mark > svg { width: 14px; height: 14px; stroke-width: 2; }
+  @media (max-width: 899px) {
+    .study-chat-button > .study-chat-avatar { width: 32px; height: 32px; }
+  }
+  @media (max-width: 420px) {
+    .study-chat-button > .study-chat-avatar { width: 30px; height: 30px; }
+    .study-chat-avatar > .study-chat-mark { right: -1px; width: 18px; height: 18px; }
+    .study-chat-mark > svg { width: 12px; height: 12px; }
+  }
+}
