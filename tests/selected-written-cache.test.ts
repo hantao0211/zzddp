@@ -9,8 +9,8 @@ import {DailyReportSchema,type DailyReport} from "../src/domain/homework";
 import {homeworkSummary} from "../src/domain/homework-summary";
 import {homeworkTaskDetail} from "../src/domain/homework-task-detail";
 const date="2026-11-20",routingNote="指定交给其他作业的照片未用作本项依据。";
-function fixture(){
- const root=mkdtempSync(join(tmpdir(),"xiaobu-selected-cache-"));let clock=Date.parse(date+'T12:00:00+08:00');const store=new HomeworkStore(root,()=>clock,null,true);
+function fixture(grading=false){
+ const root=mkdtempSync(join(tmpdir(),"xiaobu-selected-cache-"));let clock=Date.parse(date+'T12:00:00+08:00');const store=new HomeworkStore(root,()=>clock,null,true,grading);
  const assignments=[{subject:"英语",title:"课外英语习题（除默写部分）",requirement:"完成英语习题，未写明具体页码",format:"written"},{subject:"英语",title:"课外默写单词16个",requirement:"默写16个单词并订正",format:"other"}];
  function record(kind:"memo"|"homework",seed:string,count=1,targetTaskId?:string){
   clock++;store.db.exec("UPDATE jobs SET status='done'");
@@ -49,6 +49,30 @@ test("selected scope reuses its complete page checks, removes unrelated unclear 
 });
 test("missing single-page checks do not inherit another worksheet's completion",()=>{
  const f=fixture();try{f.store.db.prepare('DELETE FROM analysis_cache WHERE key=?').run(f.exerciseKeys[1]);const task=f.store.snapshot(date).report!.tasks[0];assert.deepEqual(task.evidence.map(e=>e.fileId),f.exercise);assert.equal(task.writtenCompletion,null);}finally{f.close();}
+});
+test("grading uses the same selected photos as the visible task and excludes stale automatically borrowed worksheets",()=>{
+ const f=fixture(true);try{
+  const before=f.store.quota(),batches=f.store.grading.results(date).batches;
+  assert.equal(batches.length,4);assert.ok(!batches.some(b=>b.primaryPageId===f.unrelated));
+  const exercise=f.store.db.prepare("SELECT source FROM grading_runs WHERE active=1").all() as {source:string}[];
+  assert.deepEqual(new Set(exercise.map(r=>JSON.parse(r.source)).filter(s=>s.taskIds.includes(f.report.tasks[0].id)).map(s=>s.primaryPageId)),new Set(f.exercise));
+  f.publish(f.report);assert.equal(f.store.grading.results(date).batches.length,4);
+  assert.deepEqual(f.store.quota(),before,"Scope repair must not call AI or reset the budget");
+ }finally{f.close();}
+});
+test("parent retry retires a historical wrong-scope failure without deleting any archived work or requeueing it",()=>{
+ const f=fixture(true);try{
+  const base=f.store.db.prepare("SELECT source FROM grading_runs WHERE active=1 LIMIT 1").get() as {source:string};
+  const source={...JSON.parse(base.source),primaryPageId:f.unrelated,pages:[f.store.page(f.unrelated)],taskIds:[f.report.tasks[0].id]};
+  f.store.db.prepare("INSERT INTO grading_runs(id,date,primary_page_id,source,status,attempts,created_at,updated_at) VALUES('legacy-wrong-scope',?,?,?,'failed',3,'old','old')").run(date,f.unrelated,JSON.stringify(source));
+  const old=f.store.db.prepare("SELECT * FROM grading_runs WHERE id!='legacy-wrong-scope' ORDER BY id").all(),quota=f.store.quota();
+  assert.equal(f.store.grading.summary(date).failed,1);assert.equal(f.store.grading.retry(date),0);
+  assert.equal(f.store.grading.summary(date).failed,0);
+  const legacy=f.store.db.prepare("SELECT active,status,attempts,source FROM grading_runs WHERE id='legacy-wrong-scope'").get()!;
+  assert.equal(legacy.active,0);assert.equal(legacy.status,'failed');assert.equal(legacy.attempts,3);assert.equal(legacy.source,JSON.stringify(source));
+  assert.deepEqual(f.store.db.prepare("SELECT * FROM grading_runs WHERE id!='legacy-wrong-scope' ORDER BY id").all(),old);
+  assert.deepEqual(f.store.quota(),quota);assert.equal(f.store.grading.reconcileSelectedScope(date),0);
+ }finally{f.close();}
 });
 test("incomplete scope, a real blank answer and invalid cache evidence never become done",()=>{
  for(const mode of ["scope","blank","forged","missing"]){const f=fixture();try{

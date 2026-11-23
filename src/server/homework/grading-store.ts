@@ -1,5 +1,6 @@
 import { isWrittenTask } from "../../domain/written-completion";
 import { automaticAttemptLimit } from "../../domain/homework-usage";
+import { selectedSubmissionReport } from "./selected-submission";
 import { gradingFailureText, type GradingFailure, type GradingStage } from "../../domain/grading-failure";
 import { resolveUploadTarget } from "./upload-target";
 import { createHash } from "node:crypto";
@@ -86,8 +87,33 @@ export class GradingStore {
     }
     return null;
   }
+  private selectedScope(report: DailyReport | null) {
+    const projected = report ? selectedSubmissionReport(this.store, report) : null;
+    const excluded = new Set<string>();
+    for (const task of projected?.tasks || []) {
+      if (!task.selectedSubmission) continue;
+      const kept = new Set(task.evidence.map(e => e.fileId));
+      for (const evidence of report!.tasks.find(t => t.id === task.id)?.evidence || []) if (!kept.has(evidence.fileId)) excluded.add(evidence.fileId);
+    }
+    // A page legitimately used by another assignment remains eligible there.
+    for (const task of projected?.tasks || []) for (const evidence of task.evidence) excluded.delete(evidence.fileId);
+    return { report: projected, excluded };
+  }
+  /** Retire only stale associations. Preserve originals, results, attempts and all still-current work. */
+  reconcileSelectedScope(date: string) {
+    const day = this.store.db.prepare("SELECT report FROM days WHERE date=?").get(date) as { report: string | null } | undefined;
+    const { excluded } = this.selectedScope(day?.report ? JSON.parse(day.report) : null);
+    return this.store.transaction(() => {
+      let retired = 0;
+      for (const row of this.store.db.prepare("SELECT id,primary_page_id FROM grading_runs WHERE date=? AND active=1").all(date) as { id: string; primary_page_id: string }[]) {
+        if (excluded.has(row.primary_page_id)) retired += Number(this.store.db.prepare("UPDATE grading_runs SET active=0 WHERE id=?").run(row.id).changes);
+      }
+      return retired;
+    });
+  }
   queueDay(date: string, report: DailyReport | null) {
     if (!this.store.autoGradingEnabled) return;
+    const scoped = this.selectedScope(report); report = scoped.report;
     const pages = this.store.uploads(date).filter(u => u.kind === "homework" && u.result).flatMap(u => (JSON.parse(u.result!).pages as { fileId: string; subject: string | null; book: string | null }[]).map(p => {
       const target = resolveUploadTarget(this.store, u.id);
       const assigned = target && report?.tasks.some(t => t.id === target.taskId && t.evidence.some(e => e.fileId === p.fileId));
@@ -104,6 +130,7 @@ export class GradingStore {
     const time = new Date(this.store.now()).toISOString();
     for (let index = 0; index < pages.length; index++) {
       const primary = pages[index]; if (!primary.page || !primary.subject) continue;
+      if (scoped.excluded.has(primary.fileId)) continue;
       const related = report?.tasks.filter(t => t.evidence.some(e => e.fileId === primary.fileId)) || [];
       const written = related.filter(isWrittenTask);
       if (related.length && !written.length) continue;
@@ -159,6 +186,7 @@ export class GradingStore {
   }
   retry(date: string) {
     if (!this.store.autoGradingEnabled) return 0;
+    this.reconcileSelectedScope(date);
     return Number(this.store.db.prepare("UPDATE grading_runs SET status='queued',next_at=0,note='' WHERE active=1 AND date=? AND status='failed' AND attempts<6").run(date).changes);
   }
   summary(date: string): GradingSummary {
