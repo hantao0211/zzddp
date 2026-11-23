@@ -37,6 +37,28 @@
   .study-shell .reading-streak, .study-shell .reading-points,
   .study-shell .reading-timer { border: 0; }
   .study-shell .reading-timer { background: var(--theme-warm-soft, #f5efdf); }
+  .study-shell .reading-timer > .button {
+    min-height: 44px;
+    padding: 10px 14px;
+    border: 0;
+    border-radius: 10px;
+    background: #80613b;
+    color: #fffdf7;
+    box-shadow: none;
+    gap: 8px;
+  }
+  .study-shell .reading-timer > .button:enabled:hover { background: #735735; }
+  .study-shell .reading-timer > .button:enabled:active { background: #674e2f; }
+  .study-shell .reading-timer > .button:focus-visible {
+    outline: 2px solid var(--theme-warm-text, #80613b);
+    outline-offset: 3px;
+  }
+  .study-shell .reading-timer > .button:disabled {
+    background: color-mix(in srgb, var(--theme-warm-text, #80613b) 10%, transparent);
+    color: var(--muted);
+    opacity: 1;
+  }
+
 
   /* Books and reading feedback are objects on the page, not nested panels. */
   .study-shell .reading-books { gap: 14px; padding-top: 18px; }
