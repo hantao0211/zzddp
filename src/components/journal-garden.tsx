@@ -63,13 +63,13 @@ export function JournalGarden({ hint, sticker, onChoose }: { hint: string; stick
     }}>
       <button type="button" className="journal-garden-trigger" ref={trigger} aria-label="装饰我的花盆" title="装饰我的花盆" aria-expanded={open} aria-controls={pickerId} onClick={() => setOpen(!open)}>
         <span className="journal-garden-decoration" role="img" aria-label={`花盆贴着${selected.label}贴纸`}>
-      <span className="journal-flower" aria-hidden="true">
-        <span className="journal-ground" /><span className="journal-stem" />
-        {[1, 2, 3, 4, 5].map(n => <span className={`journal-petal p${n}`} key={n} />)}
-        <span className="journal-flower-center" /><span className="journal-leaf" /><span className="journal-leaf l2" />
-        <span className="journal-book-stack" /><span className="journal-book-stack s2" />
-        <span className="journal-pot" /><span className="journal-pot-label"><Icon size={16} /></span>
-      </span>
+          <span className="journal-flower" aria-hidden="true">
+            <span className="journal-ground" /><span className="journal-stem" />
+            {[1, 2, 3, 4, 5].map(n => <span className={`journal-petal p${n}`} key={n} />)}
+            <span className="journal-flower-center" /><span className="journal-leaf" /><span className="journal-leaf l2" />
+            <span className="journal-book-stack" /><span className="journal-book-stack s2" />
+            <span className="journal-pot" /><span className="journal-pot-label"><Icon size={16} /></span>
+          </span>
         </span>
         <Pencil className="journal-garden-edit" size={13} aria-hidden="true" />
       </button>

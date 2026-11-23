@@ -53,14 +53,15 @@
 .study-shell .hw-date input { background: var(--journal-paper); border-radius: 10px; }
 
 .journal-garden {
+  --garden-width: 225px; --garden-height: 210px; --garden-scale: 1;
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
-  position: relative; min-width: 0; min-height: 68px; margin: 4px 0 12px;
+  position: relative; min-width: 0; min-height: 0; margin: 4px 0 12px;
 }
 .journal-garden-copy { min-width: 0; flex: 1; }
 .journal-eyebrow { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; }
 .journal-garden .study-next-step { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.7; }
-.journal-garden-decoration { display: block; width: 68px; height: 68px; position: relative; }
-.journal-flower { position: absolute; top: 3px; left: 0; width: 225px; height: 210px; transform: scale(.3); transform-origin: top left; pointer-events: none; }
+.journal-garden-decoration { display: block; width: var(--garden-width); height: var(--garden-height); position: relative; }
+.journal-flower { position: absolute; top: 3px; left: 0; width: 225px; height: 210px; transform: scale(var(--garden-scale)); transform-origin: top left; pointer-events: none; }
 .journal-flower > span { display: block; position: absolute; }
 .journal-ground { bottom: 14px; left: 12px; width: 192px; height: 24px; border-radius: 50%; background: #493a3d10; }
 .journal-stem { width: 3px; height: 100px; background: var(--journal-green); left: 113px; top: 35px; transform: rotate(7deg); border-radius: 3px; }
@@ -76,9 +77,9 @@
 .journal-book-stack.s2 { bottom: 45px; left: 51px; width: 139px; transform: rotate(6deg); background: var(--journal-sage); border-left-color: var(--journal-green); }
 .journal-pot { width: 68px; height: 58px; background: var(--accent); left: 83px; top: 114px; clip-path: polygon(0 0,100% 0,85% 100%,15% 100%); border-radius: 4px; }
 .journal-flower .journal-pot-label { left: 98px; top: 132px; width: 36px; height: 20px; border-radius: 5px; background: var(--journal-paper); color: var(--accent-dark); display: grid; place-items: center; }
-.journal-garden-tools { position: relative; flex: 0 0 68px; }
-.journal-garden-trigger { position: relative; display: block; width: 68px; height: 68px; padding: 0; border-radius: 13px; background: transparent; color: var(--accent-dark); }
-.journal-garden-trigger:hover { background: var(--accent-soft); }
+.journal-garden-tools { position: relative; flex: 0 0 var(--garden-width); }
+.journal-garden-trigger { position: relative; display: block; width: var(--garden-width); height: var(--garden-height); padding: 0; border-radius: 13px; background: transparent; color: var(--accent-dark); }
+.journal-garden-trigger:hover .journal-garden-edit { background: var(--accent-soft); }
 .journal-garden-edit { position: absolute; bottom: 4px; right: 1px; padding: 3px; width: 22px; height: 22px; border-radius: 50%; background: var(--journal-paper); }
 .journal-garden-picker { position: absolute; top: calc(100% + 4px); right: 0; z-index: 25; width: max-content; padding: 12px; border: 1px solid var(--border); border-radius: 14px; background: var(--journal-paper); box-shadow: 0 6px 20px #493a3d18; }
 .journal-garden-picker[hidden] { display: none; }
@@ -217,6 +218,7 @@
   .assistant-dialog { border-radius: 0; }
 }
 @media (max-width: 600px) {
+  .journal-garden { --garden-width: 168px; --garden-height: 170px; --garden-scale: .74; }
   .study-topbar { padding: 12px 15px 8px; }
   .study-brand-mobile { font-size: 19px; }
   .study-shell .hw-main, .study-shell .reading-main { padding: 22px 19px calc(102px + env(safe-area-inset-bottom)); }
@@ -256,6 +258,7 @@
   .study-shell .reading-heading .reading-muted { font-size: 13px; }
 }
 @media (max-width: 359px) {
+  .journal-garden { --garden-width: 144px; --garden-height: 150px; --garden-scale: .64; }
   .study-shell .hw-home-summary .journal-col-task { width: 41%; }
   .study-shell .hw-home-summary .journal-col-completion { width: 36%; }
   .study-shell .hw-main, .study-shell .reading-main { padding-left: 16px; padding-right: 16px; }

@@ -33,7 +33,7 @@ async function audit(page,label){const values=await page.evaluate(()=>{
  }return result.slice(0,20);
  });assert.deepEqual(values,[],label+' text must remain readable');}
 try{
- const page=await browser.newPage({viewport:{width:390,height:844},isMobile:true,hasTouch:true,colorScheme:'light'});
+ const page=await browser.newPage({viewport:{width:390,height:844},isMobile:true,hasTouch:true,locale:'zh-CN',colorScheme:'light'});
  page.on('pageerror',e=>errors.push(e.message));let authenticated=true;
  await page.route('**/assistant-api/**',async route=>{
   const req=route.request(),url=new URL(req.url()),path=url.pathname,send=v=>route.fulfill({contentType:'application/json',body:JSON.stringify(v)});
@@ -57,6 +57,11 @@ try{
   await summary.focus();const focused=await summary.evaluate(el=>getComputedStyle(el).backgroundColor);await page.getByRole('heading',{name:'我的阅读手帐',exact:true}).click();assert.notEqual(focused,await summary.evaluate(el=>getComputedStyle(el).backgroundColor));
   for(const width of [320,390,768,1280]){
    await page.setViewportSize({width,height:900});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+   const overflow=await page.locator('.reading-checkin').evaluate(card=>{
+    const b=card.getBoundingClientRect(),style=getComputedStyle(card),left=b.left+parseFloat(style.paddingLeft),right=b.right-parseFloat(style.paddingRight);
+    return Array.from(card.querySelectorAll('input:not([type=checkbox]),select,textarea')).filter(el=>el.checkVisibility()).flatMap(el=>{const r=el.getBoundingClientRect(),parent=el.closest('label')?.getBoundingClientRect();return r.left<left-1||r.right>right+1||parent&&(r.left<parent.left-1||r.right>parent.right+1)?[{type:el.type,left:r.left,right:r.right,allowedRight:right}]:[];});
+   });assert.deepEqual(overflow,[],`Reading fields must stay inside card padding at ${width}px (${mode})`);
+   if(width<=480){const book=await page.getByLabel('正在读的书',{exact:true}).boundingBox(),date=await page.getByLabel('阅读日期',{exact:true}).boundingBox();assert.ok(date.y>=book.y+book.height,'Phone date has room for its full localized value');}
    await page.screenshot({path:output+`/reading-${mode}-${width}.png`});
   }
   await audit(page,'reading '+mode);

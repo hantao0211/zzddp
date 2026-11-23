@@ -120,7 +120,7 @@
 @media(max-height:500px) and (max-width:899px){.study-topbar{min-height:50px;padding-top:4px;padding-bottom:4px}.study-bottom-nav{padding-top:4px;padding-bottom:max(4px,env(safe-area-inset-bottom))}.study-bottom-nav .study-nav-item{flex-direction:row;min-height:40px;gap:8px}.study-shell .hw-main,.study-shell .reading-main{padding-bottom:75px}}
 @media print{.study-sidebar,.study-topbar,.study-bottom-nav,.study-companion{display:none!important}.study-workspace{margin-left:0}.study-shell{background:var(--theme-surface, #fff)}.study-shell .hw-main,.study-shell .reading-main{padding:0}}
 .study-shell .hw-primary-actions>button{justify-content:flex-start}
-@media(max-width:899px){html:has(.study-shell){scroll-padding-bottom:calc(100px + env(safe-area-inset-bottom))}.study-shell :is(button,a,input,select,textarea){scroll-margin-bottom:calc(100px + env(safe-area-inset-bottom))}.study-shell .reading-book-date{grid-template-columns:minmax(0,1fr) 155px;gap:12px}.study-shell .reading-summary-label{flex-direction:row;align-items:center;gap:10px;flex-wrap:wrap}.study-shell .reading-summary-label label{margin:0}.study-shell .reading-summary-label .text-button{font-size:14px;min-height:38px}}
+@media(max-width:899px){html:has(.study-shell){scroll-padding-bottom:calc(100px + env(safe-area-inset-bottom))}.study-shell :is(button,a,input,select,textarea){scroll-margin-bottom:calc(100px + env(safe-area-inset-bottom))}.study-shell .reading-book-date{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.study-shell .reading-summary-label{flex-direction:row;align-items:center;gap:10px;flex-wrap:wrap}.study-shell .reading-summary-label label{margin:0}.study-shell .reading-summary-label .text-button{font-size:14px;min-height:38px}}
 @media(max-width:359px){.study-shell .reading-book-date{grid-template-columns:1fr;gap:0}}
 
 /* Direct corrections and predictable status help, available on every visit. */
@@ -146,3 +146,12 @@
 .study-homework-reward{display:flex;align-items:center;gap:7px;flex-wrap:wrap;padding:10px 12px;margin:10px 0;background:var(--theme-rose-soft, #faf3f6);border-radius:10px;color:var(--accent);font-size:13px}
 .study-homework-reward>.reading-token{font-size:14px}.study-homework-reward>.reading-token svg{width:16px;height:16px}.study-homework-reward>.reading-token small{font-size:12px}
 .study-homework-reward.earned{background:var(--theme-green-soft, #f0f5f1);color:var(--theme-success-text, #54745d)}.reading-homework-reward h2{display:flex;align-items:center;gap:8px}
+
+/* Bound each control to its grid cell, including native iOS date fields. */
+.reading-main label, .reading-dialog label { min-width: 0; max-width: 100%; }
+.reading-main :is(input, select, textarea), .reading-dialog :is(input, select, textarea) { max-width: 100%; box-sizing: border-box; }
+.reading-main input[type=date], .reading-dialog input[type=date] { display: block; width: 100%; min-width: 0; min-inline-size: 0; max-inline-size: 100%; -webkit-appearance: none; appearance: none; text-align: left; }
+.reading-main input[type=date]::-webkit-date-and-time-value, .reading-dialog input[type=date]::-webkit-date-and-time-value { min-width: 0; text-align: left; }
+@media (max-width: 480px) {
+  .study-shell .reading-book-date { grid-template-columns: minmax(0,1fr); gap: 0; }
+}
