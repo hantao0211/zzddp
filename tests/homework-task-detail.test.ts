@@ -36,7 +36,7 @@ test("nonwritten photo receipts count only unique viewable pages, and manual com
   Object.assign(task, { title: "复习单元六", requirement: "复习单元六，无需提交书面。", format: "reading", selfCompletion: { confirmedAt: "2026-11-23T00:50:00Z", confirmedBy: "爸爸", role: "admin" } });
   task.evidence.push(ev("wrong-date-page"), ev("memo-page"), ev("missing-page"));
   let row = homeworkSummary(s)!.rows[0];
-  assert.equal(row.photo.text, "已收到2张"); assert.equal(row.photoCount, 2); assert.equal(row.activity.text, "已完成（手动确认）");
+  assert.equal(row.photo.text, "已收到2张"); assert.equal(row.photoCount, 2); assert.equal(row.activity.text, "已完成（手动）");
   assert.match(row.activityDetail, /爸爸已确认完成/);
   task.selfCompletion = undefined; task.reviewActivity = { status: "marked", reason: "可见圈画" };
   row = homeworkSummary(s)!.rows[0]; assert.equal(row.activity.text, "已做"); assert.equal(row.selfConfirmed, false);

@@ -24,7 +24,7 @@ test("automatic submission choice excludes explicit written work, even if its ol
 });
 test("self completion survives refresh/restart, is idempotent, can be undone, and never changes photos, jobs or AI usage",()=>{const f=fixture();try{
  const initial=f.store.snapshot(date),task=initial.report!.tasks[0],raw=f.store.db.prepare('select report from days where date=?').get(date),jobs=f.store.db.prepare('select count(*) as n from jobs').get(),quota=f.store.quota();assert.ok(task.completionToken);assert.equal(homeworkSummary(initial)!.rows[0].activity.text,"待完成");
- f.store.completions.set(date,task.id,task.completionToken!,true,child);f.store.completions.set(date,task.id,task.completionToken!,true,child);assert.equal(f.store.completions.revision(date),1);assert.equal(homeworkSummary(f.store.snapshot(date))!.rows[0].activity.text,"已完成（手动确认）");assert.equal(f.store.snapshot(date).report!.tasks[0].selfCompletion?.confirmedBy,child.name);
+ f.store.completions.set(date,task.id,task.completionToken!,true,child);f.store.completions.set(date,task.id,task.completionToken!,true,child);assert.equal(f.store.completions.revision(date),1);assert.equal(homeworkSummary(f.store.snapshot(date))!.rows[0].activity.text,"已完成（手动）");assert.equal(f.store.snapshot(date).report!.tasks[0].selfCompletion?.confirmedBy,child.name);
  f.reopen();assert.ok(f.store.snapshot(date).report!.tasks[0].selfCompletion);assert.deepEqual(f.store.db.prepare('select report from days where date=?').get(date),raw);assert.deepEqual(f.store.db.prepare('select count(*) as n from jobs').get(),jobs);assert.deepEqual(f.store.quota(),quota);
  f.store.completions.set(date,task.id,task.completionToken!,false,child);assert.equal(homeworkSummary(f.store.snapshot(date))!.rows[0].activity.text,"待完成");assert.equal(f.store.completions.revision(date),2);
  }finally{f.close();}});
@@ -49,6 +49,6 @@ test("editing a nonwritten requirement keeps a usable button during recheck and 
  assert.equal(updated.selfCompletion,undefined);assert.equal(row.selfTask,true);assert.equal(row.activity.text,"待完成");
  assert.throws(()=>f.store.completions.set(date,task.id,task.completionToken!,true,child),/要求已更新/);
  f.store.completions.set(date,task.id,updated.completionToken!,true,child);
- assert.equal(homeworkSummary(f.store.snapshot(date))!.rows[0].activity.text,"已完成（手动确认）");
+ assert.equal(homeworkSummary(f.store.snapshot(date))!.rows[0].activity.text,"已完成（手动）");
  assert.equal(JSON.parse((f.store.db.prepare('SELECT report FROM days WHERE date=?').get(date) as {report:string}).report).tasks[0].title,task.title);
  }finally{f.close();}});

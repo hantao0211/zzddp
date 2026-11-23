@@ -28,7 +28,7 @@ export function homeworkSummary(snapshot: HomeworkSnapshot | null) {
     if (taskSubmission(task) === "self") {
       const confirmed=task.selfCompletion;const marked=task.reviewActivity?.status === "marked";
       const photoCount=homeworkTaskDetail(snapshot,task).homework.photos.length;
-      return {id:task.id,title:task.title,subject:task.subject,selfTask:true,updating:false,completionToken:task.completionToken,selfConfirmed:!!confirmed,photoCount,photo:{text:photoCount?`已收到${photoCount}张`:"照片可选",tone:"good"},activity:{text:confirmed?"已完成（手动确认）":marked?"已做":"待完成",tone:confirmed||marked?"good":"attention"},photoDetail:photoCount?`已收到这项作业的${photoCount}张补充照片。这项不强制交照片，无需额外补拍。`:"这项通常没有书面成果，不要求交照片。已上传的照片仅作补充参考。",activityDetail:confirmed?`${confirmed.confirmedBy}已确认完成。这是手动完成标记，可在这里撤销确认。`:marked?"已看到学习痕迹，按家庭约定记为已做；也可以自己确认完成。":"做好后点“我完成了”即可，不用为了证明完成而拍照或补写笔记。"};
+      return {id:task.id,title:task.title,subject:task.subject,selfTask:true,updating:false,completionToken:task.completionToken,selfConfirmed:!!confirmed,photoCount,photo:{text:photoCount?`已收到${photoCount}张`:"照片可选",tone:"good"},activity:{text:confirmed?"已完成（手动）":marked?"已做":"待完成",tone:confirmed||marked?"good":"attention"},photoDetail:photoCount?`已收到这项作业的${photoCount}张补充照片。这项不强制交照片，无需额外补拍。`:"这项通常没有书面成果，不要求交照片。已上传的照片仅作补充参考。",activityDetail:confirmed?`${confirmed.confirmedBy}已确认完成。这是手动完成标记，可在这里撤销确认。`:marked?"已看到学习痕迹，按家庭约定记为已做；也可以自己确认完成。":"做好后点“我完成了”即可，不用为了证明完成而拍照或补写笔记。"};
     }
     const photo: State = { text: { complete: "已收到", partial: "对应待确认", none: hasPhotos ? "未匹配" : "未交照片", uncertain: task.evidence.length ? "已关联" : "待匹配" }[task.coverage], tone: task.coverage === "complete" ? "good" : "attention" };
     let activity: State = { text: "尚未判断", tone: "muted" };
