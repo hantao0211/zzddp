@@ -24,7 +24,7 @@ async function fixture() {
   let ip = 0;
   async function send(path: string, method = "GET", value?: unknown, cookie = "", extra: Record<string, string> = {}) {
     return new Promise<{ status: number; data: any; cookie: string }>((resolve, reject) => {
-      const headers = { Host: "family.test", "X-Forwarded-Proto": "https", Origin: origin, "X-Real-IP": `192.0.2.${++ip}`, Cookie: cookie, "Content-Type": "application/json", ...extra };
+      const headers = { Host: "family.test", "X-Forwarded-Proto": "https", Origin: origin, "X-Real-IP": `192.0.2.${++ip}`, Cookie: cookie, "Content-Type": "application/json", ...(value === undefined ? {} : {"Content-Length": String(Buffer.byteLength(JSON.stringify(value)))}), ...extra };
       const request = httpRequest({ host: "127.0.0.1", port, path: "/assistant-api/" + path, method, headers }, response => { const chunks: Buffer[] = []; response.on("data", b => chunks.push(b)); response.on("end", () => resolve({ status: response.statusCode!, data: JSON.parse(Buffer.concat(chunks).toString()), cookie: response.headers["set-cookie"]?.[0]?.split(";")[0] || "" })); }); request.on("error", reject); request.end(value === undefined ? undefined : JSON.stringify(value));
     });
   }
@@ -378,3 +378,19 @@ test("growth setup and activity confirmation require parents, preserve quotes, e
 }finally{await f.cleanup();}});
 
 test("student profile is private to authenticated family accounts and editable only by a parent",async()=>{const f=await fixture();try{const admin=await f.bootstrap();await f.send("admin/accounts","POST",{username:"child",name:"模拟孩子",role:"child",password},admin.cookie);const child=await f.login("child");const input={grade:4,semester:2,region:"模拟地区",school:"模拟学校"};assert.equal((await f.send("reading/student-profile","PATCH",input,child.cookie)).status,403);assert.equal((await f.send("reading/student-profile","PATCH",input,admin.cookie,{Origin:"https://other.test"})).status,403);const saved=await f.send("reading/student-profile","PATCH",input,admin.cookie);assert.equal(saved.status,200);assert.equal((await f.send("reading/state","GET",undefined,child.cookie)).data.studentProfile.school,input.school);assert.equal((await f.send("reading/student-profile","PATCH",{...input,grade:5},admin.cookie)).status,409);assert.equal((await f.send("reading/state")).status,401);}finally{await f.cleanup();}});
+
+test("reading deletion requires login and same-origin; history and direct lookups exclude the deleted record",async()=>{
+ const f=await fixture();try{
+  const parent=await f.bootstrap(),viewer=(await f.send('status','GET',undefined,parent.cookie)).data.viewer;
+  const book=f.reading.addBook({title:'模拟删除权限书'},viewer.id),input={id:randomUUID(),version:0,bookId:book.id,date:f.reading.today(),startPage:1,endPage:9,minutes:10,summary:'这是模拟阅读记录。'};
+  const log=f.reading.save(input,viewer).log;
+  assert.equal((await f.send(`reading/logs/${log.id}`,'DELETE',{version:1})).status,401);
+  assert.equal((await f.send(`reading/logs/${log.id}`,'DELETE',{version:1},parent.cookie,{Origin:'https://other.test'})).status,403);
+  assert.equal((await f.send(`reading/logs/${log.id}`,'DELETE',{version:1,actorId:viewer.id},parent.cookie)).status,400);
+  assert.equal((await f.send(`reading/logs/${log.id}`,'DELETE',{version:1},parent.cookie)).status,200);
+  assert.equal((await f.send(`reading/logs/${log.id}`,'DELETE',{version:1},parent.cookie)).data.deleted,true);
+  assert.equal((await f.send(`reading/logs/${log.id}`,'GET',undefined,parent.cookie)).status,404);
+  const history=await f.send(`reading/logs?date=${input.date}&bookId=${book.id}`,'GET',undefined,parent.cookie);assert.equal(history.status,200);assert.equal(history.data.total,0);assert.deepEqual(history.data.items,[]);
+  assert.equal((await f.send('reading/logs','POST',input,parent.cookie)).status,409);
+ }finally{await f.cleanup();}
+});

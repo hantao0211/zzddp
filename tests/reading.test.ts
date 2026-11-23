@@ -148,3 +148,54 @@ test("editing a deduplicated reading uses its canonical version and never overwr
  assert.equal(updated.log.version,2);assert.equal(f.store.snapshot(child).logs.length,1);
  assert.throws(()=>f.store.save({...input,id:reused.log.id,version:1,minutes:22},child),/更新/);
 }finally{f.cleanup();}});
+
+test("deleting a duplicate session updates progress and continuation, preserves the other record and every earned step",()=>{const f=fixture();try{
+ const original=f.store.save({...f.input(),startPage:49,endPage:79,minutes:20},child).log;
+ const duplicate=f.store.save({...f.input(),startPage:79,endPage:79,minutes:20},child).log;
+ const ledger=f.store.db.prepare('SELECT * FROM ledger').all(),originalRow=f.store.row(original.id),before=f.store.snapshot(child);
+ const result=f.store.removeLog(duplicate.id,{version:duplicate.version},parent);
+ const after=f.store.snapshot(child);assert.equal(result.deleted,true);assert.equal(after.logs.length,1);assert.equal(after.logs[0].id,original.id);
+ assert.equal(before.stats.minutes-after.stats.minutes,20);assert.equal(after.books[0].minutes,20);assert.equal(after.books[0].uniquePages,31);assert.equal(after.books[0].lastReadPage,79);
+ assert.deepEqual(nextReadingPages(after.books[0]),{startPage:80,endPage:80});assert.equal(after.stats.days,1);assert.equal(after.stats.currentStreak,1);
+ assert.deepEqual(f.store.row(original.id),originalRow);assert.deepEqual(f.store.db.prepare('SELECT * FROM ledger').all(),ledger);
+ assert.equal(f.store.db.prepare('SELECT count(*) n FROM logs').get()!.n,2,'Originals remain in the private archive');
+ assert.throws(()=>f.store.log(duplicate.id,child),/不存在/);assert.throws(()=>f.store.save({...f.input(),id:duplicate.id},child),/已删除/);assert.throws(()=>f.store.retry(duplicate.id,parent),/不存在/);
+ const audits=f.store.db.prepare("SELECT * FROM audit WHERE action='delete-log'").all();assert.equal(audits.length,1);
+ assert.equal(f.store.removeLog(duplicate.id,{version:duplicate.version},parent).alreadyDeleted,true);assert.deepEqual(f.store.db.prepare("SELECT * FROM audit WHERE action='delete-log'").all(),audits);
+}finally{f.cleanup();}});
+test("delete permission and version checks prevent deleting another child's record or an updated record",()=>{const f=fixture();try{
+ const log=f.store.save(f.input(),parent).log,snapshot=f.store.snapshot(child);
+ assert.throws(()=>f.store.removeLog(log.id,{version:log.version},child),/家长/);
+ assert.throws(()=>f.store.removeLog(log.id,{version:0},parent));
+ const updated=f.store.save({...f.input(),id:log.id,version:1,minutes:22},parent).log;
+ assert.throws(()=>f.store.removeLog(log.id,{version:1},parent),/更新/);assert.equal(f.store.snapshot(child).logs.length,snapshot.logs.length);
+ assert.equal(f.store.log(log.id,parent).minutes,22);f.store.removeLog(log.id,{version:updated.version},parent);
+ assert.throws(()=>f.store.removeLog(log.id,{version:updated.version},child),/家长/);
+ const own=f.store.save(f.input(),child).log;f.store.removeLog(own.id,{version:own.version},child);assert.equal(f.store.snapshot(child).logs.length,0);
+}finally{f.cleanup();}});
+test("deleting the last session updates calendar and streaks; a new session cannot re-earn daily or streak awards",()=>{const f=fixture();try{
+ f.store.setRules({...DEFAULT_READING_RULES,backfillCounts:true},parent.id);f.store.save(f.input('2026-11-19'),child);const log=f.store.save(f.input(),child).log,ledger=f.store.db.prepare('SELECT * FROM ledger').all();
+ f.store.removeLog(log.id,{version:log.version},child);const state=f.store.snapshot(child);
+ assert.equal(state.stats.currentStreak,1);assert.equal(state.stats.days,1);assert.equal(state.calendar.some(day=>day.date===log.date),false);
+ assert.equal(f.store.db.prepare('SELECT 1 FROM eligible_days WHERE date=?').get(log.date),undefined);
+ assert.deepEqual(f.store.db.prepare('SELECT * FROM ledger').all(),ledger);
+ assert.equal(f.store.save(f.input(),child).pointsAdded,0);assert.deepEqual(f.store.db.prepare('SELECT * FROM ledger').all(),ledger);
+}finally{f.cleanup();}});
+test("deleting during review cancels pending work and late AI success or failure cannot revive deleted records",()=>{const f=fixture();try{
+ const input=f.input(),log=f.store.save(input,child).log,job=f.store.claim()!;assert.ok(job);
+ f.store.removeLog(log.id,{version:log.version},child);assert.equal(f.store.claim(),undefined);
+ const archived=f.store.db.prepare('SELECT * FROM logs WHERE id=?').get(log.id);
+ const review={...output,expression:'clear' as const,comparison:'consistent' as const,basis:'none' as const,timingNote:'模拟评价'};
+ f.store.complete(job,review);f.store.fail(job,true);
+ assert.equal(f.store.snapshot(child).logs.length,0);assert.deepEqual(f.store.db.prepare('SELECT * FROM logs WHERE id=?').get(log.id),archived);
+ assert.equal(f.store.db.prepare('SELECT status FROM review_jobs WHERE id=?').get(job.id)!.status,'superseded');
+ assert.throws(()=>f.store.save({...input,version:1,minutes:25},child),/已删除/);
+}finally{f.cleanup();}});
+test("deletion survives restart without losing archived photos, and page-count edits ignore deleted sessions",()=>{const f=fixture();try{
+ const photo=Buffer.from([255,216,255,224,1,2,3]).toString('base64'),log=f.store.save({...f.input(),endPage:99,image:photo},child).log;
+ f.store.removeLog(log.id,{version:log.version},parent);assert.equal(f.store.image(log.imageId!).bytes.toString('base64'),photo);
+ f.store.close();const reopened=new ReadingStore(f.directory,f.store.now);assert.equal(reopened.snapshot(child).logs.length,0);assert.equal(reopened.book(f.book.id).lastReadPage,null);assert.equal(reopened.balance(),2);
+ assert.throws(()=>reopened.save({...f.input(),id:log.id},child),/已删除/);
+ const book=reopened.book(f.book.id);assert.equal(reopened.editBook(book.id,{title:book.title,author:book.author,isbn:book.isbn,publisher:book.publisher,totalPages:50,revision:book.revision},parent.id).totalPages,50);
+ reopened.close();(f.store as any).close=()=>{};
+}finally{f.cleanup();}});

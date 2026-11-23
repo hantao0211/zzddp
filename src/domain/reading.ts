@@ -8,6 +8,7 @@ export const BookInputSchema=z.object({title:text(150).min(1),author:text(150).d
 export type BookInput=z.infer<typeof BookInputSchema>;
 export const BookEditSchema=BookInputSchema.omit({catalogId:true}).extend({revision:z.string().regex(/^[a-f0-9]{64}$/)}).strict();
 export const ReadingLogSchema=z.object({id:z.string().uuid(),version:z.number().int().min(0),bookId:z.string().uuid(),date:DaySchema,startPage:z.number().int().min(1).max(20000),endPage:z.number().int().min(1).max(20000),minutes:z.number().int().min(1).max(720),summary:text(3000).min(2),chapter:text(200).default(""),reflection:text(2000).default(""),excerpt:text(12000).default(""),image:z.string().max(2800000).optional(),keepImage:z.boolean().default(true),separateSession:z.boolean().optional()}).strict().refine(v=>v.endPage>=v.startPage,{message:"结束页不能小于开始页"});
+export const ReadingDeleteSchema=z.object({version:z.number().int().min(1)}).strict();
 export type ReadingLogInput=z.infer<typeof ReadingLogSchema>;
 export const ReadingRulesSchema=z.object({dailyPoints:z.number().int().min(0).max(100),backfillCounts:z.boolean(),milestones:z.array(z.object({days:z.number().int().min(2).max(365),points:z.number().int().min(1).max(1000)}).strict()).max(8)}).strict().refine(v=>new Set(v.milestones.map(m=>m.days)).size===v.milestones.length,{message:"连续天数不能重复"});
 export type ReadingRules=z.infer<typeof ReadingRulesSchema>;

@@ -16,6 +16,7 @@ export function subscribeOperationFeedback(listener: (event: OperationFeedback |
 export function operationLabels(path: string, method: string): OperationLabels | null {
   if (["GET", "HEAD"].includes(method.toUpperCase())) return null;
   const p = path.replace(/^\/assistant-api\//, "").split("?")[0];
+  if (/^reading\/logs\/[^/]+$/.test(p) && method.toUpperCase() === "DELETE") return {pending: "正在删除阅读记录…", success: "阅读记录已删除，阅读进度已更新。"};
   if (p === "reading/logs") return {pending: "正在保存阅读，请稍候…", success: "阅读已保存，AI评价在后台进行。"};
   if (/^reading\/logs\/[^/]+\/retry$/.test(p)) return {pending: "正在提交评价重试…", success: "已提交重试，打卡记录仍保留。"};
   if (/^reading\/books(?:\/[^/]+(?:\/finished)?)?$/.test(p)) return {pending: "正在保存书籍…", success: "书籍信息已保存。"};

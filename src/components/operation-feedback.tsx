@@ -28,6 +28,9 @@ export function OperationFeedback() {
   useEffect(() => {
     if (!feedback) return;
     const node = ref.current;
+    // A successful write may close/unmount its dialog in this same commit.
+    // Wait for the observer to move the receipt before calling top-layer APIs.
+    if (!node?.isConnected || (container instanceof HTMLDialogElement && !container.open)) return;
     if (node && typeof node.showPopover === "function") {
       // A dialog opened after an earlier receipt moves above that receipt in the
       // top layer. Reinsert on every new result so its backdrop cannot dim it.
