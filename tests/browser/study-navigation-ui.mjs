@@ -12,7 +12,7 @@ const task=(id,subject,title)=>({id,subject,title,requirement:'模拟练习要�
 const engine=process.env.SMOKE_BROWSER==='webkit'?webkit:chromium;
 const touch=process.env.SMOKE_TOUCH==='1';
 const activate=locator=>touch?locator.tap():locator.click();
-const browser=await engine.launch({headless:true,args:['--no-sandbox','--host-resolver-rules=MAP 14.103.24.55 127.0.0.1']});
+const browser=await engine.launch({headless:true,args:engine===chromium?['--no-sandbox','--host-resolver-rules=MAP 14.103.24.55 127.0.0.1']:[]});
 try{const page=await browser.newPage({colorScheme:process.env.SMOKE_COLOR_SCHEME||'light',viewport:{width:390,height:844},...(touch?{isMobile:true,hasTouch:true}:{}),ignoreHTTPSErrors:true}),errors=[],dialogs=[];page.on('request',r=>{if(r.isNavigationRequest()&&r.frame()===page.mainFrame())documentRequests++;});page.on('pageerror',e=>errors.push(e.message));page.on('dialog',d=>{dialogs.push(d.type());void d.accept();});
  await page.route('**/assistant-api/**',async route=>{const req=route.request(),url=new URL(req.url()),path=url.pathname;const json=v=>route.fulfill({contentType:'application/json',body:JSON.stringify(v)});
   if(path.endsWith('/status'))return json({authenticated:true,accounts:true,viewer,available:true,speech:true});
