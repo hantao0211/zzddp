@@ -1,0 +1,238 @@
+/* 手帐花园: warm paper, rose ink, and a small garden of the child's own. */
+:root {
+  --bg: #f5efe5;
+  --ink: #493a3d;
+  --muted: #786769;
+  --accent: #b44b64;
+  --accent-dark: #963a50;
+  --accent-soft: #f6e3e6;
+  --border: #e4dbce;
+  --journal-paper: #fffdf7;
+  --journal-pink: #f0cdd4;
+  --journal-sage: #dbe5d5;
+  --journal-green: #48614e;
+  --journal-yellow: #f2ddb2;
+  --journal-lilac: #e4ddec;
+}
+
+/* Paper is a real layout surface; decorations never cover interactive content. */
+.study-sidebar { background: var(--bg); border: 0; padding: 32px 14px; }
+.study-brand { letter-spacing: .5px; }
+.study-brand > span { background: var(--journal-pink); color: var(--accent-dark); }
+.study-nav-item { border-radius: 10px; }
+.study-nav-item.active { background: var(--journal-paper); color: var(--accent-dark); font-weight: 650; }
+.study-nav-item:hover, .study-parent-link:hover { background: #ede4d8; }
+.study-nav-item.active:hover { background: var(--journal-paper); }
+.study-workspace {
+  position: relative;
+  margin: 18px 18px 18px calc(var(--study-sidebar-width) + 6px);
+  min-height: calc(100dvh - 36px);
+  border: 1px solid var(--border);
+  border-radius: 22px;
+  background: var(--journal-paper);
+}
+.study-workspace::before {
+  content: "";
+  position: absolute;
+  left: 13px; top: 92px; bottom: 35px; width: 5px;
+  background: radial-gradient(circle, #d9cebc 1.8px, transparent 2px) 0 0 / 5px 26px;
+  pointer-events: none;
+}
+.study-topbar { padding: 17px 36px; min-height: 72px; }
+.study-tagline { color: var(--journal-green); letter-spacing: .5px; }
+.study-profile-icon { background: var(--journal-pink); color: var(--accent-dark); }
+.study-account-popover { background: var(--journal-paper); }
+.study-account-popover button { background: var(--accent-soft); }
+.study-shell .hw-main, .study-shell .reading-main { padding: 16px 36px 38px; max-width: 1280px; }
+.study-shell .hw-simple-heading { margin-bottom: 12px; align-items: center; }
+.study-shell .hw-simple-heading h1 { font-size: 28px; font-weight: 700; letter-spacing: .5px; }
+.journal-page-label { color: var(--muted); font-size: 13px; display: block; margin-bottom: 3px; }
+.study-shell .hw-date input { background: var(--journal-paper); border-radius: 10px; }
+
+.journal-garden {
+  display: flex; justify-content: space-between; align-items: center; gap: 20px;
+  position: relative; min-width: 0; margin-bottom: 22px; padding: 8px 16px 8px 0;
+  background: repeating-linear-gradient(transparent 0 31px, #e4dbce66 31px 32px);
+}
+.journal-garden-copy { min-width: 0; padding: 12px 0; }
+.journal-eyebrow { display: inline-flex; align-items: center; gap: 7px; color: var(--journal-green); font-size: 13px; }
+.study-shell .journal-garden h2 { font-size: 30px; line-height: 1.55; margin: 9px 0 0; letter-spacing: 1px; font-weight: 650; }
+.journal-garden .study-next-step { margin: 10px 0 0; max-width: 430px; color: var(--muted); }
+.journal-garden-decoration { flex: 0 0 210px; height: 210px; position: relative; }
+.journal-flower { position: absolute; top: -8px; left: -5px; width: 225px; height: 210px; transform: scale(.86); transform-origin: top center; pointer-events: none; }
+.journal-flower > span { display: block; position: absolute; }
+.journal-ground { bottom: 14px; left: 12px; width: 192px; height: 24px; border-radius: 50%; background: #493a3d10; }
+.journal-stem { width: 3px; height: 100px; background: var(--journal-green); left: 113px; top: 35px; transform: rotate(7deg); border-radius: 3px; }
+.journal-petal { width: 33px; height: 46px; background: var(--journal-pink); border-radius: 75% 75% 65% 65%; left: 99px; top: 7px; transform-origin: 50% 100%; }
+.journal-petal.p2 { transform: rotate(72deg); }
+.journal-petal.p3 { transform: rotate(144deg); }
+.journal-petal.p4 { transform: rotate(216deg); }
+.journal-petal.p5 { transform: rotate(288deg); }
+.journal-flower-center { width: 24px; height: 24px; border-radius: 50%; background: var(--journal-yellow); left: 103px; top: 40px; }
+.journal-leaf { width: 37px; height: 20px; background: var(--journal-green); border-radius: 90% 5% 90% 5%; left: 78px; top: 83px; transform: rotate(18deg); }
+.journal-leaf.l2 { left: 115px; top: 68px; transform: rotate(-28deg); }
+.journal-book-stack { height: 15px; border-radius: 4px; left: 32px; width: 165px; bottom: 30px; transform: rotate(-4deg); background: var(--journal-yellow); border-left: 8px solid var(--journal-pink); }
+.journal-book-stack.s2 { bottom: 45px; left: 51px; width: 139px; transform: rotate(6deg); background: var(--journal-sage); border-left-color: var(--journal-green); }
+.journal-pot { width: 68px; height: 58px; background: var(--accent); left: 83px; top: 114px; clip-path: polygon(0 0,100% 0,85% 100%,15% 100%); border-radius: 4px; }
+.journal-flower .journal-pot-label { left: 98px; top: 132px; width: 36px; height: 20px; border-radius: 5px; background: var(--journal-paper); color: var(--accent-dark); display: grid; place-items: center; }
+.journal-stickers { position: absolute; bottom: 0; left: 50%; transform: translateX(-50%); display: flex; gap: 7px; }
+.journal-stickers button { display: grid; place-items: center; width: 44px; height: 44px; padding: 0; background: var(--journal-pink); color: var(--accent-dark); border: 1px solid transparent; border-radius: 50%; }
+.journal-stickers button:nth-child(2) { background: var(--journal-yellow); color: #74532a; }
+.journal-stickers button:nth-child(3) { background: var(--journal-lilac); color: #655174; }
+.journal-stickers button[aria-pressed=true] { border-color: currentColor; outline: 2px solid var(--journal-paper); outline-offset: -4px; }
+.journal-stickers button:hover { filter: brightness(.97); }
+
+/* The work, and its real status, stay more prominent than the garden. */
+.study-home-grid { grid-template-columns: minmax(0,1fr) 245px; gap: 30px; }
+.study-shell .hw-primary-actions { gap: 12px; }
+.study-shell .hw-primary-actions > button {
+  min-height: 84px; padding: 16px 18px; border: 0; border-radius: 12px;
+  background: var(--journal-sage); color: var(--journal-green); align-items: center;
+}
+.study-shell .hw-primary-actions > button.study-primary-upload { background: var(--accent); color: #fffdf7; }
+.study-shell .hw-primary-actions > button > span { background: transparent; color: inherit; width: 30px; }
+.study-shell .hw-primary-actions strong { color: inherit; font-size: 19px; }
+.study-shell .hw-primary-actions small { color: inherit; margin-top: 2px; font-size: 12px; }
+.study-shell .hw-primary-actions > button:hover { filter: brightness(.96); }
+.study-shell .hw-home-summary { background: transparent; border-radius: 0; padding: 4px 0 0; }
+.study-shell .hw-summary-heading h2 { font-size: 19px; }
+.study-shell .hw-home-summary thead th { color: var(--muted); }
+.study-shell .hw-home-summary tbody th, .study-shell .hw-home-summary td { padding-top: 16px; padding-bottom: 16px; }
+.study-subject-mark { border-radius: 8px 12px 12px 8px; background: var(--journal-sage); color: var(--journal-green); }
+.study-shell .hw-home-status { background: var(--accent-soft); color: var(--ink); }
+.study-shell .hw-grading-overview, .study-shell .hw-details-link { background: #f4efe5; border-radius: 12px; }
+.study-shell .study-homework-reward { background: #f3e7cb; color: #795832; }
+.study-shell .study-homework-reward.earned { background: #e6eddf; color: var(--journal-green); }
+.study-shell .card { background: var(--journal-paper); border: 1px solid var(--border); border-radius: 15px; }
+.study-shell .hw-tabs > button { background: var(--journal-paper); }
+.study-shell .hw-tabs > button.selected { background: var(--journal-pink); color: var(--accent-dark); }
+
+/* A taped reading note and a quieter wish pocket use actual family records. */
+.study-home-companion { padding-top: 7px; }
+.study-side-card { position: relative; border-radius: 5px 17px 17px 17px; background: var(--journal-sage); padding: 23px 21px; }
+.study-side-card::before { content: ""; position: absolute; left: 27px; top: -5px; width: 54px; height: 12px; transform: rotate(-7deg); background: #f2ddb2cc; pointer-events: none; }
+.study-home-companion .study-side-card + .study-side-card { background: #f5e8eb; border-radius: 15px 15px 5px 15px; }
+.study-home-companion .study-side-card + .study-side-card::before { display: none; }
+.study-side-card h2 { font-size: 18px; }
+.study-side-card p { color: #52614f; }
+.study-home-companion .study-side-card + .study-side-card p { color: var(--muted); }
+.study-book-spot { background: transparent; min-height: 116px; margin-bottom: 14px; }
+.study-book-cover { background: var(--journal-paper); color: var(--journal-green); border-left-color: #7c967a; box-shadow: 5px 6px 0 #48614e16; }
+.study-side-card .button.secondary { background: var(--journal-paper); border-color: transparent; color: var(--journal-green); }
+
+/* Reading, wishes, and the assistant share paper, ink, and clear controls. */
+.study-shell .reading-main .card { border: 1px solid var(--border); border-radius: 15px; background: var(--journal-paper); }
+.study-shell .reading-heading { padding: 10px 0 23px; border-bottom: 1px solid var(--border); }
+.study-shell .reading-heading h1 { font-size: 28px; letter-spacing: .5px; }
+.study-shell .reading-main .reading-checkin { border-top: 5px solid var(--journal-sage); }
+.study-shell .reading-streak { background: var(--journal-sage); color: var(--journal-green); }
+.study-shell .reading-points { background: var(--journal-pink); color: var(--accent-dark); }
+.study-shell .reading-timer { background: #f5f2e8; }
+.study-shell .reading-feedback { background: #f1f4ea; border-left-color: #829b79; }
+.study-shell .reading-feedback h4 { color: var(--journal-green); }
+.study-shell .reading-book-icon, .study-shell .reading-cover { background: var(--journal-sage); color: var(--journal-green); border-left-color: #829b79; }
+.study-shell .reading-books article { border-color: var(--border); border-radius: 10px; }
+.study-shell .reading-main .reading-wishes { border-top: 5px solid var(--journal-pink); }
+.study-shell #family-reward-shop { border-top: 5px solid var(--journal-yellow); }
+.study-shell .reading-rewards article { border-color: var(--border); border-radius: 11px; background: #f6ead6; }
+.study-shell .reading-rewards article:nth-child(3n + 2) { background: #e9eedd; }
+.study-shell .reading-rewards article:nth-child(3n) { background: #eee6f0; }
+.study-shell .reading-rewards article > svg { color: #8c5b38; }
+.study-shell .reading-rewards article > h3 { color: var(--ink); }
+.study-shell .reading-stats > .card { background: #f3eedf; }
+.study-shell .reading-stats > .card:nth-child(2n) { background: #eaf0e4; }
+.study-shell .reading-main .reading-homework-reward { background: #f6f0df; }
+.study-shell :is(input, select, textarea) { background: #fffefa; }
+.study-shell .button.secondary { border-color: var(--border); background: #fffefa; color: var(--ink); }
+.study-shell .button.primary, .reading-dialog .button.primary, .hw-dialog .button.primary { background: var(--accent); color: #fffdf7; }
+.study-shell .button.primary:hover, .reading-dialog .button.primary:hover, .hw-dialog .button.primary:hover { background: var(--accent-dark); }
+.reading-dialog, .hw-dialog, .assistant-dialog { background: var(--journal-paper); border-color: var(--border); border-radius: 18px; }
+.reading-dialog::backdrop, .hw-dialog::backdrop, .assistant-dialog::backdrop { background: #493a3d66; }
+.reading-dialog :is(input, select, textarea), .hw-dialog :is(input, select, textarea) { background: #fffefa; }
+.reading-dialog :is(button, a, input, select, textarea, summary):focus-visible, .hw-dialog :is(button, a, input, select, textarea, summary):focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+.assistant-header, .assistant-messages, .assistant-compose, .assistant-settings { background: var(--journal-paper); }
+.assistant-avatar { background: var(--journal-pink); color: var(--accent-dark); }
+.assistant-context-bar { background: #f3eddf; }
+.assistant-message.assistant > div { background: #edf1e6; }
+.assistant-message.user > div { background: var(--accent-soft); }
+.assistant-intro button { background: #fffefa; border-color: var(--border); color: var(--ink); }
+.assistant-compose-row textarea { background: #fffefa; }
+.admin-app .card { background: var(--journal-paper); border: 1px solid var(--border); }
+::selection { background: var(--journal-pink); color: var(--ink); }
+
+@media (max-width: 1190px) {
+  .study-home-grid { grid-template-columns: minmax(0,1fr); gap: 24px; }
+  .study-home-companion { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 18px; padding-top: 6px; }
+  .study-home-companion .study-book-spot { display: none; }
+  .study-home-companion .study-side-card { padding: 21px; }
+  .study-home-companion .study-side-card .reading-token { font-size: 26px; }
+}
+@media (max-width: 899px) {
+  .study-workspace { margin: 7px; min-height: calc(100dvh - 14px); border-radius: 18px; }
+  .study-workspace::before { display: none; }
+  .study-topbar { padding: 12px 20px; min-height: 64px; }
+  .study-shell .hw-main, .study-shell .reading-main { padding: 16px 22px calc(104px + env(safe-area-inset-bottom)); }
+  .study-bottom-nav { background: var(--journal-paper); border-color: var(--border); }
+  .study-bottom-nav .study-nav-item.active { background: var(--journal-pink); }
+  .study-parent-mobile { background: var(--journal-paper); }
+  .assistant-dialog { border-radius: 0; }
+}
+@media (max-width: 600px) {
+  .study-topbar { padding: 10px 14px; }
+  .study-brand-mobile { font-size: 19px; }
+  .study-shell .hw-main, .study-shell .reading-main { padding: 12px 15px calc(102px + env(safe-area-inset-bottom)); }
+  .study-shell .hw-simple-heading { gap: 10px; flex-wrap: wrap; margin-bottom: 9px; }
+  .study-shell .hw-simple-heading h1 { font-size: 22px; white-space: nowrap; }
+  .journal-page-label { font-size: 12px; }
+  .study-shell .hw-date input { width: 133px; min-height: 44px; font-size: 13px; }
+  .journal-garden { gap: 4px; margin-bottom: 18px; padding: 0; }
+  .journal-garden-copy { padding: 11px 0; flex: 1; }
+  .journal-eyebrow { font-size: 12px; gap: 5px; }
+  .study-shell .journal-garden h2 { font-size: 24px; line-height: 1.55; letter-spacing: 0; }
+  .journal-garden .study-next-step { font-size: 13px; line-height: 1.7; margin-top: 8px; }
+  .journal-garden-decoration { flex-basis: 132px; height: 184px; }
+  .journal-flower { transform: scale(.66); transform-origin: top left; left: -10px; top: 3px; }
+  .journal-stickers { gap: 0; bottom: 0; }
+  .journal-stickers button { width: 44px; height: 44px; border-radius: 14px; }
+  .study-home-main { gap: 16px; }
+  .study-shell .hw-primary-actions { gap: 10px; }
+  .study-shell .hw-primary-actions > button { min-height: 64px; flex-direction: row; padding: 13px 12px; gap: 8px; align-items: center; justify-content: center; border-radius: 11px; text-align: left; }
+  .study-shell .hw-primary-actions > button > span { width: 25px; height: 32px; }
+  .study-shell .hw-primary-actions strong { font-size: 17px; }
+  .study-shell .hw-primary-actions small { display: none; }
+  .study-shell .hw-home-summary { padding: 4px 0 0; border-radius: 0; }
+  .study-shell .hw-summary-heading h2 { font-size: 18px; }
+  .study-shell .hw-home-summary tbody th, .study-shell .hw-home-summary td { padding-top: 14px; padding-bottom: 14px; }
+  .study-shell .study-task-title > span { font-size: 15px; }
+  .study-home-companion { gap: 13px; }
+  .study-home-companion .study-side-card { padding: 18px 14px; }
+  .study-side-card h2 { font-size: 16px; }
+  .study-side-card p { font-size: 13px; line-height: 1.8; margin: 7px 0 10px; }
+  .study-home-companion .study-side-card .reading-token { font-size: 24px; flex-wrap: wrap; gap: 4px; white-space: normal; }
+  .study-home-companion .reading-token small { margin-left: 0; font-size: 12px; }
+  .study-home-companion .button, .study-home-companion .text-button { font-size: 13px; min-height: 44px; padding: 7px 0; gap: 5px; }
+  .study-home-companion .button.secondary { padding: 7px 10px; }
+  .study-shell .reading-heading { padding: 5px 0 18px; gap: 12px; }
+  .study-shell .reading-heading h1 { font-size: 24px; }
+  .study-shell .reading-main .card { padding: 20px 16px; }
+  .study-shell .reading-heading .reading-muted { font-size: 13px; }
+}
+@media (max-width: 359px) {
+  .study-shell .hw-main, .study-shell .reading-main { padding-left: 12px; padding-right: 12px; }
+  .study-shell .hw-simple-heading h1 { font-size: 21px; }
+  .study-shell .hw-simple-heading > div { flex-basis: auto; }
+  .study-shell .hw-simple-heading .hw-date { flex-direction: column; align-items: flex-start; gap: 5px; }
+  .study-shell .hw-simple-heading .hw-date input { width: 126px; padding: 7px; }
+  .journal-garden-decoration { height: 178px; }
+  .journal-flower { transform: scale(.6); top: 12px; left: 0; }
+  .study-shell .journal-garden h2 { font-size: 20px; }
+  .journal-eyebrow { font-size: 11px; }
+  .study-shell .hw-primary-actions > button { padding: 12px 10px; gap: 6px; }
+  .study-shell .hw-primary-actions small { font-size: 10px; }
+  .study-home-companion .study-side-card { padding: 18px 12px; }
+  .study-home-companion .study-side-card .reading-token { font-size: 21px; }
+}
+@media print {
+  .study-workspace { margin: 0; min-height: 0; border: 0; background: #fff; }
+  .study-workspace::before, .journal-garden { display: none; }
+}
