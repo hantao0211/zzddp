@@ -50,7 +50,8 @@
 .study-account-popover button { background: var(--accent-soft); }
 .study-shell .hw-main, .study-shell .reading-main { padding: 22px 28px 28px; max-width: 880px; }
 .study-shell .hw-simple-heading { margin-bottom: 0; align-items: center; gap: 14px; }
-.study-shell .hw-simple-heading h1 { font-size: 27px; font-weight: 650; letter-spacing: -.8px; }
+.study-shell .hw-simple-heading h1,
+.study-shell .reading-heading h1 { font-size: 27px; font-weight: 650; letter-spacing: -.8px; line-height: 1.4; margin: 0; }
 .study-shell .journal-date > span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .study-shell .journal-date input { width: 145px; min-height: 44px; border-color: transparent; background: transparent; padding: 8px 3px; }
 .study-shell .hw-date input { background: var(--journal-paper); border-radius: 10px; }
@@ -176,7 +177,7 @@
 /* Reading, wishes, and the assistant share paper, ink, and clear controls. */
 .study-shell .reading-main .card { border: 1px solid var(--border); border-radius: 15px; background: var(--journal-paper); }
 .study-shell .reading-heading { padding: 10px 0 23px; border-bottom: 1px solid var(--border); }
-.study-shell .reading-heading h1 { font-size: 28px; letter-spacing: .5px; }
+
 .study-shell .reading-main .reading-checkin { border-top: 5px solid var(--journal-sage); }
 .study-shell .reading-streak { background: var(--journal-sage); color: var(--journal-green); }
 .study-shell .reading-points { background: var(--journal-pink); color: var(--accent-dark); }
@@ -234,7 +235,9 @@
   .study-brand-mobile { font-size: 19px; }
   .study-shell .hw-main, .study-shell .reading-main { padding: 22px 19px calc(102px + env(safe-area-inset-bottom)); }
   .study-shell .hw-simple-heading { gap: 8px; flex-wrap: nowrap; margin-bottom: 0; }
-  .study-shell .hw-simple-heading h1 { font-size: 24px; letter-spacing: -.8px; white-space: nowrap; }
+  .study-shell .hw-simple-heading h1,
+  .study-shell .reading-heading h1 { font-size: 24px; }
+  .study-shell .hw-simple-heading h1 { white-space: nowrap; }
   .study-shell .journal-date input { width: 126px; font-size: 13px; }
   .journal-eyebrow { font-size: 11px; gap: 5px; }
   .journal-garden .study-next-step { font-size: 12px; line-height: 1.8; margin-top: 10px; }
@@ -264,7 +267,6 @@
   .study-home-companion .reading-token { font-size: 26px; gap: 5px; flex-wrap: wrap; white-space: normal; }
   .study-home-companion .reading-token small { margin-left: 0; font-size: 11px; }
   .study-shell .reading-heading { padding: 5px 0 18px; gap: 12px; }
-  .study-shell .reading-heading h1 { font-size: 24px; }
   .study-shell .reading-main .card { padding: 20px 16px; }
   .study-shell .reading-heading .reading-muted { font-size: 13px; }
 }
@@ -278,7 +280,8 @@
   .study-shell .hw-home-summary .journal-col-task { width: 41%; }
   .study-shell .hw-home-summary .journal-col-completion { width: 36%; }
   .study-shell .hw-main, .study-shell .reading-main { padding-left: 16px; padding-right: 16px; }
-  .study-shell .hw-simple-heading h1 { font-size: 21px; }
+  .study-shell .hw-simple-heading h1,
+  .study-shell .reading-heading h1 { font-size: 21px; }
   .study-shell .hw-simple-heading > div { flex-basis: auto; }
   .study-shell .hw-simple-heading .hw-date { flex-direction: column; align-items: flex-start; gap: 0; }
   .study-shell .hw-simple-heading .journal-date input { width: 118px; padding: 7px 0; }

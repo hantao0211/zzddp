@@ -406,7 +406,9 @@ test("reading history supports bounded pages and a lightweight latest record wit
   assert.equal(all.data.items.length,23);assert.equal(first.data.total,23);assert.equal(first.data.items.length,10);assert.equal(second.data.items.length,10);assert.equal(last.data.items.length,3);
   assert.deepEqual([...first.data.items,...second.data.items,...last.data.items].map((r:any)=>r.id),all.data.items.map((r:any)=>r.id));
   const filtered=await get(`logs?limit=10&date=${today}&bookId=${book.data.id}`);assert.equal(filtered.data.total,12);assert.equal(filtered.data.items.length,10);assert.ok(filtered.data.items.every((r:any)=>r.date===today&&r.bookId===book.data.id));
-  const full=await get("state"),light=await get("state?logLimit=1");assert.equal(full.data.logs.length,23);assert.equal(light.data.logs.length,1);assert.equal(light.data.logs[0].id,first.data.items[0].id);assert.equal(light.data.hasMore,true);assert.deepEqual(light.data.stats,full.data.stats);assert.deepEqual(light.data.books,full.data.books);
+  assert.ok(first.data.items.every((r:any)=>r.bookStreak===2));assert.ok(last.data.items.every((r:any)=>r.bookStreak===1));
+  assert.ok(filtered.data.items.every((r:any)=>r.bookStreak===2));
+  const full=await get("state"),light=await get("state?logLimit=1");assert.equal(full.data.logs.length,23);assert.equal(light.data.logs.length,1);assert.equal(light.data.logs[0].id,first.data.items[0].id);assert.equal(light.data.logs[0].bookStreak,2);assert.equal(light.data.hasMore,true);assert.deepEqual(light.data.stats,full.data.stats);assert.deepEqual(light.data.books,full.data.books);
   for(const limit of ["0","101","1.5","bad",""]){assert.equal((await get("logs?limit="+limit)).status,400);assert.equal((await get("state?logLimit="+limit)).status,400);}
   const target=first.data.items[0];assert.equal((await f.send("reading/logs/"+target.id,"DELETE",{version:target.version},admin.cookie)).status,200);const remaining=await get("logs?limit=10");assert.equal(remaining.data.total,22);assert.ok(remaining.data.items.every((r:any)=>r.id!==target.id));assert.equal(f.calls(),0);
  }finally{await f.cleanup();}

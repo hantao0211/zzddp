@@ -89,11 +89,11 @@
   .reading-history-entry { border-top: 1px solid var(--border); }
   .reading-history-entry > summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; list-style: none; padding: 14px 0; }
   .reading-history-entry > summary::-webkit-details-marker { display: none; }
-  .reading-history-entry > summary > span { display: grid; gap: 4px; min-width: 0; }
+  .reading-history-entry > summary > .reading-history-label { display: grid; gap: 4px; min-width: 0; }
   .reading-history-entry > summary strong { font-size: 15px; font-weight: 600; }
   .reading-history-entry > summary small { font-size: 12px; color: var(--muted); }
-  .reading-history-entry > summary > svg { flex-shrink: 0; color: var(--accent); }
-  .reading-history-entry[open] > summary > svg { transform: rotate(90deg); }
+  .reading-history-meta > svg { flex-shrink: 0; color: var(--accent); }
+  .reading-history-entry[open] > summary > .reading-history-meta > svg { transform: rotate(90deg); }
   .reading-history-entry > .reading-record { margin: 0; padding: 0 0 18px; border: 0; }
   .reading-history-pages { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; padding-top: 16px; }
 
@@ -214,4 +214,22 @@
     .study-shell .growth-activities .economy-grid h3 { font-size: 16px; }
     .study-shell .reading-wish-row { padding: 15px; }
   }
+}
+
+/* Compact reading milestones share the existing status position. */
+@media screen {
+  .reading-book-streak { display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; white-space: nowrap; padding: 4px 8px; border-radius: 999px; background: var(--journal-sage); color: var(--journal-green); font-size: 12px; font-weight: 500; line-height: 1.5; }
+  .reading-book-streak > svg { flex-shrink: 0; }
+  .reading-record-heading > div { min-width: 0; }
+  .reading-record-meta { display: flex; flex-wrap: wrap; gap: 0 4px; }
+  .reading-record-meta > * { white-space: nowrap; }
+  .reading-history-meta { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; }
+  .reading-history-meta > .status-indicator { font-size: 12px; white-space: nowrap; }
+  .study-shell .study-brand { font-size: 21px; }
+}
+@media screen and (max-width: 899px) {
+  .study-shell .study-brand-mobile { font-size: 20px; }
+}
+@media screen and (max-width: 360px) {
+  .study-shell .study-brand-mobile { font-size: 18px; }
 }

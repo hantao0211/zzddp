@@ -7,7 +7,7 @@ import {randomUUID} from "node:crypto";
 import {ReadingStore} from "../src/server/reading/store";
 import {ReadingWorker} from "../src/server/reading/worker";
 import {lookupBooks} from "../src/server/reading/catalog";
-import {streaks,uniquePages,DEFAULT_READING_RULES,nextReadingPages} from "../src/domain/reading";
+import {bookReadingStreaks,streaks,uniquePages,DEFAULT_READING_RULES,nextReadingPages} from "../src/domain/reading";
 import type {Viewer} from "../src/domain/accounts";
 import type {StructuredAI} from "../src/server/ai/provider";
 const child:Viewer={id:"11111111-1111-4111-8111-111111111111",username:"qa-child",name:"模拟孩子",role:"child"};
@@ -198,4 +198,36 @@ test("deletion survives restart without losing archived photos, and page-count e
  assert.throws(()=>reopened.save({...f.input(),id:log.id},child),/已删除/);
  const book=reopened.book(f.book.id);assert.equal(reopened.editBook(book.id,{title:book.title,author:book.author,isbn:book.isbn,publisher:book.publisher,totalPages:50,revision:book.revision},parent.id).totalPages,50);
  reopened.close();(f.store as any).close=()=>{};
+}finally{f.cleanup();}});
+
+
+test("per-book reading runs deduplicate days, cross calendar boundaries and retain each historic day's count",()=>{
+ const runs=bookReadingStreaks([
+  {bookId:"a",date:"2026-01-01"},{bookId:"b",date:"2026-01-01"},
+  {bookId:"a",date:"2025-12-31"},{bookId:"a",date:"2025-12-30"},{bookId:"a",date:"2026-01-01"},
+  {bookId:"a",date:"2026-01-03"},{bookId:"a",date:"2024-02-29"},{bookId:"a",date:"2024-03-01"},{bookId:"a",date:"2024-02-28"}
+ ]);
+ assert.equal(runs.get("a")!.get("2025-12-31"),2);assert.equal(runs.get("a")!.get("2026-01-01"),3);
+ assert.equal(runs.get("a")!.get("2026-01-03"),1);assert.equal(runs.get("b")!.get("2026-01-01"),1);
+ assert.equal(runs.get("a")!.get("2024-03-01"),3);assert.equal(bookReadingStreaks([]).size,0);
+});
+
+test("book streaks use full active history for a one-record snapshot and filtered page, without changing rewards or AI work",()=>{const f=fixture();try{
+ const inputs=Array.from({length:20},(_,i)=>f.input(`2026-11-${String(i+1).padStart(2,"0")}`));
+ for(const input of inputs)f.store.save(input,child);
+ const duplicate={...f.input("2026-11-19"),separateSession:true};f.store.save(duplicate,parent);
+ const other=f.store.addBook({title:"另一本模拟书"},child.id);
+ for(const date of ["2026-11-18","2026-11-19","2026-11-20"])f.store.save({...f.input(date),bookId:other.id},child);
+ const balance=f.store.balance(),jobs=(f.store.db.prepare("SELECT COUNT(*) AS n FROM review_jobs").get() as {n:number}).n;
+ assert.equal(f.store.log(inputs[19].id,child).bookStreak,20);
+ assert.equal(f.store.logs([inputs[9].id,inputs[19].id],child)[0].bookStreak,10);
+ assert.equal(f.store.snapshot(child,1).logs[0].bookStreak,3);
+ assert.equal(f.store.log(duplicate.id,child).bookStreak,19);
+ f.store.removeLog(inputs[9].id,{version:1},child);
+ assert.equal(f.store.log(inputs[19].id,child).bookStreak,10);
+ f.store.removeLog(inputs[18].id,{version:1},child);
+ assert.equal(f.store.log(inputs[19].id,child).bookStreak,10);
+ f.store.removeLog(duplicate.id,{version:1},parent);
+ assert.equal(f.store.log(inputs[19].id,child).bookStreak,1);
+ assert.equal(f.store.balance(),balance);assert.equal((f.store.db.prepare("SELECT COUNT(*) AS n FROM review_jobs").get() as {n:number}).n,jobs);
 }finally{f.cleanup();}});
