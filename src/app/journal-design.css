@@ -63,7 +63,7 @@
 }
 .journal-garden-copy { min-width: 0; flex: 1; padding: 12px 0; }
 .journal-tape-label { position: absolute; right: 7px; top: 1px; transform: rotate(9deg); font-size: 11px; padding: 5px 12px; background: var(--journal-yellow); color: var(--ink); border-radius: 4px; z-index: 1; pointer-events: none; }
-.study-shell .journal-garden h2 { font-size: 31px; line-height: 1.43; margin: 11px 0 0; letter-spacing: -1px; font-weight: 600; }
+.study-shell .journal-garden h2 { font-size: 30px; line-height: 1.43; margin: 11px 0 0; letter-spacing: -1px; font-weight: 600; }
 .journal-eyebrow { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; }
 .journal-garden .study-next-step { margin: 12px 0 0; color: var(--muted); font-size: 13px; line-height: 1.7; }
 .journal-garden-decoration { display: block; width: var(--garden-width); height: var(--garden-height); position: relative; }
@@ -227,7 +227,7 @@
 @media (max-width: 600px) {
   .journal-garden { --garden-width: 144px; --garden-height: 175px; --garden-scale: .74; gap: 8px; margin: 13px 0 19px; }
   .journal-garden-copy { padding: 11px 0; }
-  .study-shell .journal-garden h2 { font-size: 24px; line-height: 1.5; letter-spacing: -.8px; }
+  .study-shell .journal-garden h2 { font-size: 23px; line-height: 1.5; letter-spacing: -.8px; }
   .journal-tape-label { font-size: 10px; top: 0; right: 1px; padding: 4px 7px; }
   .journal-flower { left: -15px; }
   .study-topbar { padding: 12px 15px 8px; }
@@ -268,10 +268,13 @@
   .study-shell .reading-main .card { padding: 20px 16px; }
   .study-shell .reading-heading .reading-muted { font-size: 13px; }
 }
+@media (min-width: 360px) and (max-width: 374px) {
+  .study-shell .journal-garden h2 { font-size: 22px; }
+}
 @media (max-width: 359px) {
   .journal-garden { --garden-width: 112px; --garden-height: 168px; --garden-scale: .58; }
   .journal-flower { left: -4px; }
-  .study-shell .journal-garden h2 { font-size: 20px; }
+  .study-shell .journal-garden h2 { font-size: 19px; }
   .study-shell .hw-home-summary .journal-col-task { width: 41%; }
   .study-shell .hw-home-summary .journal-col-completion { width: 36%; }
   .study-shell .hw-main, .study-shell .reading-main { padding-left: 16px; padding-right: 16px; }
