@@ -304,16 +304,21 @@ export class HomeworkWorker {
       if (pages.length > 6 || pages.some(p => !homework.find(h => h.fileId === p.id)?.readable)) {
         task.writtenCompletion = { version: WRITTEN_COMPLETION_VERSION, status: "unclear", reason: pages.length > 6 ? "这项作业超过一次可检查的6页，尚未完成逐题检查。" : "对应照片有关键内容看不清，暂时无法检查是否写完。", parts: [] }; return;
       }
-      const input = { title: task.title, requirement: task.requirement, subject: task.subject, pages: pages.map(p => ({ fileId: p.id, page: p.number, printedPage: homework.find(h => h.fileId === p.id)?.printedPage })) };
-      const inspection = await this.cached((isCorrectionSignTask(task) ? "written-completion:correction-sign-v1:" : "written-completion:v2:") + createHash("sha256").update(JSON.stringify(input)).digest("hex"), async () => {
-        const value = await ai.run("assess_written_completion", WrittenInspectionSchema, {...input, scopePolicy: SUBMITTED_SCOPE_POLICY, inferFromSubmittedWork:mayInferScope(task)}, () => this.pipeline.images(pages));
-        validateEvidence(value.parts.map(p => p.evidence), pages);
+      const inputFor = (batch: PageRow[]) => ({ title: task.title, requirement: task.requirement, subject: task.subject,
+        pages: batch.map(p => ({ fileId: p.id, page: p.number, printedPage: homework.find(h => h.fileId === p.id)?.printedPage })) });
+      const cacheKey = (prefix: string, batch: PageRow[]) => prefix + createHash("sha256").update(JSON.stringify(inputFor(batch))).digest("hex");
+      const inspect = async (batch: PageRow[], split = false) => {
+        this.current(job);
+        const guidance = "证据摘录只需能定位所检查的小题，最多12字。" + (split ? "这是同一作业的一张照片，只列本页范围内的作答处。scopeComplete表示本页应检查内容是否完整可见，其他页由后台合并，不要在这批推测其他页是否已交。整页不属于要求或是明确排除项时返回空parts和scopeComplete=true。" : "");
+        const metadata = { ...inputFor(batch), guidance, scopePolicy: SUBMITTED_SCOPE_POLICY, inferFromSubmittedWork: mayInferScope(task) };
+        const value = await ai.run("assess_written_completion", WrittenInspectionSchema, metadata, () => this.pipeline.images(batch));
+        validateEvidence(value.parts.map(p => p.evidence), batch);
         if (new Set(value.parts.map(p => `${p.evidence.fileId}:${p.label}`)).size !== value.parts.length) throw new AIServiceError("DUPLICATE_WRITTEN_PART", true, "题目作答检查出现重复，正在重试。");
         this.current(job);
         const targets = value.parts.filter(p => p.status === "unclear");
         if (targets.length) {
-          const reviewed = await ai.run("recheck_written_parts", WrittenRecheckSchema, { ...input, scopePolicy:SUBMITTED_SCOPE_POLICY, inferFromSubmittedWork:mayInferScope(task), targets }, () => this.pipeline.images(pages));
-          validateEvidence(reviewed.parts.map(p => p.evidence), pages);
+          const reviewed = await ai.run("recheck_written_parts", WrittenRecheckSchema, { ...metadata, targets }, () => this.pipeline.images(batch));
+          validateEvidence(reviewed.parts.map(p => p.evidence), batch);
           const keys = (items: typeof targets) => items.map(p => `${p.evidence.fileId}:${p.label}`).sort();
           if (JSON.stringify(keys(reviewed.parts)) !== JSON.stringify(keys(targets))) throw new AIServiceError("INVALID_WRITTEN_RECHECK", true, "局部复查未对应原题，正在重试。");
           value.parts = value.parts.map(p => reviewed.parts.find(r => r.label === p.label && r.evidence.fileId === p.evidence.fileId) || p);
@@ -321,6 +326,20 @@ export class HomeworkWorker {
           value.reason = value.parts.some(p => p.status === "unclear") ? "仍有作答部分看不清，具体位置见下方题目记录。" : value.parts.some(p => p.status === "blank") ? "逐项检查后仍有空题，具体题号见下方记录。" : "已逐项检查指定作业，原先不清楚的部分经复查可见学生作答；本次未批改答案对错。";
         }
         return value;
+      };
+      const prefix = isCorrectionSignTask(task) ? "written-completion:correction-sign-v1:" : "written-completion:v2:";
+      const inspection = await this.cached(cacheKey(prefix, pages), async () => {
+        try { return await inspect(pages); }
+        catch (error) {
+          if (pages.length < 2 || !(error instanceof AIServiceError) || !["INCOMPLETE_RESPONSE", "INVALID_ENVELOPE", "INVALID_RESULT"].includes(error.code)) throw error;
+        }
+        const results = [];
+        for (const page of pages) results.push(await this.cached(cacheKey("written-completion:single-page-v1:", [page]), () => inspect([page], true)));
+        const parts = results.flatMap(result => result.parts);
+        if (parts.length > 160) throw new AIServiceError("WRITTEN_PARTS_LIMIT", false, "这项作业的作答部分超过一次可检查的数量。照片和已保存的清单仍可查看。");
+        return WrittenInspectionSchema.parse({ scopeComplete: results.every(result => result.scopeComplete),
+          reason: results.filter(result => result.parts.length || !result.scopeComplete).map(result => result.reason).join("；").slice(0, 1500) || "照片中暂未找到本次要求作答的题目。",
+          parts });
       });
       task.writtenCompletion = evaluateWrittenInspection(inspection, task.coverage);
     });

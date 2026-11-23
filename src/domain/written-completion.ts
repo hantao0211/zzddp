@@ -11,7 +11,7 @@ export const WrittenRecheckSchema = z.object({ parts: z.array(WrittenPartSchema)
 export const WrittenInspectionSchema = z.object({
   scopeComplete: z.boolean(),
   reason: z.string().min(1).max(1500),
-  parts: z.array(WrittenPartSchema).min(1).max(160),
+  parts: z.array(WrittenPartSchema).max(160),
 }).strict();
 export const WRITTEN_COMPLETION_VERSION = "written-v2" as const;
 export const WrittenCompletionSchema = z.object({
@@ -33,6 +33,6 @@ export function writtenCompletionLabel(value?: WrittenCompletion | null) {
   return value.status === "done" ? "已做完（未批改）" : value.status === "incomplete" ? value.parts.every(p => p.status === "blank") ? "未做" : "未做完" : value.status === "missing" ? "未找到对应照片" : "AI未判清";
 }
 export function evaluateWrittenInspection(value: z.infer<typeof WrittenInspectionSchema>, coverage: string): WrittenCompletion {
-  const status = value.parts.some(p => p.status === "blank") ? "incomplete" : !value.scopeComplete || coverage !== "complete" || value.parts.some(p => p.status === "unclear") ? "unclear" : "done";
+  const status = value.parts.some(p => p.status === "blank") ? "incomplete" : !value.parts.length || !value.scopeComplete || coverage !== "complete" || value.parts.some(p => p.status === "unclear") ? "unclear" : "done";
   return { version: WRITTEN_COMPLETION_VERSION, parts: value.parts, status, reason: status === "unclear" && coverage !== "complete" ? "指定作业范围的照片还不完整，不能判断整项是否写完。" : value.reason };
 }

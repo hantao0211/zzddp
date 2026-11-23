@@ -13,6 +13,7 @@ test("completion is separate from correctness, incomplete page scope and unclear
   assert.equal(readWrittenCompletion({}), false); assert.throws(() => readWrittenCompletion({ ASSISTANT_WRITTEN_COMPLETION: "yes" }));
   const value = WrittenInspectionSchema.parse({ scopeComplete: true, reason: "错误答案也已填写", parts: [{ label: "第1题", status: "answered", evidence: { fileId: "page", page: 1, excerpt: "1+1=3，已填写但不在此批改" } }] });
   assert.equal(evaluateWrittenInspection(value, "complete").status, "done");
+  assert.equal(evaluateWrittenInspection(WrittenInspectionSchema.parse({ ...value, parts: [] }), "complete").status, "unclear", "An entirely excluded or unrecognized task must never count as completed");
   assert.equal(evaluateWrittenInspection(value, "partial").status, "unclear");
   assert.equal(evaluateWrittenInspection({ ...value, scopeComplete: false }, "complete").status, "unclear");
   assert.equal(evaluateWrittenInspection({ ...value, parts: [{ ...value.parts[0], status: "unclear" }] }, "complete").status, "unclear");

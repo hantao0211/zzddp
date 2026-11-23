@@ -25,15 +25,16 @@ export class VisionAI implements StructuredAI {
     if (images.length > 20 || images.reduce((size, image) => size + image.base64.length, 0) > 24 * 1024 * 1024 || images.some((image) => !image.base64 || image.base64.length > 14 * 1024 * 1024)) throw new AIServiceError("INVALID_IMAGES", false, "图片数量或大小超限，需要先拆分及压缩页面。");
     const userText = `${AI_INSTRUCTIONS[task]}\nJSON Schema：${JSON.stringify(z.toJSONSchema(schema))}\n任务数据：${JSON.stringify(metadata)}\n图片顺序：${JSON.stringify(images.map((image) => image.fileId))}`;
     const isDeepSeek = this.config.provider === "deepseek";
+    const detailed = ["grade_homework", "verify_homework_grading", "assess_written_completion", "recheck_written_parts"].includes(task);
     const body = isDeepSeek ? {
       model: this.config.model,
       messages: [{ role: "system", content: AI_SYSTEM_INSTRUCTIONS }, { role: "user", content: [{ type: "text", text: userText }, ...images.map((image) => ({ type: "image_url", image_url: { url: `data:${image.mimeType};base64,${image.base64}` } }))] }],
-      response_format: { type: "json_object" }, max_tokens: ["tutor_answer", "reading_review", "reading_dialogue"].includes(task) ? 2048 : task === "homework_dialogue" ? 4096 : ["grade_homework", "verify_homework_grading"].includes(task) ? 16000 : 8192,
+      response_format: { type: "json_object" }, max_tokens: ["tutor_answer", "reading_review", "reading_dialogue"].includes(task) ? 2048 : task === "homework_dialogue" ? 4096 : detailed ? 16000 : 8192,
       ...(["tutor_answer", "homework_dialogue", "reading_review", "reading_dialogue", "organize_homework"].includes(task) ? { thinking: { type: "disabled" } } : {}),
     } : {
       model: this.config.model, store: false, instructions: AI_SYSTEM_INSTRUCTIONS,
       input: [{ role: "user", content: [{ type: "input_text", text: userText }, ...images.map((image) => ({ type: "input_image", image_url: `data:${image.mimeType};base64,${image.base64}`, detail: "high" }))] }],
-      text: { format: { type: "json_object" } }, max_output_tokens: ["grade_homework", "verify_homework_grading"].includes(task) ? 16000 : 8192,
+      text: { format: { type: "json_object" } }, max_output_tokens: detailed ? 16000 : 8192,
     };
     let response: Response;
     try {

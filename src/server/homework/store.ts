@@ -8,7 +8,7 @@ import { currentUploadTarget, readUploadTarget, resolveUploadTarget } from "./up
 import { GradingStore } from "./grading-store";
 import { needsWrittenCompletionUpdate } from "../../domain/written-completion";
 import { needsReviewTraceUpdate, type ReviewPolicy } from "../../domain/review-policy";
-import { effectiveMemo } from "./memo-context";
+import { effectiveMemo, overlayMemoEdits } from "./memo-context";
 import { DatabaseSync } from "node:sqlite";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdirSync } from "node:fs";
@@ -243,9 +243,8 @@ export class HomeworkStore {
       const pages = this.uploads(date).filter(u=>u.kind==="homework" && u.result).flatMap(u=>ExtractedHomeworkSchema.parse(JSON.parse(u.result!)).pages).filter(p=>{const file=this.file(this.page(p.fileId)?.file_id||"");const owner=file?this.upload(file.upload_id):undefined;return !!file?.stored&&owner?.kind==="homework"&&owner.date===date;});
       report=inferredReportScope(selectedSubmissionReport(this,report),pages);
     }
-    // Read current explanations even before reorganization, without rewriting the saved report.
     const memo = report?.memoId ? this.upload(report.memoId) : undefined;
-    if (report && memo?.result) report.familyNotes = effectiveMemo(this, memo).receipts;
+    const memoEdits = report && memo?.result && this.uploads(date).filter(u => u.kind === "memo").at(-1)?.id === memo.id ? overlayMemoEdits(this, memo, report) : [];
     if (report) report.tasks = report.tasks.map(task => this.completions.view(date, task));
     const pendingUploads=pending?all.map(u=>this.upload(u.id)!).filter(u=>{
       const active=["queued","converting","recognizing","retrying"].includes(u.status);
@@ -254,7 +253,7 @@ export class HomeworkStore {
     }):[];
     const scoped=pendingUploads.filter(u=>u.kind==="homework").map(u=>({upload:u,target:resolveUploadTarget(this,u.id)}));
     const processing=pending?{taskIds:[...new Set(scoped.flatMap(s=>s.target?[s.target.taskId]:[]))],memo:pendingUploads.some(u=>u.kind==="memo"),subjects:[...new Set(scoped.filter(s=>!s.target).flatMap(s=>JSON.parse(s.upload.subjects)))],unclassified:scoped.some(s=>!s.target&&(!s.upload.result||!JSON.parse(s.upload.subjects).length)),retrying:day?.status==="retrying"}:undefined;
-    return { date, processing, grading: this.grading.summary(date), writtenCompletionEnabled: this.writtenCompletionEnabled, reviewPolicy: this.reviewPolicy, status: day?.status || "empty", note: day?.note || "先上传当天的作业备忘录，再把作业照片交给AI整理。", report, uploads: all.map((u) => this.view(u.id)), dates, quota: this.quota(), pending };
+    return { date, processing, ...(memoEdits.length ? { memoEdits } : {}), grading: this.grading.summary(date), writtenCompletionEnabled: this.writtenCompletionEnabled, reviewPolicy: this.reviewPolicy, status: day?.status || "empty", note: day?.note || "先上传当天的作业备忘录，再把作业照片交给AI整理。", report, uploads: all.map((u) => this.view(u.id)), dates, quota: this.quota(), pending };
   }
   close() { this.db.close(); }
 }

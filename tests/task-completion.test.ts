@@ -37,3 +37,18 @@ test("self confirmation notifies the reward checker after an earlier incomplete 
  const rewards=new HomeworkRewards(f.store,f.reading);rewards.tick();assert.equal(f.reading.balance(),0);const task=f.store.snapshot(date).report!.tasks[0];f.store.completions.set(date,task.id,task.completionToken!,true,child);rewards.tick();rewards.tick();assert.equal(f.reading.balance(),1);f.store.completions.set(date,task.id,task.completionToken!,false,child);f.store.completions.set(date,task.id,task.completionToken!,true,child);rewards.tick();assert.equal(f.reading.balance(),1);
  }finally{f.close();}});
 test("history requirement options are optional, bounded and selected by the user, not silently applied to AI context",()=>{const f=fixture();try{const context=new HomeworkConversation(f.store);assert.equal(context.context(date).requirementOptions,undefined);const options=context.context(date,undefined,true).requirementOptions!;assert.ok(options.length>0&&options.length<=20);assert.equal(options[0].title,"复习单元六");}finally{f.close();}});
+
+test("editing a nonwritten requirement keeps a usable button during recheck and never reuses an old confirmation",()=>{const f=fixture();try{
+ const before=f.store.snapshot(date),task=before.report!.tasks[0];
+ f.store.completions.set(date,task.id,task.completionToken!,true,child);
+ const context=new HomeworkConversation(f.store),state=context.context(date),{entryId,...entry}=state.entries[0];
+ context.editEntry({requestId:crypto.randomUUID(),date,revision:state.revision,entryId,entry:{...entry,title:"朗读课文",requirement:"朗读课文三遍，无需提交书面。",format:"oral"}},child.id);
+ const pending=f.store.snapshot(date),updated=pending.report!.tasks[0],row=homeworkSummary(pending)!.rows[0];
+ assert.equal(pending.pending,true);assert.deepEqual(pending.memoEdits,[task.id]);
+ assert.equal(updated.title,"朗读课文");assert.ok(updated.completionToken);assert.notEqual(updated.completionToken,task.completionToken);
+ assert.equal(updated.selfCompletion,undefined);assert.equal(row.selfTask,true);assert.equal(row.activity.text,"待完成");
+ assert.throws(()=>f.store.completions.set(date,task.id,task.completionToken!,true,child),/要求已更新/);
+ f.store.completions.set(date,task.id,updated.completionToken!,true,child);
+ assert.equal(homeworkSummary(f.store.snapshot(date))!.rows[0].activity.text,"已完成");
+ assert.equal(JSON.parse((f.store.db.prepare('SELECT report FROM days WHERE date=?').get(date) as {report:string}).report).tasks[0].title,task.title);
+ }finally{f.close();}});

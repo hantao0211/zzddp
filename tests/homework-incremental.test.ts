@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {createHash} from "node:crypto";
+import {createHash,randomUUID} from "node:crypto";
 import {mkdtempSync,rmSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
@@ -10,8 +10,9 @@ import type {AITask} from "../src/domain/ai-contracts";
 import {ExtractedHomeworkSchema} from "../src/domain/homework";
 import {homeworkSummary} from "../src/domain/homework-summary";
 import {HomeworkStore} from "../src/server/homework/store";
+import {HomeworkConversation} from "../src/server/homework/conversation";
 import {HomeworkWorker} from "../src/server/homework/worker";
-import type {StructuredAI,AIImage} from "../src/server/ai/provider";
+import {AIServiceError,type StructuredAI,type AIImage} from "../src/server/ai/provider";
 const date="2026-11-20",hash=(value:unknown)=>createHash("sha256").update(JSON.stringify(value)).digest("hex");
 function fixture(written=false){
  const dir=mkdtempSync(join(tmpdir(),"xiaobu-incremental-"));let now=Date.parse(date+"T04:00:00Z");
@@ -99,6 +100,63 @@ test("supplemental pages inspect only changed written work and keep other subjec
  }finally{f.cleanup();}
 });
 
+test("memo edits refresh the title before rechecking and can recover from an incomplete multi-page result", async () => {
+  const f = fixture(true);
+  try {
+    f.seed("memo", null, "memo");
+    const exercise = f.seed("homework", "英语", "exercise");
+    const dictation = f.seed("homework", "英语", "dictation");
+    f.seed("homework", "数学", "math");
+    await f.drain();
+    const oldReport = f.store.snapshot(date).report!;
+    const unchanged = oldReport.tasks.find(task => task.subject === "数学");
+    const conversation = new HomeworkConversation(f.store);
+    const context = conversation.context(date);
+    const { entryId, ...entry } = context.entries.find(item => item.subject === "英语")!;
+    const title = "英语练习（除默写部分）";
+    conversation.editEntry({ requestId: randomUUID(), date, revision: context.revision, entryId, entry: { ...entry, title } }, "test-owner");
+
+    const pending = f.store.snapshot(date);
+    const edited = pending.report!.tasks.find(task => task.subject === "英语")!;
+    assert.equal(edited.title, title);
+    assert.equal(edited.writtenCompletion, null);
+    assert.equal(edited.evidence.length, 2);
+    assert.equal(homeworkSummary(pending)!.rows.find(row => row.id === edited.id)!.activity.text, "重新检查中");
+    assert.deepEqual(pending.report!.tasks.find(task => task.subject === "数学"), unchanged);
+    const job = f.store.claim()!;
+    f.store.fail(job, "模拟整理失败", false);
+    assert.equal(homeworkSummary(f.store.snapshot(date))!.rows.find(row => row.id === edited.id)!.activity.text, "待重试");
+    const rawReport = f.store.db.prepare("SELECT report FROM days WHERE date=?").get(date) as { report: string };
+    assert.equal(JSON.parse(rawReport.report).tasks.find((task: { id: string }) => task.id === edited.id).title, entry.title);
+
+    const run = f.ai.run.bind(f.ai);
+    const checked: string[][] = [];
+    f.ai.run = async (task, schema, input, images = []) => {
+      if (task !== "assess_written_completion") return run(task, schema, input, images);
+      const metadata = input as { title: string; scopePolicy: string };
+      assert.equal(metadata.title, title);
+      assert.match(metadata.scopePolicy, /排除项不计入/u);
+      const ids = images.map(image => image.fileId);
+      checked.push(ids);
+      if (ids.length > 1) throw new AIServiceError("INCOMPLETE_RESPONSE", true, "simulated truncation");
+      return schema.parse({ scopeComplete: true, reason: "模拟检查", parts: ids[0] === dictation.pageId ? [] : [{
+        label: "第1题", status: "answered", evidence: { fileId: exercise.pageId, page: 1, excerpt: "模拟已填写" },
+      }] });
+    };
+    f.store.retryDay(date);
+    await f.drain();
+    const finished = f.store.snapshot(date);
+    assert.equal(finished.pending, false);
+    assert.equal(finished.memoEdits, undefined);
+    assert.equal(finished.report!.tasks.find(task => task.id === edited.id)!.writtenCompletion?.status, "done");
+    assert.deepEqual(checked, [[exercise.pageId, dictation.pageId], [exercise.pageId], [dictation.pageId]]);
+    f.restart();
+    f.store.bump(date);
+    await f.drain();
+    assert.equal(checked.length, 3, "Successful split results must be reused on later reorganization");
+  } finally { f.cleanup(); }
+});
+
 
 test("contradictory completeness and an omitted subject label remain conservative without retrying the whole day",async()=>{
  const f=fixture();try{
@@ -133,5 +191,26 @@ test("a contradictory completeness flag cannot turn another subject's page into 
     return schema.parse(result);
   };
   await f.worker().tick();assert.equal(f.store.snapshot(date).report,null);assert.equal(f.store.snapshot(date).status,"retrying");
+ }finally{f.cleanup();}
+});
+
+test("a second edit and undo project the correct applied version without borrowing another subject's photos",async()=>{
+ const f=fixture(true);try{
+  f.seed("memo",null,"memo");f.seed("homework","英语","english");f.seed("homework","数学","math");await f.drain();
+  const service=new HomeworkConversation(f.store),owner="test-owner";
+  const edit=(changes:Record<string,string>)=>{const state=service.context(date),{entryId,...entry}=state.entries.find(e=>e.subject==="英语")!;return service.editEntry({requestId:randomUUID(),date,revision:state.revision,entryId,entry:{...entry,...changes}},owner);};
+  const first=edit({title:"英语口语练习"});await f.drain();
+  const applied=f.store.snapshot(date).report!.tasks.find(t=>t.subject==="英语")!;
+  const second=edit({title:"英语练习（除默写部分）"});
+  assert.equal(f.store.snapshot(date).report!.tasks.find(t=>t.id===applied.id)!.title,"英语练习（除默写部分）");
+  service.undo(second.id,owner);
+  assert.equal(f.store.snapshot(date).report!.tasks.find(t=>t.id===applied.id)!.title,first.title);
+  assert.equal(f.store.snapshot(date).memoEdits,undefined,"Undo to the applied version may safely retain its result");
+  service.undo(first.id,owner);
+  const undone=f.store.snapshot(date).report!.tasks.find(t=>t.id===applied.id)!;
+  assert.equal(undone.title,"英语练习");assert.equal(undone.writtenCompletion,null);assert.deepEqual(f.store.snapshot(date).memoEdits,[applied.id]);
+  edit({subject:"语文",title:"语文练习修正"});
+  const changed=f.store.snapshot(date).report!.tasks.find(t=>t.id===applied.id)!;
+  assert.equal(changed.subject,"语文");assert.equal(changed.coverage,"none");assert.deepEqual(changed.evidence,[]);
  }finally{f.cleanup();}
 });

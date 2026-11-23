@@ -5,7 +5,7 @@ import { needsWrittenCompletionUpdate } from "./written-completion";
 import { needsReviewTraceUpdate, usesReviewTraces } from "./review-policy";
 
 type State = { text: string; tone: "good" | "attention" | "muted" };
-export type HomeworkSummaryRow = { id: string; title: string; subject: string; photo: State; activity: State; photoDetail: string; activityDetail: string; selfTask?: boolean; completionToken?: string; selfConfirmed?: boolean; updating?: boolean; inferred?:boolean; displayTitle?:string };
+export type HomeworkSummaryRow = { id: string; title: string; subject: string; photo: State; activity: State; photoDetail: string; activityDetail: string; selfTask?: boolean; completionToken?: string; selfConfirmed?: boolean; updating?: boolean; memoEdited?: boolean; inferred?:boolean; displayTitle?:string };
 export function homeworkSummary(snapshot: HomeworkSnapshot | null) {
   if (!snapshot?.uploads.length) return null;
   const receipt = (kind: "memo" | "homework") => {
@@ -16,6 +16,14 @@ export function homeworkSummary(snapshot: HomeworkSnapshot | null) {
   const hasPhotos = snapshot.uploads.some(u => u.kind === "homework" && u.files.some(f => f.stored));
   const rows: HomeworkSummaryRow[] = (snapshot.report?.tasks || []).map(original => {
     const task = reviewConclusion(original, snapshot.reviewPolicy);
+    if (snapshot.memoEdits?.includes(task.id) && taskSubmission(task) !== "self") {
+      const hasEvidence = task.evidence.length > 0;
+      const photo: State = hasEvidence ? { text: "已关联", tone: "attention" } : { text: "待匹配", tone: "muted" };
+      const activity: State = snapshot.pending ? { text: "重新检查中", tone: "muted" } : { text: "待重试", tone: "attention" };
+      return { id: task.id, title: task.title, subject: task.subject, photo, activity, memoEdited: true, updating: snapshot.pending,
+        photoDetail: hasEvidence ? "之前关联的照片可继续查看，小步会按新要求核对。" : "已保存新要求，小步会重新核对对应照片。",
+        activityDetail: snapshot.pending ? "正在按新要求重新检查。" : "新要求已保存，重新检查未完成。可以用已上传的照片重试。" };
+    }
     if (taskSubmission(task) === "self") {
       const confirmed=task.selfCompletion;const marked=task.reviewActivity?.status === "marked";
       return {id:task.id,title:task.title,subject:task.subject,selfTask:true,updating:false,completionToken:task.completionToken,selfConfirmed:!!confirmed,photo:{text:"照片可选",tone:"good"},activity:{text:confirmed?"已完成":marked?"已做":"待完成",tone:confirmed||marked?"good":"attention"},photoDetail:"这项通常没有书面成果，不要求交照片。已上传的照片仅作补充参考。",activityDetail:confirmed?`${confirmed.confirmedBy}已确认完成。这是使用者的完成记录，不是AI看图验证。`:marked?"已看到学习痕迹，按家庭约定记为已做；也可以自己确认完成。":"做好后点“我完成了”即可，不用为了证明完成而拍照或补写笔记。"};
