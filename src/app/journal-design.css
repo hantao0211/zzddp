@@ -111,6 +111,7 @@
 .study-shell .hw-home-summary .journal-col-task { width: 53%; }
 .study-shell .hw-home-summary .journal-col-photo { width: 23%; }
 .study-shell .hw-home-summary .journal-col-completion { width: 24%; }
+.study-shell .hw-home-summary .task-manual-label small { font: inherit; white-space: nowrap; }
 .study-shell .hw-home-summary thead th:first-child { width: 53%; }
 .study-shell .hw-home-summary thead th:nth-child(2) { width: 23%; }
 .study-shell .hw-home-summary thead th:nth-child(3) { width: 24%; }
@@ -231,9 +232,10 @@
   .study-shell .hw-summary-heading > div { gap: 6px; font-size: 11px; }
   .study-shell .hw-summary-heading > div > span { font-size: 11px; }
   .study-shell .study-edit-list { font-size: 11px; }
-  .study-shell .hw-home-summary .journal-col-task { width: 49%; }
-  .study-shell .hw-home-summary .journal-col-photo { width: 24%; }
-  .study-shell .hw-home-summary .journal-col-completion { width: 27%; }
+  .study-shell .hw-home-summary .journal-col-task { width: 45%; }
+  .study-shell .hw-home-summary .journal-col-photo { width: 23%; }
+  .study-shell .hw-home-summary .journal-col-completion { width: 32%; }
+  .study-shell .hw-home-summary .task-manual-label small { display: block; font-size: 10px; }
   .study-shell .hw-home-summary tbody th, .study-shell .hw-home-summary td { padding-top: 6px; padding-bottom: 6px; }
   .study-shell .study-task-title > span { font-size: 14px; }
   .study-shell .study-task-title > .study-edit-task { width: 27px; }

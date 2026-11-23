@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { DailyReportSchema, type HomeworkSnapshot, type UploadView } from "../src/domain/homework";
 import { homeworkTaskDetail } from "../src/domain/homework-task-detail";
+import { homeworkSummary } from "../src/domain/homework-summary";
 const date = "2026-11-20";
 const ev = (fileId: string, excerpt = "可定位内容", page = 1) => ({ fileId, excerpt, page });
 function fixture(): HomeworkSnapshot {
@@ -29,6 +30,17 @@ test("invalid, wrong-kind, old-date, unstored and old-memo references cannot bec
   assert.equal(detail.homework.unavailable, 5);
   assert.deepEqual(detail.memo.photos.map(p => p.pageId), ["memo-page"]); assert.equal(detail.memo.unavailable, 2);
   task.evidence = []; assert.equal(homeworkTaskDetail(s, task).homework.photos.length, 0, "never borrow another task's same-subject photo");
+});
+test("nonwritten photo receipts count only unique viewable pages, and manual completion remains distinct from observed traces", () => {
+  const s = fixture(), task = s.report!.tasks[0];
+  Object.assign(task, { title: "复习单元六", requirement: "复习单元六，无需提交书面。", format: "reading", selfCompletion: { confirmedAt: "2026-11-23T00:50:00Z", confirmedBy: "爸爸", role: "admin" } });
+  task.evidence.push(ev("wrong-date-page"), ev("memo-page"), ev("missing-page"));
+  let row = homeworkSummary(s)!.rows[0];
+  assert.equal(row.photo.text, "已收到2张"); assert.equal(row.photoCount, 2); assert.equal(row.activity.text, "已完成（手动确认）");
+  assert.match(row.activityDetail, /爸爸已确认完成/);
+  task.selfCompletion = undefined; task.reviewActivity = { status: "marked", reason: "可见圈画" };
+  row = homeworkSummary(s)!.rows[0]; assert.equal(row.activity.text, "已做"); assert.equal(row.selfConfirmed, false);
+  task.evidence = []; row = homeworkSummary(s)!.rows[0]; assert.equal(row.photo.text, "照片可选"); assert.equal(row.photoCount, 0);
 });
 test("specific unanswered parts preserve their own evidence without treating uncertainty as missing pages", () => {
   const s = fixture(), task = s.report!.tasks[0];
