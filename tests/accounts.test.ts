@@ -183,7 +183,7 @@ test("reading routes share account authentication; children can read and check i
   assert.equal((await f.send("reading/rules","PATCH",rules,parent.cookie,{Origin:"https://other.test"})).status,403);
   const reward=await f.send("reading/rewards","POST",{title:"模拟亲子活动",cost:2},parent.cookie);assert.equal(reward.status,200);
   assert.equal((await f.send("reading/rewards","POST",{title:"伪造奖励",cost:1},child.cookie)).status,403);
-  const redemption=randomUUID();assert.equal((await f.send("reading/redemptions","POST",{id:redemption,rewardId:reward.data.id},child.cookie)).status,200);
+  const redemption=randomUUID();assert.equal((await f.send("reading/redemptions","POST",{id:redemption,rewardId:reward.data.id,revision:reward.data.revision},child.cookie)).status,200);
   assert.equal((await f.send("reading/redemptions/"+redemption,"PATCH",{status:"fulfilled"},child.cookie)).status,403);
   assert.equal((await f.send("reading/redemptions/"+redemption,"PATCH",{status:"approved"},parent.cookie)).status,200);
   assert.equal((await f.send("reading/redemptions/"+redemption,"PATCH",{status:"fulfilled"},parent.cookie)).status,200);
@@ -343,11 +343,38 @@ test("reward expiry is parent-controlled and enforced on the authenticated redem
  const child=await f.login("child"),parent=await f.login("parent");
  const book=await f.send("reading/books","POST",{title:"模拟书"},child.cookie);
  await f.send("reading/logs","POST",{id:randomUUID(),version:0,bookId:book.data.id,date:f.reading.today(),startPage:1,endPage:2,minutes:5,summary:"我读到朋友们一起想办法。"},child.cookie);
- const reward=await f.send("reading/rewards","POST",{title:"模拟过期电影",cost:1,expiresOn:"2020-01-01"},parent.cookie);assert.equal(reward.status,200);
+ assert.equal((await f.send("reading/rewards","POST",{title:"模拟过期电影",cost:1,expiresOn:"2020-01-01"},parent.cookie)).status,400);
+ const legacyId=randomUUID();f.reading.db.prepare("INSERT INTO rewards VALUES(?,?,?,1,1)").run(legacyId,"模拟过期电影","");f.reading.db.prepare("INSERT INTO reward_deadlines VALUES(?,?)").run(legacyId,"2020-01-01");const reward={data:f.reading.shop.reward(legacyId)};
  assert.equal((await f.send("reading/rewards/"+reward.data.id,"PATCH",{title:"延期",cost:1,expiresOn:null},child.cookie)).status,403);
  assert.equal((await f.send("reading/rewards/"+reward.data.id,"PATCH",{title:"延期",cost:1,expiresOn:null},parent.cookie,{Origin:"https://other.test"})).status,403);
  const denied=await f.send("reading/redemptions","POST",{id:randomUUID(),rewardId:reward.data.id},child.cookie);assert.equal(denied.status,409);
  assert.equal((await f.send("reading/state","GET",undefined,child.cookie)).data.growth.balance,2);
- assert.equal((await f.send("reading/rewards/"+reward.data.id,"PATCH",{title:"延期",cost:1,expiresOn:f.reading.today()},parent.cookie)).status,200);
- assert.equal((await f.send("reading/redemptions","POST",{id:randomUUID(),rewardId:reward.data.id},child.cookie)).status,200);
+ const renewed=await f.send("reading/rewards/"+reward.data.id,"PATCH",{title:"延期",cost:1,expiresOn:f.reading.today(),revision:reward.data.revision},parent.cookie);assert.equal(renewed.status,200);
+ assert.equal((await f.send("reading/redemptions","POST",{id:randomUUID(),rewardId:reward.data.id,revision:renewed.data.revision},child.cookie)).status,200);
 }finally{await f.cleanup();}});
+
+test("growth setup and activity confirmation require parents, preserve quotes, enforce caps and use no AI",async()=>{const f=await fixture();try{
+ const admin=await f.bootstrap();for(const role of ["child","parent"] as const)await f.send("admin/accounts","POST",{username:role,name:"模拟"+role,role,password},admin.cookie);const child=await f.login("child"),parent=await f.login("parent");
+ assert.equal((await f.send("reading/economy/setup","POST",{},child.cookie)).status,403);
+ assert.equal((await f.send("reading/economy/setup","POST",{},parent.cookie,{Origin:"https://other.test"})).status,403);
+ const first=await f.send("reading/economy/setup","POST",{},parent.cookie);assert.equal(first.status,200);assert.equal(first.data.rewardIds.length,4);assert.equal((await f.send("reading/economy/setup","POST",{},parent.cookie)).data.alreadyInstalled,true);
+ const input={id:randomUUID(),key:"housework",date:f.reading.today(),note:"叠衣服"};
+ assert.equal((await f.send("reading/activities","POST",{...input,points:100},child.cookie)).status,400);
+ assert.equal((await f.send("reading/activities","POST",input,child.cookie)).data.status,"pending");
+ assert.equal((await f.send("reading/activities","POST",{...input,id:randomUUID()},child.cookie)).status,409);
+ assert.equal((await f.send("reading/activities/"+input.id,"PATCH",{status:"approved"},child.cookie)).status,403);
+ assert.equal((await f.send("reading/activities/"+input.id,"PATCH",{status:"approved"},parent.cookie,{Origin:"https://other.test"})).status,403);
+ assert.equal((await f.send("reading/activities/"+input.id,"PATCH",{status:"approved"},parent.cookie)).status,200);
+ await f.send("reading/activities/"+input.id,"PATCH",{status:"approved"},parent.cookie);
+ const state=(await f.send("reading/state","GET",undefined,child.cookie)).data;assert.equal(state.growth.balance,1);assert.equal(state.rules.dailyPoints,1);
+ const shop=state.rewards.find((r:any)=>r.kind==="shopping");
+ assert.equal((await f.send("reading/redemptions","POST",{id:randomUUID(),rewardId:shop.id,amountCents:100},child.cookie)).status,409);
+ const id=randomUUID();assert.equal((await f.send("reading/redemptions","POST",{id,rewardId:shop.id,revision:shop.revision,amountCents:100},child.cookie)).status,200);
+ assert.equal((await f.send("reading/redemptions","POST",{id,rewardId:shop.id,revision:shop.revision,amountCents:100},child.cookie)).status,200);
+ assert.equal((await f.send("reading/state","GET",undefined,child.cookie)).data.growth.balance,0);
+ assert.equal((await f.send("reading/rewards/"+shop.id+"/history","GET",undefined,child.cookie)).status,403);
+ assert.equal((await f.send("reading/rewards/"+shop.id+"/history","GET",undefined,parent.cookie)).data.items.length,1);
+ assert.equal(f.calls(),0);
+}finally{await f.cleanup();}});
+
+test("student profile is private to authenticated family accounts and editable only by a parent",async()=>{const f=await fixture();try{const admin=await f.bootstrap();await f.send("admin/accounts","POST",{username:"child",name:"模拟孩子",role:"child",password},admin.cookie);const child=await f.login("child");const input={grade:4,semester:2,region:"模拟地区",school:"模拟学校"};assert.equal((await f.send("reading/student-profile","PATCH",input,child.cookie)).status,403);assert.equal((await f.send("reading/student-profile","PATCH",input,admin.cookie,{Origin:"https://other.test"})).status,403);const saved=await f.send("reading/student-profile","PATCH",input,admin.cookie);assert.equal(saved.status,200);assert.equal((await f.send("reading/state","GET",undefined,child.cookie)).data.studentProfile.school,input.school);assert.equal((await f.send("reading/student-profile","PATCH",{...input,grade:5},admin.cookie)).status,409);assert.equal((await f.send("reading/state")).status,401);}finally{await f.cleanup();}});

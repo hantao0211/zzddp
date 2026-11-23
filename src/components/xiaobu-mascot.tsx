@@ -1,0 +1,1 @@
+export function XiaobuMascot({className=""}:{className?:string}){return <img className={`xiaobu-mascot ${className}`} src="/mascot/xiaobu-rabbit.webp" alt="" aria-hidden="true" width={80} height={80} decoding="async"/>;}

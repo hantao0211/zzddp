@@ -38,3 +38,6 @@ assistant-access-code
 .codex/
 .agents/
 parent-setup-code
+
+# Local family memory: private learning profile, never publish.
+.local/
