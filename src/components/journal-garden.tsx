@@ -26,14 +26,15 @@ export function useJournalDecoration(viewerKey: string) {
   return { sticker, choose };
 }
 
-export function JournalStickerPicker({ sticker, onChoose }: { sticker: JournalSticker; onChoose: (next: JournalSticker) => void }) {
+function JournalStickerPicker({ sticker, onChoose }: { sticker: JournalSticker; onChoose: (next: JournalSticker) => void }) {
   return <div className="journal-stickers" role="group" aria-label="选择花盆贴纸">
     {stickers.map(item => <button type="button" key={item.id} aria-label={`选择${item.label}贴纸`} aria-pressed={sticker === item.id} title={`${item.label}贴纸`} onClick={() => onChoose(item.id)}><item.Icon size={19} aria-hidden="true" /></button>)}
   </div>;
 }
 
-export function JournalGarden({ hint, sticker }: { hint: string; sticker: JournalSticker }) {
-  const Icon = stickers.find(item => item.id === sticker)!.Icon;
+export function JournalGarden({ hint, sticker, onChoose }: { hint: string; sticker: JournalSticker; onChoose: (next: JournalSticker) => void }) {
+  const selected = stickers.find(item => item.id === sticker)!;
+  const Icon = selected.Icon;
   return <section className="journal-garden" aria-label="手帐花园">
     <span className="journal-tape-label">今天也在长大</span>
     <div className="journal-garden-copy">
@@ -41,7 +42,7 @@ export function JournalGarden({ hint, sticker }: { hint: string; sticker: Journa
       <h2>让小小的努力，<br />开出自己的花。</h2>
       <p className="study-next-step">{hint}</p>
     </div>
-    <div className="journal-garden-decoration">
+    <div className="journal-garden-decoration" role="img" aria-label={`花盆贴着${selected.label}贴纸`}>
       <div className="journal-flower" aria-hidden="true">
         <span className="journal-ground" /><span className="journal-stem" />
         {[1, 2, 3, 4, 5].map(n => <span className={`journal-petal p${n}`} key={n} />)}
@@ -49,6 +50,10 @@ export function JournalGarden({ hint, sticker }: { hint: string; sticker: Journa
         <span className="journal-book-stack" /><span className="journal-book-stack s2" />
         <span className="journal-pot" /><span className="journal-pot-label"><Icon size={16} /></span>
       </div>
+    </div>
+    <div className="journal-garden-tools">
+      <span>装饰我的花盆</span>
+      <JournalStickerPicker sticker={sticker} onChoose={onChoose} />
     </div>
   </section>;
 }
