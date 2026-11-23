@@ -55,7 +55,10 @@ export function JournalGarden({ hint, sticker, onChoose }: { hint: string; stick
   const selected = stickers.find(item => item.id === sticker)!;
   const Icon = selected.Icon;
   return <section className="journal-garden" aria-label="手帐花园">
+    <span className="journal-tape-label">今天也在长大</span>
     <div className="journal-garden-copy">
+      <span className="journal-eyebrow"><Sun size={16} aria-hidden="true" />新的一页，开始啦</span>
+      <h2>让小小的努力，<br />开出自己的花。</h2>
       <p className="study-next-step">{hint}</p>
     </div>
     <div className="journal-garden-tools" ref={tools} onBlur={event => {

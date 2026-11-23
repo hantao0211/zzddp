@@ -7,7 +7,7 @@
   --field-border: #d6c6b6;
   --field-placeholder: #78665c;
   --field-disabled-bg: #eae2d8;
-  --action-bg: #b44b64;
+  --action-bg: #bb536e;
   --action-hover-bg: #963a50;
 }
 
@@ -50,6 +50,7 @@ input:is([type=checkbox], [type=radio]), progress { accent-color: var(--accent);
     --journal-green: #b2cfaf;
     --journal-yellow: #53432b;
     --journal-lilac: #44364f;
+    --journal-line: #57474f66;
     --field-bg: #342c32;
     --field-focus-bg: #3c2e37;
     --field-border: #8f7783;
