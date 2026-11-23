@@ -1,3 +1,4 @@
+import {defaultRewardIcon,RewardIconInputSchema} from "../../domain/reward-icons";
 import { createHash,randomUUID } from "node:crypto";
 import type { ReadingStore } from "./store";
 import { RewardInputSchema,type Reward,type Redemption } from "../../domain/reading";
@@ -13,6 +14,7 @@ const activeStatuses="('pending','approved','fulfilled')";
 
 export class FamilyShop {
  constructor(private store:ReadingStore){store.db.exec(`
+  CREATE TABLE IF NOT EXISTS reward_appearance(reward_id TEXT PRIMARY KEY,icon TEXT NOT NULL);
   CREATE TABLE IF NOT EXISTS reward_policies(reward_id TEXT PRIMARY KEY,version INTEGER NOT NULL);
   CREATE TABLE IF NOT EXISTS reward_policy_versions(reward_id TEXT NOT NULL,version INTEGER NOT NULL,data TEXT NOT NULL,revision TEXT NOT NULL,request_hash TEXT NOT NULL,PRIMARY KEY(reward_id,version));
   CREATE TABLE IF NOT EXISTS redemption_contracts(redemption_id TEXT PRIMARY KEY,reward_id TEXT NOT NULL,version INTEGER NOT NULL,data TEXT NOT NULL,amount_cents INTEGER NOT NULL,period TEXT NOT NULL,approved_on TEXT,use_until TEXT,refunded_points INTEGER);
@@ -33,10 +35,12 @@ export class FamilyShop {
   const base=this.base(id);if(!base)throw new HomeworkError(404,"奖励不存在。");
   const stored=this.version(id),defaults=OfferPolicySchema.parse({});
   const contract:RewardContract=stored?JSON.parse(stored.data):{...defaults,title:base.title,description:base.description,cost:base.cost,active:!!base.active,startsOn:"",expiresOn:base.expires_on,version:0};
-  return{id,...contract,revision:stored?.revision||hash(contract),legacy:!stored,usage:this.usage(id,contract.version,contract.monthlyBudgetCents)};
+  const appearance=this.store.db.prepare("SELECT icon FROM reward_appearance WHERE reward_id=?").get(id) as {icon:Reward["icon"]}|undefined;
+  return{id,...contract,icon:appearance?.icon||defaultRewardIcon(contract.title),revision:stored?.revision||hash(contract),legacy:!stored,usage:this.usage(id,contract.version,contract.monthlyBudgetCents)};
  }
  list():Reward[]{return(this.store.db.prepare("SELECT id FROM rewards ORDER BY rowid DESC").all() as {id:string}[]).map(r=>this.reward(r.id));}
  history(id:string){this.reward(id);return(this.store.db.prepare("SELECT data FROM reward_policy_versions WHERE reward_id=? ORDER BY version DESC").all(id) as {data:string}[]).map(r=>JSON.parse(r.data) as RewardContract);}
+ setIcon(id:string,value:unknown,actor:string){const {icon}=RewardIconInputSchema.parse(value);return this.store.transaction(()=>{this.reward(id);this.store.db.prepare("INSERT INTO reward_appearance VALUES(?,?) ON CONFLICT(reward_id) DO UPDATE SET icon=excluded.icon").run(id,icon);this.store.audit(actor,"change-reward-icon",id);return this.reward(id);});}
  save(value:unknown,actor:string,id?:string){const v=RewardInputSchema.parse(value);return this.store.transaction(()=>this.write(v,actor,id));}
  /** Called inside the wish/setup transaction as well as the normal editor transaction. */
  write(v:ReturnType<typeof RewardInputSchema.parse>,actor:string,id?:string):Reward {
@@ -50,13 +54,14 @@ export class FamilyShop {
   const expiresOn=v.expiresOn||addDays(s.today(),v.offerDays-1);
   if(expiresOn<s.today())throw new HomeworkError(400,"新一期的截止日期不能早于今天。");
   if(v.kind==="shopping"&&!v.monthlyBudgetCents)throw new HomeworkError(400,"请设置购物卡的每月金额上限。");
-  const {revision:_revision,requestId:_requestId,changeReason,...input}=v;
+  const {revision:_revision,requestId:_requestId,changeReason,icon,...input}=v;
   const contract:RewardContract={...input,expiresOn,startsOn:s.today(),version:(old?.version||0)+1,...(old&&changeReason?{changeReason,changedAt:s.time()}:{})};
-  if(old?.legacy){const{id:_id,revision:_r,legacy:_l,usage:_u,...original}=old;s.db.prepare("INSERT OR IGNORE INTO reward_policy_versions VALUES(?,?,?,?,?)").run(key,0,JSON.stringify(original),hash(original),"legacy-snapshot");}
+  if(old?.legacy){const{id:_id,revision:_r,legacy:_l,usage:_u,icon:_icon,...original}=old;s.db.prepare("INSERT OR IGNORE INTO reward_policy_versions VALUES(?,?,?,?,?)").run(key,0,JSON.stringify(original),hash(original),"legacy-snapshot");}
   s.db.prepare("INSERT INTO rewards(id,title,description,cost,active) VALUES(?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET title=excluded.title,description=excluded.description,cost=excluded.cost,active=excluded.active").run(key,v.title,v.description,v.cost,Number(v.active));
   s.db.prepare("INSERT INTO reward_deadlines VALUES(?,?) ON CONFLICT(reward_id) DO UPDATE SET expires_on=excluded.expires_on").run(key,expiresOn);
   s.db.prepare("INSERT INTO reward_policy_versions VALUES(?,?,?,?,?)").run(key,contract.version,JSON.stringify(contract),hash(contract),fingerprint);
   s.db.prepare("INSERT INTO reward_policies VALUES(?,?) ON CONFLICT(reward_id) DO UPDATE SET version=excluded.version").run(key,contract.version);
+  if(icon)s.db.prepare("INSERT INTO reward_appearance VALUES(?,?) ON CONFLICT(reward_id) DO UPDATE SET icon=excluded.icon").run(key,icon);
   s.audit(actor,old?changeReason?"correct-reward-offer":"renew-reward-offer":"publish-reward-offer",key+":"+contract.version);return this.reward(key);
  }
  redeem(input:RedemptionInput,viewer:Viewer){this.expire();const s=this.store;return s.transaction(()=>{

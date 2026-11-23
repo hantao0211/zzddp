@@ -17,5 +17,25 @@
 .mall-item-more{margin-top:auto;color:var(--accent);font-size:13px;padding-top:6px}
 .study-chat-button{display:inline-flex;align-items:center;justify-content:center;gap:5px;color:var(--accent);border:1px solid var(--border);border-radius:24px;background:var(--journal-paper);padding:4px 12px;min-height:40px;flex-shrink:0;touch-action:manipulation;font-size:14px}
 .study-chat-button .xiaobu-mascot{width:34px;height:34px}
-@media(max-width:700px){.reading-main .reading-rewards.mall-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.mall-item{padding:13px 11px;gap:7px}.mall-grid .mall-item h3{font-size:15px}.mall-grid .mall-item strong{font-size:15px}.mall-item-icon{width:34px;height:34px}.study-topbar{flex-wrap:wrap}.study-chat-button{order:3;margin-left:auto;min-height:36px;font-size:13px;padding:2px 11px}.study-chat-button .xiaobu-mascot{width:30px;height:30px}}
+@media(max-width:700px){.reading-main .reading-rewards.mall-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.mall-item{padding:13px 11px;gap:7px}.mall-grid .mall-item h3{font-size:15px}.mall-grid .mall-item strong{font-size:15px}.mall-item-icon{width:34px;height:34px}}
 .mall-item .reading-token{gap:4px}.mall-item .reading-token>svg{width:17px;height:17px}.mall-item .reading-token small{display:inline;font-size:11px;margin-left:3px;white-space:nowrap}
+
+/* Compact reward tiles: title and icon share a row; complete terms live in the dialog. */
+.mall-grid .mall-item{aspect-ratio:1;min-height:162px;height:100%;gap:8px;padding:16px;line-height:1.4}
+.mall-item-heading{display:flex;align-items:center;gap:8px;width:100%;min-width:0;min-height:40px}
+.mall-item-heading .mall-item-icon{width:32px;height:32px;border-radius:10px;flex-shrink:0}
+.mall-grid .mall-item h3{font-size:15px;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.mall-item-more{font-size:12px;padding-top:0}
+.reward-icon-choices{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;border:0;padding:0;margin:12px 0 22px;min-width:0}
+.reward-icon-choices legend{margin-bottom:10px;color:var(--muted)}
+.reward-icon-choices button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;min-width:0;min-height:65px;padding:8px 4px;border:1px solid var(--border);border-radius:12px;background:var(--journal-paper);color:var(--muted);font-size:12px;touch-action:manipulation}
+.reward-icon-choices button[aria-pressed=true]{border-color:var(--accent);background:var(--journal-pink);color:var(--accent)}
+.study-topbar{flex-wrap:nowrap}.study-topbar-actions .study-chat-button{margin-left:0;order:0}
+@media(max-width:899px){.study-chat-button>span{display:none}.study-topbar-actions .study-chat-button{width:40px;min-width:40px;height:44px;min-height:44px;padding:3px;border-radius:12px}.study-chat-button .xiaobu-mascot{width:32px;height:32px}}
+@media(max-width:700px){.mall-grid .mall-item{padding:12px 10px;gap:6px;min-height:150px}.mall-item-heading{gap:6px;min-height:38px}.mall-item-heading .mall-item-icon{width:28px;height:28px;border-radius:9px}.mall-item-icon svg{width:20px;height:20px}.mall-grid .mall-item h3{font-size:14px}.mall-item small{font-size:12px}.mall-item .reading-token small{font-size:10px}}
+@media(max-width:420px){.study-topbar{gap:6px}.study-topbar .study-brand-mobile{font-size:16px;gap:4px;white-space:nowrap}.study-brand-mobile>svg{width:20px;height:20px}.study-topbar-actions{gap:3px}.study-topbar-actions .study-chat-button,.study-topbar .study-help,.study-topbar .study-refresh-button,.study-topbar .study-parent-mobile{width:34px;min-width:34px;height:40px;min-height:40px;padding:3px}.study-topbar .study-account>summary{padding:0;min-height:40px}.study-topbar .study-profile-icon{width:30px;height:30px}.study-chat-button .xiaobu-mascot{width:30px;height:30px}}
+
+@media(max-width:360px){.mall-grid .mall-item{min-height:140px;padding:10px 8px;gap:5px}.mall-grid .mall-item h3{font-size:13px}.mall-item-heading{gap:5px}.mall-item-heading .mall-item-icon{width:24px;height:28px}.mall-item .reading-token{gap:2px}.mall-item .reading-token>svg{width:14px;height:14px}}
+.mall-item-footer{display:flex;align-items:center;justify-content:space-between;gap:5px;width:100%;margin-top:auto;min-width:0}
+.mall-item-footer .mall-item-more{margin:0;flex-shrink:0;white-space:nowrap}
+.mall-grid .mall-item .mall-item-footer small{font-size:11px;line-height:1.35}

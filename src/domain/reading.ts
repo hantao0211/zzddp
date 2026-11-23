@@ -1,3 +1,4 @@
+import {RewardIconSchema} from "./reward-icons";
 import {z} from "zod";
 import {OfferFields,type RewardUsage,type ActivityState} from "./growth-economy";
 import {DaySchema} from "./calendar";
@@ -15,7 +16,7 @@ export const ReadingReviewSchema=z.object({summaryFeedback:text(900).min(1),stre
 export type ReadingReview=z.infer<typeof ReadingReviewSchema>&{basis:"provided_excerpt"|"provided_image"|"none";timingNote:string};
 export type ReadingBook=BookInput&{id:string;revision:string;finished:boolean;description:string;sourceUrl:string|null;createdAt:string;minutes:number;uniquePages:number;logCount:number;lastReadPage:number|null};
 export type ReadingLog={id:string;version:number;bookId:string;date:string;startPage:number;endPage:number;minutes:number;summary:string;chapter:string;reflection:string;excerpt:string;imageId:string|null;actorId:string;backfilled:boolean;createdAt:string;updatedAt:string;reviewStatus:"queued"|"running"|"done"|"failed";review:ReadingReview|null;canEdit:boolean};
-export const RewardInputSchema=z.object({title:text(80).min(1),description:text(500).default(""),cost:z.number().int().min(1).max(100000),active:z.boolean().default(true),expiresOn:DaySchema.nullable().default(null),...OfferFields,revision:z.string().regex(/^[a-f0-9]{64}$/).optional(),changeReason:text(500).min(1).optional(),requestId:z.string().uuid().optional()}).strict();
+export const RewardInputSchema=z.object({title:text(80).min(1),description:text(500).default(""),cost:z.number().int().min(1).max(100000),icon:RewardIconSchema.optional(),active:z.boolean().default(true),expiresOn:DaySchema.nullable().default(null),...OfferFields,revision:z.string().regex(/^[a-f0-9]{64}$/).optional(),changeReason:text(500).min(1).optional(),requestId:z.string().uuid().optional()}).strict();
 export type Reward=Omit<z.infer<typeof RewardInputSchema>,"revision"|"requestId"|"changeReason">&{id:string;revision:string;version:number;startsOn:string;legacy:boolean;usage:RewardUsage;changeReason?:string;changedAt?:string};
 export const WishInputSchema=z.object({id:z.string().uuid(),title:text(80).min(1),description:text(500).default("")}).strict();
 export const WishDecisionSchema=z.discriminatedUnion("status",[

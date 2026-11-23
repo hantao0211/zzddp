@@ -49,6 +49,7 @@ export class ReadingHTTP{
  if(path==="/activity-rules"&&req.method==="PATCH"){send(res,this.store.activities.setRules(await body(),viewer));return;}
  if(path==="/homework-rules"&&req.method==="PATCH"){send(res,this.store.setHomeworkRewardRules(await body(),viewer));return;}
  if(path==="/rules"&&req.method==="PATCH"){send(res,this.store.setRules(await body(),viewer.id));return;}
+ const rewardIcon=path.match(/^\/rewards\/([a-f0-9-]{36})\/icon$/);if(rewardIcon&&req.method==="PATCH"){send(res,this.store.shop.setIcon(rewardIcon[1],await body(),viewer.id));return;}
  const reward=path.match(/^\/rewards(?:\/([a-f0-9-]{36}))?$/);if(reward&&req.method===(reward[1]?"PATCH":"POST")){send(res,this.store.saveReward(await body(),viewer.id,reward[1]));return;}
  const redemption=path.match(/^\/redemptions\/([a-f0-9-]{36})$/);if(redemption&&req.method==="PATCH"){const v=z.object({status:z.enum(["approved","rejected","fulfilled"])}).strict().parse(await body());send(res,this.store.decide(redemption[1],v.status,viewer.id));return;}
  throw new HomeworkError(404,"没有找到这个阅读功能。");
