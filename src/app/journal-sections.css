@@ -55,6 +55,10 @@
     background: var(--theme-green-soft, #edf3e7);
   }
 
+  .study-shell .reading-history-filters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+  .study-shell .reading-history-filters label { min-width: 0; }
+  .reading-history-specific-date { grid-column: 1 / -1; }
+
   /* A growth overview has one hierarchy, including its expanded sections. */
   .study-shell .reading-growth-details > .card {
     border: 0;
