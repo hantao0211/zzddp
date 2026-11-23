@@ -51,6 +51,7 @@ export type UploadView = {
   files: { id: string; name: string; size: number; stored: boolean; pages: { id: string; number: number }[] }[];
 };
 export type HomeworkSnapshot = {
+  dayPlan?: import("./homework-calendar").HomeworkDayPlan;
   memoEdits?: string[];
   processing?: { taskIds?: string[]; subjects: z.infer<typeof SubjectSchema>[]; memo: boolean; unclassified: boolean; retrying: boolean };
   homeworkReward?: import("./homework-reward").HomeworkRewardStatus;

@@ -296,3 +296,21 @@ test("book lookup reports invalid ISBN before spending quota; successful empty s
   assert.equal(f.reading.db.prepare("SELECT calls FROM lookup_budget").get()!.calls,1);assert.equal(f.calls(),0);
  }finally{await f.cleanup();}
 });
+
+test("children and parents share no-homework settings; login, same origin and strict inputs remain required", async () => {
+ const f=await fixture();try {
+  assert.equal((await f.send("learning/day-plan","POST",{date:"2026-11-23",noHomework:true})).status,401);
+  const admin=await f.bootstrap();
+  for(const role of ["child","parent"] as const)await f.send("admin/accounts","POST",{username:role,name:"模拟"+role,role,password},admin.cookie);
+  const child=await f.login("child"),parent=await f.login("parent");
+  assert.equal((await f.send("learning/day-plan","POST",{date:"2026-11-23",noHomework:false},child.cookie,{Origin:"https://other.test"})).status,403);
+  assert.equal((await f.send("learning/day-plan","POST",{date:"2026-11-23",noHomework:false},child.cookie)).status,200);
+  let state=await f.send("learning/state?date=2026-11-23","GET",undefined,parent.cookie);
+  assert.equal(state.data.dayPlan.noHomework,false);assert.equal(state.data.dayPlan.source,"date");
+  assert.equal((await f.send("learning/day-plan","POST",{date:"2026-11-23",noHomework:null,weekdays:[2]},parent.cookie)).status,200);
+  state=await f.send("learning/state?date=2026-11-24","GET",undefined,child.cookie);
+  assert.equal(state.data.dayPlan.noHomework,true);assert.deepEqual(state.data.dayPlan.weekdays,[2]);
+  assert.equal((await f.send("learning/day-plan","POST",{date:"2026-02-30",weekdays:[1]},child.cookie)).status,400);
+  assert.equal(f.calls(),0);
+ }finally{await f.cleanup();}
+});

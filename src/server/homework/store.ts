@@ -1,3 +1,4 @@
+import { HomeworkDayPlanInputSchema, HomeworkWeekdaysSchema, resolveHomeworkDayPlan } from "../../domain/homework-calendar";
 import { selectedSubmissionReport } from "./selected-submission";
 import { HomeworkUsageLog } from "./usage";
 import { TaskCompletions } from "./task-completions";
@@ -50,6 +51,8 @@ export class HomeworkStore {
       CREATE TABLE IF NOT EXISTS analysis_cache (key TEXT PRIMARY KEY, result TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS homework_quota_waits (job_id INTEGER PRIMARY KEY REFERENCES jobs(id));
       CREATE TABLE IF NOT EXISTS homework_quota (id INTEGER PRIMARY KEY CHECK(id=1), daily_calls INTEGER NOT NULL CHECK(daily_calls BETWEEN 1 AND 5000), updated_by TEXT NOT NULL, updated_at TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS homework_calendar_settings (id INTEGER PRIMARY KEY CHECK(id=1), weekdays TEXT NOT NULL, updated_by TEXT NOT NULL, updated_at TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS homework_day_plans (date TEXT PRIMARY KEY, no_homework INTEGER NOT NULL CHECK(no_homework IN (0,1)), updated_by TEXT NOT NULL, updated_at TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS budget (day TEXT PRIMARY KEY, calls INTEGER NOT NULL DEFAULT 0, batches INTEGER NOT NULL DEFAULT 0, bytes INTEGER NOT NULL DEFAULT 0);
       CREATE INDEX IF NOT EXISTS jobs_queue ON jobs(status,next_at,id); CREATE INDEX IF NOT EXISTS uploads_date ON uploads(date);
       PRAGMA user_version=1;`);
@@ -236,10 +239,31 @@ export class HomeworkStore {
       this.bump(date);
     });
   }
+  dayPlan(date: string) {
+    const settings = this.db.prepare("SELECT weekdays FROM homework_calendar_settings WHERE id=1").get() as { weekdays: string } | undefined;
+    const weekdays = settings ? HomeworkWeekdaysSchema.parse(JSON.parse(settings.weekdays)) : [1];
+    const saved = this.db.prepare("SELECT no_homework FROM homework_day_plans WHERE date=?").get(date) as { no_homework: number } | undefined;
+    const hasWork = !!this.db.prepare("SELECT id FROM uploads WHERE date=? LIMIT 1").get(date)
+      || !!this.db.prepare("SELECT date FROM days WHERE date=? AND report IS NOT NULL").get(date);
+    return resolveHomeworkDayPlan(date, weekdays, saved ? !!saved.no_homework : null, hasWork);
+  }
+  setDayPlan(value: unknown, actor: string) {
+    const parsed = HomeworkDayPlanInputSchema.safeParse(value);
+    if (!parsed.success) throw new HomeworkError(400, "请选择有效日期和无作业日安排。");
+    const plan = parsed.data;
+    return this.transaction(() => {
+      if (plan.noHomework === true && this.dayPlan(plan.date).hasWork) throw new HomeworkError(409, "这一天已有作业资料，继续显示作业进展；每周无作业日安排仍可修改。");
+      const updatedAt = new Date(this.now()).toISOString();
+      if (plan.weekdays !== undefined) this.db.prepare("INSERT INTO homework_calendar_settings(id,weekdays,updated_by,updated_at) VALUES(1,?,?,?) ON CONFLICT(id) DO UPDATE SET weekdays=excluded.weekdays,updated_by=excluded.updated_by,updated_at=excluded.updated_at").run(JSON.stringify(plan.weekdays), actor, updatedAt);
+      if (plan.noHomework === null) this.db.prepare("DELETE FROM homework_day_plans WHERE date=?").run(plan.date);
+      else if (plan.noHomework !== undefined) this.db.prepare("INSERT INTO homework_day_plans(date,no_homework,updated_by,updated_at) VALUES(?,?,?,?) ON CONFLICT(date) DO UPDATE SET no_homework=excluded.no_homework,updated_by=excluded.updated_by,updated_at=excluded.updated_at").run(plan.date, Number(plan.noHomework), actor, updatedAt);
+      return this.dayPlan(plan.date);
+    });
+  }
   snapshot(date: string): HomeworkSnapshot {
     const day = this.db.prepare("SELECT * FROM days WHERE date=?").get(date) as { status: string; note: string; report: string | null } | undefined;
     const all = this.db.prepare("SELECT id FROM uploads WHERE date=? ORDER BY created_at DESC,rowid DESC").all(date) as { id: string }[];
-    const dates = (this.db.prepare("SELECT DISTINCT date FROM uploads ORDER BY date DESC").all() as { date: string }[]).map((r) => r.date);
+    const dates = (this.db.prepare("SELECT date FROM uploads UNION SELECT date FROM homework_day_plans ORDER BY date DESC").all() as { date: string }[]).map((r) => r.date);
     const pending = !!this.db.prepare("SELECT id FROM jobs WHERE date=? AND status IN ('queued','running') AND (kind='recognize' OR revision=(SELECT revision FROM days WHERE date=jobs.date)) LIMIT 1").get(date);
     let report = day?.report ? reviewReportConclusion(DailyReportSchema.parse(JSON.parse(day.report)), this.reviewPolicy) : null;
     if (report) {
@@ -256,7 +280,7 @@ export class HomeworkStore {
     }):[];
     const scoped=pendingUploads.filter(u=>u.kind==="homework").map(u=>({upload:u,target:resolveUploadTarget(this,u.id)}));
     const processing=pending?{taskIds:[...new Set(scoped.flatMap(s=>s.target?[s.target.taskId]:[]))],memo:pendingUploads.some(u=>u.kind==="memo"),subjects:[...new Set(scoped.filter(s=>!s.target).flatMap(s=>JSON.parse(s.upload.subjects)))],unclassified:scoped.some(s=>!s.target&&(!s.upload.result||!JSON.parse(s.upload.subjects).length)),retrying:day?.status==="retrying"}:undefined;
-    return { date, processing, ...(memoEdits.length ? { memoEdits } : {}), grading: this.grading.summary(date), writtenCompletionEnabled: this.writtenCompletionEnabled, reviewPolicy: this.reviewPolicy, status: day?.status || "empty", note: day?.note || "先上传当天的作业备忘录，再把作业照片交给AI整理。", report, uploads: all.map((u) => this.view(u.id)), dates, quota: this.quota(), pending };
+    return { date, dayPlan: this.dayPlan(date), processing, ...(memoEdits.length ? { memoEdits } : {}), grading: this.grading.summary(date), writtenCompletionEnabled: this.writtenCompletionEnabled, reviewPolicy: this.reviewPolicy, status: day?.status || "empty", note: day?.note || "先上传当天的作业备忘录，再把作业照片交给AI整理。", report, uploads: all.map((u) => this.view(u.id)), dates, quota: this.quota(), pending };
   }
   close() { this.db.close(); }
 }

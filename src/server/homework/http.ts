@@ -29,6 +29,9 @@ export class HomeworkHTTP {
         if (!date.success) throw new HomeworkError(400, "请选择有效的作业日期。");
         json(res, { ...this.store.snapshot(date.data), ...(this.rewards ? { homeworkReward: this.rewards.status(date.data) } : {}) }); return;
       }
+      if (path === "/day-plan" && req.method === "POST") {
+        json(res, this.store.setDayPlan(await input(req), viewer?.id || "legacy")); return;
+      }
       if (path === "/task-completion" && req.method === "POST") {
         const value=z.object({date:DaySchema,taskId:z.string().min(1).max(180),token:z.string().regex(/^[a-f0-9]{64}$/),completed:z.boolean()}).strict().safeParse(await input(req));
         if(!value.success)throw new HomeworkError(400,"请从当前作业点击完成按钮。");
