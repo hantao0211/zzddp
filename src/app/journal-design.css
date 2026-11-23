@@ -311,24 +311,28 @@
 .homework-weekdays input { width: 16px; height: 16px; padding: 0; margin: 0; }
 .homework-day-settings .hw-secondary { margin: 0; line-height: 1.7; }
 
-/* Personal emoji avatars share the journal palette and work without image downloads. */
-.profile-emoji { font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif; font-weight: 400; font-style: normal; }
-.study-profile-icon.profile-emoji { font-size: 23px; line-height: 1; overflow: hidden; }
+/* Original SVG portraits use the same paper, rose and sage as the journal. */
+.journal-avatar { display: block; width: 44px; height: 44px; flex-shrink: 0; }
+.study-profile-icon.study-journal-avatar { overflow: hidden; background: var(--journal-pink); }
+.study-profile-icon.study-journal-avatar .journal-avatar { width: 30px; height: 30px; }
 .study-account-popover > button + button { margin-top: 8px; }
-.profile-avatar-dialog { width: min(480px, calc(100vw - 28px)); }
-.profile-avatar-dialog .dialog-body { padding: 20px 24px; }
+.profile-avatar-dialog { width: min(480px, calc(100vw - 28px)); max-height: calc(100dvh - 32px); overflow: hidden; }
+.profile-avatar-dialog[open] { display: flex; flex-direction: column; }
+.profile-avatar-dialog > .dialog-header { position: static; flex-shrink: 0; }
+.profile-avatar-dialog .dialog-body { padding: 20px 24px; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
 .profile-avatar-preview { display: flex; gap: 14px; align-items: center; margin-bottom: 20px; }
-.profile-avatar-preview > .profile-emoji { display: grid; place-items: center; width: 64px; height: 64px; border-radius: 22px; background: var(--journal-pink); font-size: 40px; flex-shrink: 0; }
+.profile-avatar-preview > .profile-avatar-art { display: grid; place-items: center; width: 64px; height: 64px; border-radius: 22px; background: var(--journal-pink); flex-shrink: 0; }
+.profile-avatar-preview .journal-avatar { width: 58px; height: 58px; }
 .profile-avatar-preview p { margin: 5px 0 0; color: var(--muted); font-size: 13px; }
 .profile-avatar-group + .profile-avatar-group { margin-top: 18px; }
 .profile-avatar-group h3 { font-size: 13px; color: var(--muted); font-weight: 500; margin: 0 0 9px; }
 .profile-avatar-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
-.profile-avatar-choice { display: grid; place-items: center; position: relative; min-width: 0; min-height: 55px; border: 1px solid var(--border); border-radius: 15px; background: var(--field-bg); cursor: pointer; }
-.profile-avatar-choice .profile-emoji { font-size: 30px; line-height: 1; }
+.profile-avatar-choice { display: grid; place-items: center; position: relative; min-width: 0; min-height: 60px; border: 1px solid var(--border); border-radius: 15px; background: var(--journal-paper); cursor: pointer; }
+.profile-avatar-choice:hover { background: var(--accent-soft); }
 .profile-avatar-choice[aria-pressed=true] { border: 2px solid var(--accent); background: var(--accent-soft); }
 .profile-avatar-choice:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .profile-avatar-check { position: absolute; right: 2px; bottom: 2px; color: var(--accent-dark); }
 .profile-avatar-footer { padding: 12px 24px 16px; border-top: 1px solid var(--border); flex-shrink: 0; }
 .profile-avatar-footer > button { width: 100%; }
 .profile-avatar-footer p { margin: 9px 0 0; text-align: center; font-size: 12px; color: var(--muted); }
-@media(max-width:400px) { .profile-avatar-grid { grid-template-columns: repeat(3,minmax(0,1fr)); } .profile-avatar-dialog .dialog-body { padding: 16px 20px; } .profile-avatar-choice { min-height: 51px; } }
+@media(max-width:400px) { .profile-avatar-grid { grid-template-columns: repeat(3,minmax(0,1fr)); } .profile-avatar-dialog .dialog-body { padding: 16px 20px; } .profile-avatar-choice { min-height: 58px; } }
