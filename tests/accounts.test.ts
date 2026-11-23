@@ -269,3 +269,14 @@ test("children can confirm nonwritten work with their server identity; login, or
   const state=(await f.send('learning/state?date='+date,'GET',undefined,session.cookie)).data;assert.equal(state.report.tasks[0].selfCompletion.confirmedBy,'模拟孩子');assert.equal(state.report.tasks[0].selfCompletion.role,'child');assert.equal(f.calls(),0);
  }finally{await f.cleanup();}
 });
+
+test("book metadata HTTP editing is authenticated, same-origin, versioned and available to child and parent",async()=>{const f=await fixture();try{
+ const admin=await f.bootstrap();for(const role of ["child","parent"] as const)await f.send("admin/accounts","POST",{username:role,name:"模拟"+role,role,password},admin.cookie);
+ const child=await f.login("child"),parent=await f.login("parent"),book=(await f.send("reading/books","POST",{title:"模拟书名",totalPages:100},child.cookie)).data;
+ const path="reading/books/"+book.id,edit={title:"修改后的书名",author:"作者",publisher:"出版社",isbn:"",totalPages:120,revision:book.revision};
+ assert.equal((await f.send(path)).status,401);assert.equal((await f.send(path,"PATCH",edit)).status,401);assert.equal((await f.send(path,"PATCH",edit,child.cookie,{Origin:"https://other.test"})).status,403);
+ assert.equal((await f.send(path,"PATCH",{...edit,finished:true},child.cookie)).status,400);
+ const saved=await f.send(path,"PATCH",edit,child.cookie);assert.equal(saved.status,200);assert.equal(saved.data.id,book.id);assert.equal((await f.send(path,"GET",undefined,parent.cookie)).data.title,edit.title);
+ const conflict=await f.send(path,"PATCH",{...edit,title:"过期修改"},parent.cookie);assert.equal(conflict.status,409);assert.equal(conflict.data.code,"BOOK_UPDATED");
+ assert.equal((await f.send(path,"PATCH",{...edit,revision:saved.data.revision,totalPages:130},parent.cookie)).status,200);assert.equal(f.reading.snapshot(child.data.viewer).books.length,1);assert.equal(f.calls(),0);
+ }finally{await f.cleanup();}});

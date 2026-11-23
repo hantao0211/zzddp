@@ -4,13 +4,14 @@ import {DatabaseSync} from "node:sqlite";
 import {randomUUID,createHash} from "node:crypto";
 import {mkdirSync,readFileSync,writeFileSync,unlinkSync} from "node:fs";
 import {join} from "node:path";
-import {BookInputSchema,ReadingLogSchema,ReadingRulesSchema,RewardInputSchema,WishInputSchema,WishDecisionSchema,DEFAULT_READING_RULES,streaks,uniquePages,previousDay,type ReadingRules,type ReadingBook,type ReadingLog,type ReadingReview,type CatalogBook,type Reward,type Wish,type Redemption,type ReadingState} from "../../domain/reading";
+import {BookInputSchema,BookEditSchema,ReadingLogSchema,ReadingRulesSchema,RewardInputSchema,WishInputSchema,WishDecisionSchema,DEFAULT_READING_RULES,streaks,uniquePages,previousDay,type ReadingRules,type ReadingBook,type ReadingLog,type ReadingReview,type CatalogBook,type Reward,type Wish,type Redemption,type ReadingState} from "../../domain/reading";
 import {shanghaiDay} from "../../domain/homework";
 import {isParent,type Viewer} from "../../domain/accounts";
 import {HomeworkError} from "../homework/store";
 const hash=(value:unknown)=>createHash("sha256").update(JSON.stringify(value)).digest("hex");
 type Row={id:string;book_id:string;version:number;date:string;start_page:number;end_page:number;minutes:number;summary:string;chapter:string;reflection:string;excerpt:string;image_id:string|null;actor_id:string;backfilled:number;created_at:string;updated_at:string;review_status:ReadingLog["reviewStatus"];review:string|null;input_hash:string};
 export type ReadingJob={id:number;log_id:string;version:number;attempts:number};
+export class BookEditConflict extends HomeworkError { readonly code="BOOK_UPDATED"; constructor(){super(409,"书籍信息刚更新过，请读取最新信息后再保存。你的填写仍保留。");} }
 export class ReadingStore{
  readonly db:DatabaseSync;
  constructor(readonly directory:string,readonly now=Date.now){mkdirSync(directory,{recursive:true,mode:0o700});mkdirSync(join(directory,"images"),{recursive:true,mode:0o700});this.db=new DatabaseSync(join(directory,"reading.sqlite"));this.db.exec(`PRAGMA journal_mode=WAL;PRAGMA synchronous=FULL;PRAGMA busy_timeout=5000;
@@ -40,7 +41,21 @@ export class ReadingStore{
  cache(books:CatalogBook[]){this.transaction(()=>{for(const b of books)this.db.prepare("INSERT INTO catalog_cache VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data,expires_at=excluded.expires_at").run(b.id,JSON.stringify(b),this.now()+86400000);this.db.prepare("DELETE FROM catalog_cache WHERE expires_at<?").run(this.now());});}
  reserveLookup(){this.transaction(()=>{const day=this.today();this.db.prepare("INSERT OR IGNORE INTO lookup_budget VALUES(?,0)").run(day);if((this.db.prepare("SELECT calls FROM lookup_budget WHERE day=?").get(day) as {calls:number}).calls>=40)throw new HomeworkError(429,"今天查书次数较多，可以直接填写书名添加。");this.db.prepare("UPDATE lookup_budget SET calls=calls+1 WHERE day=?").run(day);});}
  addBook(value:unknown,actor:string){const input=BookInputSchema.parse(value),catalog=input.catalogId?this.catalog(input.catalogId):null;if(input.catalogId&&!catalog)throw new HomeworkError(409,"查书结果已过期，请重新搜索或手动添加。");const data={...input,...(catalog?{title:catalog.title,author:catalog.author,isbn:catalog.isbn,publisher:catalog.publisher,totalPages:input.totalPages||catalog.totalPages}:{}),description:catalog?.description||"",sourceUrl:catalog?.sourceUrl||null};const same=(this.db.prepare("SELECT id,data FROM books").all() as {id:string;data:string}[]).find(r=>{const b=JSON.parse(r.data);return data.isbn?data.isbn===b.isbn:data.title===b.title&&data.author===b.author&&data.publisher===b.publisher;});if(same)return this.book(same.id);if((this.db.prepare("SELECT COUNT(*) AS n FROM books").get() as {n:number}).n>=500)throw new HomeworkError(409,"书架已有500本书，请先整理。");const id=randomUUID();this.transaction(()=>{this.db.prepare("INSERT INTO books VALUES(?,?,0,?)").run(id,JSON.stringify(data),this.time());this.audit(actor,"add-book",id);});return this.book(id);}
- book(id:string):ReadingBook{const row=this.db.prepare("SELECT * FROM books WHERE id=?").get(id) as {id:string;data:string;finished:number;created_at:string}|undefined;if(!row)throw new HomeworkError(404,"这本书不存在。");const logs=this.db.prepare("SELECT start_page AS startPage,end_page AS endPage,minutes FROM logs WHERE book_id=?").all(id) as {startPage:number;endPage:number;minutes:number}[];return{...JSON.parse(row.data),id,finished:!!row.finished,createdAt:row.created_at,uniquePages:uniquePages(logs),minutes:logs.reduce((s,r)=>s+r.minutes,0),logCount:logs.length};}
+ editBook(id:string,value:unknown,actor:string){const input=BookEditSchema.parse(value);return this.transaction(()=>{
+  const row=this.db.prepare("SELECT data FROM books WHERE id=?").get(id) as {data:string}|undefined;if(!row)throw new HomeworkError(404,"这本书不存在。");
+  const old=JSON.parse(row.data),fields=["title","author","isbn","publisher","totalPages"] as const;
+  if(fields.every(field=>old[field]===input[field]))return this.book(id);
+  if(hash(old)!==input.revision)throw new BookEditConflict();
+  const last=(this.db.prepare("SELECT MAX(end_page) AS n FROM logs WHERE book_id=?").get(id) as {n:number|null}).n;
+  if(input.totalPages!==null&&last&&input.totalPages<last)throw new HomeworkError(400,`已经记录到第${last}页，总页数不能少于${last}页。请核对页数，或先修改对应阅读记录。`);
+  const duplicate=(this.db.prepare("SELECT data FROM books WHERE id<>?").all(id) as {data:string}[]).some(row=>{const other=JSON.parse(row.data);return input.isbn?input.isbn===other.isbn:input.title===other.title&&input.author===other.author&&input.publisher===other.publisher;});
+  if(duplicate)throw new HomeworkError(409,"书架里已有这本书，不能覆盖或合并另一册的阅读记录。");
+  const identityChanged=["title","author","isbn","publisher"].some(field=>old[field]!==input[field as "title"]);
+  const {revision:_revision,...metadata}=input;
+  this.db.prepare("UPDATE books SET data=? WHERE id=?").run(JSON.stringify({...old,...metadata,...(identityChanged?{catalogId:null,description:"",sourceUrl:null}:{})}),id);
+  this.audit(actor,"update-book",id);return this.book(id);
+ });}
+ book(id:string):ReadingBook{const row=this.db.prepare("SELECT * FROM books WHERE id=?").get(id) as {id:string;data:string;finished:number;created_at:string}|undefined;if(!row)throw new HomeworkError(404,"这本书不存在。");const logs=this.db.prepare("SELECT start_page AS startPage,end_page AS endPage,minutes FROM logs WHERE book_id=?").all(id) as {startPage:number;endPage:number;minutes:number}[];return{...JSON.parse(row.data),id,revision:hash(JSON.parse(row.data)),finished:!!row.finished,createdAt:row.created_at,uniquePages:uniquePages(logs),minutes:logs.reduce((s,r)=>s+r.minutes,0),logCount:logs.length};}
  finishBook(id:string,finished:boolean,actor:string){this.book(id);this.transaction(()=>{this.db.prepare("UPDATE books SET finished=? WHERE id=?").run(Number(finished),id);this.audit(actor,"book-finished:"+finished,id);});return this.book(id);}
  row(id:string){return this.db.prepare("SELECT * FROM logs WHERE id=?").get(id) as Row|undefined;}
  log(id:string,viewer:Viewer):ReadingLog{const r=this.row(id);if(!r)throw new HomeworkError(404,"这条阅读记录不存在。");return{id:r.id,version:r.version,bookId:r.book_id,date:r.date,startPage:r.start_page,endPage:r.end_page,minutes:r.minutes,summary:r.summary,chapter:r.chapter,reflection:r.reflection,excerpt:r.excerpt,imageId:r.image_id,actorId:r.actor_id,backfilled:!!r.backfilled,createdAt:r.created_at,updatedAt:r.updated_at,reviewStatus:r.review_status,review:r.review?JSON.parse(r.review):null,canEdit:isParent(viewer)||r.actor_id===viewer.id};}
