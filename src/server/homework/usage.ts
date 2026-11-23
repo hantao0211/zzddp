@@ -7,6 +7,8 @@ import type { HomeworkStore, Job } from "./store";
 export type CallContext = { date: string; title: string; runId?: string; pageId?: string; attempt?: number };
 const record = (value: unknown): Record<string, unknown> => value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 function phaseOf(task: AITask, metadata: unknown): HomeworkPhase {
+  if (task==="index_curriculum") return "curriculum";
+  if (["generate_practice","verify_practice","grade_practice"].includes(task)) return "practice";
   if (task === "recognize_memo" || task === "extract_homework") return "recognition";
   if (task === "organize_homework") return "organization";
   if (["inspect_study_traces", "assess_written_completion", "recheck_written_parts"].includes(task)) return "completion";

@@ -1,3 +1,5 @@
+import type {PracticeHTTP} from "../practice/http";
+import {LearningScopeSchema,type PracticeSubject} from "../../domain/practice";
 import { z } from "zod";
 import type { Viewer } from "../../domain/accounts";
 import { createHash, randomUUID } from "node:crypto";
@@ -20,10 +22,11 @@ async function input(req: IncomingMessage) {
 export class HomeworkHTTP {
   private writing = new Set<string>();
   private active = 0;
-  constructor(private store: HomeworkStore, private rewards?: HomeworkRewards) {}
+  constructor(private store: HomeworkStore, private rewards?: HomeworkRewards,private practice?:PracticeHTTP) {}
   async handle(req: IncomingMessage, res: ServerResponse, viewer?: Viewer) {
     const url = new URL(req.url!, "http://internal"), path = url.pathname.replace("/assistant-api/learning", "");
     try {
+      if(path.startsWith("/practice/")&&this.practice){if(!viewer)throw new HomeworkError(403,"请先登录家庭账号。");await this.practice.handle(req,res,viewer);return;}
       if (path === "/state" && req.method === "GET") {
         const date = DaySchema.safeParse(url.searchParams.get("date"));
         if (!date.success) throw new HomeworkError(400, "请选择有效的作业日期。");
@@ -62,7 +65,7 @@ export class HomeworkHTTP {
         const subject = url.searchParams.get("subject");
         const offset = Number(url.searchParams.get("offset") || 0);
         if ((subject && !["语文", "数学", "英语"].includes(subject)) || !Number.isSafeInteger(offset) || offset < 0 || offset > 100000) throw new HomeworkError(400, "筛选条件无效。");
-        json(res, this.store.grading.mistakes(subject, offset)); return;
+        const scope=url.searchParams.get("scope");if(scope&&!LearningScopeSchema.safeParse(scope).success)throw new HomeworkError(400,"请选择课内、课外或待分类。");json(res,this.practice?this.practice.mistakes(subject as PracticeSubject||undefined,scope as "curricular"|"extracurricular"|"unknown"||undefined,offset):this.store.grading.mistakes(subject, offset)); return;
       }
       if (path === "/uploads" && req.method === "POST") {
         const parsed = UploadInputSchema.safeParse(await input(req));

@@ -1,3 +1,6 @@
+import {PracticeStore} from "../practice/store";
+import {PracticeHTTP} from "../practice/http";
+import {PracticeWorker} from "../practice/worker";
 import { ReadingStore } from "../reading/store";
 import { ReadingHTTP } from "../reading/http";
 import { ReadingWorker } from "../reading/worker";
@@ -27,13 +30,15 @@ try {
   const port = Number(process.env.ASSISTANT_PORT || 3091);
   if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new Error("Invalid port");
   const reading = new ReadingStore(join(process.env.ASSISTANT_STATE_DIRECTORY || "/var/lib/xiaobu-assistant", "reading"));
+  const practices=new PracticeStore(homeworkStore,reading);
+  const practiceWorker=new PracticeWorker(practices,()=>new VisionAI(config));
   const homeworkRewards = new HomeworkRewards(homeworkStore, reading);
   const readingWorker = new ReadingWorker(reading, () => new VisionAI(config));
   const server = createAssistantServer({
     reading: new ReadingHTTP(reading),
     accounts: new Accounts(process.env.ASSISTANT_STATE_DIRECTORY || "/var/lib/xiaobu-assistant"),
     serviceInfo: { provider: config.provider, model: config.model },
-    homework: new HomeworkHTTP(homeworkStore, homeworkRewards),
+    homework: new HomeworkHTTP(homeworkStore, homeworkRewards,new PracticeHTTP(practices)),
     learning: new HomeworkConversation(homeworkStore, new ServerImages(homeworkStore)),
     origin: process.env.ASSISTANT_ORIGIN || "https://14.103.24.55",
     accessHash: process.env.ASSISTANT_ACCESS_HASH || "",
@@ -41,8 +46,8 @@ try {
     ai: (signal) => new VisionAI(config, (url, init) => fetch(url, { ...init, signal: AbortSignal.any([signal, ...(init?.signal ? [init.signal] : [])]) })),
     speech: config.provider === "deepseek" ? new DeepSeekSpeech(config.apiKey) : undefined,
   });
-  worker.start(); readingWorker.start(); homeworkRewards.start();
+  worker.start(); readingWorker.start(); homeworkRewards.start();practiceWorker.start();
   server.listen(port, "127.0.0.1", () => console.log("Xiaobu assistant ready on loopback"));
   server.on("error", () => { console.error("Assistant listener unavailable"); process.exitCode = 1; });
-  for (const signal of ["SIGTERM", "SIGINT"] as const) process.on(signal, () => { worker.stop(); readingWorker.stop(); homeworkRewards.stop(); server.close(() => process.exit(0)); setTimeout(() => process.exit(0), 5000).unref(); });
+  for (const signal of ["SIGTERM", "SIGINT"] as const) process.on(signal, () => { worker.stop(); readingWorker.stop(); homeworkRewards.stop();practiceWorker.stop(); server.close(() => process.exit(0)); setTimeout(() => process.exit(0), 5000).unref(); });
 } catch { console.error("Assistant configuration or private state unavailable"); process.exitCode = 1; }

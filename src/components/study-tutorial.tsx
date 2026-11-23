@@ -1,11 +1,14 @@
 "use client";
 import {useEffect,useRef,useState} from "react";
 import {ChevronLeft,ChevronRight,Download,HelpCircle,X} from "lucide-react";
-export type TutorialTopic="home"|"reading"|"growth"|"assistant";
+export type TutorialTopic="home"|"reading"|"growth"|"assistant"|"practice"|"materials"|"mall";
 export const tutorials:Record<TutorialTopic,{name:string;pages:{title:string;text:string}[]}>= {
+ mall:{name:"商城",pages:[{title:"看看小小期待",text:"逛逛奖励卡片，点开查看价格、次数、申请和使用期限。固定奖励用小脚步，购物卡填写实际金额；想兑换时再申请。"},{title:"把约定说清楚",text:"等家长确认，在期限内使用。家长可以说明原因后更正价格或期限；已经兑换的奖励仍保留当时约定。"}]},
+ practice:{name:"小练习",pages:[{title:"先在纸上试一试",text:"选择主课，下载或打印题单，认真作答。只使用课内错题，课外和待分类的题分开保留。"},{title:"看见自己的进步",text:"拍完整答卷，查看逐题结果，下次再测。每科每天最多奖励2个小脚步，不要求全部答对。"}]},
+ materials:{name:"课程资料",pages:[{title:"先整理正在学的内容",text:"确认年级和学期，添加教材或练习册，再上传原件。先补版本、目录和当前单元，不必一次上传全书。"},{title:"课内课外分清楚",text:"标明归属，选择需要整理的页，核对原页来源。PDF每次最多整理8页，只使用已经整理的内容。"}]},
  home:{name:"作业",pages:[{title:"认识今天的任务",text:"拍备忘录，核对清单，识别有误可修改。复习、背诵等非书面作业，做完后可手动确认。"},{title:"上传与检查",text:"从对应作业上传，查看状态，再打开详情。遇到疑问，先看对应照片和具体原因，再决定是否补充。"}]},
  reading:{name:"阅读",pages:[{title:"开始阅读",text:"添加书籍，接着上次结束页的下一页开始。可以计时，也能直接填写页码和时长。"},{title:"留下自己的想法",text:"用自己的话说一说，保存阅读打卡，再和小步聊聊。可以打字或语音，章节、感想和照片选填。"}]},
- growth:{name:"成长",pages:[{title:"每一步都算数",text:"记录实际完成的活动，等家长确认后小脚步到账。家务每天合计一次，羽毛球课和英语线上课每周各一次。"},{title:"把心愿变成约定",text:"许愿，家长上架，再攒小脚步兑换。先看价格、次数和期限；商品上架期与兑换后使用期分别计算，已兑换的奖励保留原约定。"}]},
+ growth:{name:"成长",pages:[{title:"每一步都算数",text:"记录实际完成的活动，等家长确认后小脚步到账。家务每天合计一次，羽毛球课和英语线上课每周各一次。"},{title:"把约定说清楚",text:"小脚步可以去独立的商城兑换心愿。先看价格、次数和期限；家长更正需要说明原因，已兑换奖励保留原约定。"}]},
  assistant:{name:"小步",pages:[{title:"有问题就来问",text:"可以打字、语音或选图，一起找思路。对话附图最多三张。"},{title:"看清依据再确认",text:"结合对应作业提问，看清解释，需要时确认修改。聊天附图用于问答；作业归档请用“交作业”。"}]}
 };
 export function TutorialButton({topic}:{topic:TutorialTopic}){const [open,setOpen]=useState(false);return <><button type="button" className="icon-button study-help" aria-label={`${tutorials[topic].name}使用教程`} title="使用教程" onClick={()=>setOpen(true)}><HelpCircle size={21}/></button>{open&&<StudyTutorial topic={topic} close={()=>setOpen(false)}/>}</>;}

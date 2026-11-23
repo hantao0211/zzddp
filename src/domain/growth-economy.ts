@@ -15,7 +15,7 @@ export const OfferFields = {
 export const OfferPolicySchema = z.object(OfferFields).strict();
 export type OfferPolicy = z.infer<typeof OfferPolicySchema>;
 export type RewardUsage = { monthCount:number; yearCount:number; monthCents:number; groupCents:number; remainingCents:number|null };
-export type RewardContract = OfferPolicy & { title:string; description:string; cost:number; expiresOn:string|null; startsOn:string; version:number; active:boolean };
+export type RewardContract = OfferPolicy & { title:string; description:string; cost:number; expiresOn:string|null; startsOn:string; version:number; active:boolean; changeReason?:string; changedAt?:string };
 export const RedemptionInputSchema = z.object({id:z.string().uuid(),rewardId:z.string().uuid(),revision:z.string().regex(/^[a-f0-9]{64}$/).optional(),amountCents:z.number().int().min(1).max(10000000).optional()}).strict();
 export type RedemptionInput = z.infer<typeof RedemptionInputSchema>;
 export const addDays = (day:string,days:number) => new Date(Date.parse(day+"T00:00:00Z")+days*86400000).toISOString().slice(0,10);

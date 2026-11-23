@@ -9,6 +9,7 @@ import "./study-design.css";
 import "./journal-design.css";
 import "./interactions.css";
 import "./growth-economy.css";
+import "./practice.css";
 import "./theme.css";
 import { AppInteractions } from "@/components/app-interactions";
 

@@ -1,5 +1,5 @@
 export const HOMEWORK_PHASES = {
-  recognition: "照片识别", organization: "清单整理", completion: "完成检查",
+  curriculum: "课程资料整理", practice: "课内小练习", recognition: "照片识别", organization: "清单整理", completion: "完成检查",
   inspection: "初次批改", verification: "独立复核", focus: "疑题复核", other: "其他检查",
 } as const;
 export type HomeworkPhase = keyof typeof HOMEWORK_PHASES;

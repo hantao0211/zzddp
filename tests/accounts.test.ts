@@ -372,7 +372,7 @@ test("growth setup and activity confirmation require parents, preserve quotes, e
  const id=randomUUID();assert.equal((await f.send("reading/redemptions","POST",{id,rewardId:shop.id,revision:shop.revision,amountCents:100},child.cookie)).status,200);
  assert.equal((await f.send("reading/redemptions","POST",{id,rewardId:shop.id,revision:shop.revision,amountCents:100},child.cookie)).status,200);
  assert.equal((await f.send("reading/state","GET",undefined,child.cookie)).data.growth.balance,0);
- assert.equal((await f.send("reading/rewards/"+shop.id+"/history","GET",undefined,child.cookie)).status,403);
+ assert.equal((await f.send("reading/rewards/"+shop.id+"/history","GET",undefined,child.cookie)).status,200);
  assert.equal((await f.send("reading/rewards/"+shop.id+"/history","GET",undefined,parent.cookie)).data.items.length,1);
  assert.equal(f.calls(),0);
 }finally{await f.cleanup();}});

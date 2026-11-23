@@ -10,7 +10,7 @@ import type { StudyPage } from "./study-shell";
 function locationPage(): StudyPage {
   if (location.pathname !== "/reading/") return "home";
   const view = new URLSearchParams(location.search).get("view");
-  return view === "growth" || view === "manage" ? view : "reading";
+  return view === "growth" || view === "mall" || view === "manage" ? view : "reading";
 }
 
 /** Keep the learning spaces alive: menu clicks never reload the document or discard drafts. */
@@ -42,7 +42,7 @@ export function StudyWorkspace({ initialPage }: { initialPage: "home" | "reading
     const url = new URL(location.href);
     url.pathname = next === "home" ? "/" : "/reading/";
     url.searchParams.delete("view");
-    if (next === "growth" || next === "manage") url.searchParams.set("view", next);
+    if (next === "growth" || next === "mall" || next === "manage") url.searchParams.set("view", next);
     if (date) url.searchParams.set("studyDate", date);
     if (url.href !== location.href) window.history[replace ? "replaceState" : "pushState"](null, "", url);
     setPreloaded(true);
@@ -60,7 +60,7 @@ export function StudyWorkspace({ initialPage }: { initialPage: "home" | "reading
     if (url.origin !== location.origin || (url.pathname !== "/" && url.pathname !== "/reading/") || url.hash) return;
     event.preventDefault();
     const view = url.searchParams.get("view");
-    navigate(url.pathname === "/" ? "home" : view === "growth" || view === "manage" ? view : "reading");
+    navigate(url.pathname === "/" ? "home" : view === "growth" || view === "mall" || view === "manage" ? view : "reading");
   }
 
   return <StudyNavigationContext.Provider value={navigation}>

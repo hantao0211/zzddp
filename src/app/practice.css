@@ -1,0 +1,47 @@
+.practice-center,.curriculum-library{min-width:0;line-height:1.8}
+.practice-heading,.curriculum-card>header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.practice-heading h2{display:flex;align-items:center;gap:9px;font-size:21px}
+.practice-heading p,.curriculum-card header p{color:var(--muted);font-size:14px}
+.practice-heading .xiaobu-mascot{width:64px;height:64px}
+.practice-home-links{display:flex;gap:24px;flex-wrap:wrap;margin:20px 0}
+.practice-subjects{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin:24px 0}
+.practice-subjects article{border:1px solid var(--border);border-top:5px solid var(--journal-sage);border-radius:16px;padding:20px;min-width:0;background:var(--journal-paper)}
+.practice-subjects article:nth-child(2){border-top-color:var(--journal-pink)}
+.practice-subjects article:nth-child(3){border-top-color:var(--journal-lilac)}
+.practice-subjects small{display:block;color:var(--muted);margin-bottom:16px}
+.practice-subjects button{width:100%;margin-top:10px;white-space:normal}
+.practice-history{margin-top:26px}
+.practice-history summary{display:flex;align-items:center;gap:8px;cursor:pointer}
+.practice-history-row{display:flex;align-items:center;justify-content:space-between;gap:12px;text-align:left;width:100%;padding:16px 0;background:none;color:var(--ink);border-bottom:1px solid var(--border);line-height:1.8;flex-wrap:wrap}
+.practice-history-row span:last-child{color:var(--muted);font-size:13px}
+.practice-dialog{max-width:850px}
+.practice-status-note{padding:16px;background:var(--journal-sage);border-radius:12px;margin-bottom:20px}
+.practice-question-preview{padding-left:24px;margin:18px 0}
+.practice-question-preview li{padding:14px 0;border-bottom:1px solid var(--border);white-space:pre-wrap;overflow-wrap:anywhere}
+.practice-upload{display:block;padding:18px;border:1px dashed var(--field-border);background:var(--field-bg);border-radius:12px;margin:20px 0}
+.practice-upload input,.curriculum-upload input{display:block;max-width:100%;min-width:0;margin-top:12px;font-size:14px}
+.practice-photo-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:16px 0}
+.practice-photo-grid>*{min-width:0;overflow-wrap:anywhere;font-size:13px}
+.practice-photo-grid img{display:block;width:100%;max-height:230px;object-fit:contain;border:1px solid var(--border);border-radius:10px;margin-bottom:8px}
+.practice-results article{border:1px solid var(--border);border-left:4px solid var(--accent);border-radius:10px;padding:18px;margin:16px 0;white-space:pre-wrap;overflow-wrap:anywhere}
+.practice-results h4{margin-bottom:10px}
+.curriculum-card{border-top:1px solid var(--border);margin-top:28px;padding-top:24px;min-width:0;overflow-wrap:anywhere}
+.curriculum-card h3{font-size:18px}
+.curriculum-source{display:flex;align-items:center;gap:10px;padding:12px 0;color:var(--accent);font-size:14px}
+.curriculum-source svg{flex-shrink:0}
+.curriculum-upload{display:block;color:var(--ink);padding:16px;background:var(--field-bg);border:1px dashed var(--field-border);border-radius:12px;margin:18px 0}
+.curriculum-upload>svg{vertical-align:middle;margin-right:8px}
+.curriculum-card details{margin:16px 0}
+.curriculum-job{padding:12px 16px;border-left:3px solid var(--journal-green);background:var(--journal-sage);border-radius:8px;margin:12px 0;font-size:14px}
+.curriculum-pages article{padding:18px;border:1px solid var(--border);border-radius:12px;margin:14px 0}
+.curriculum-text{white-space:pre-wrap;overflow-wrap:anywhere;line-height:2;max-height:450px;overflow:auto;overscroll-behavior:contain}
+.curriculum-library .reading-fields{margin:22px 0}
+.curriculum-library .reading-fields label{min-width:0}
+.curriculum-library select,.curriculum-card input{min-width:0;width:100%;max-width:100%}
+.mistake-scope{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-top:25px;font-size:14px}
+.mistake-scope strong{padding:3px 12px;border-radius:8px;background:var(--journal-sage)}
+.mistake-scope label{margin-left:auto;display:flex;align-items:center;gap:8px;min-width:0}
+.mistake-scope select{border:1px solid var(--field-border);border-radius:8px;padding:8px;color:var(--ink);max-width:100%}
+.mistake-retest{font-size:13px;line-height:1.9;color:var(--muted);margin-top:12px}
+.grade-photo img{max-width:100%;height:auto;border-radius:12px}
+@media(max-width:700px){.practice-subjects{grid-template-columns:1fr}.practice-subjects article{padding:16px}.practice-subjects article h3{font-size:18px}.practice-heading h2{font-size:19px}.practice-photo-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.practice-heading .xiaobu-mascot{width:48px;height:48px}.practice-home-links{gap:18px}.mistake-scope label{margin-left:0}.curriculum-library .reading-fields{grid-template-columns:1fr}.practice-results article{padding:14px}}

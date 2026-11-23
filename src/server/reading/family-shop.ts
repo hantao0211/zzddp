@@ -44,20 +44,20 @@ export class FamilyShop {
   if(id&&!old)throw new HomeworkError(404,"奖励不存在。");
   if(last?.request_hash===fingerprint)return this.reward(key);
   if(old){
-   // Every visible term is a promise, including legacy rewards with no deadline.
-   if(!old.expiresOn||old.expiresOn>=s.today())throw new HomeworkError(409,`本期约定仍有效${old.expiresOn?`至${old.expiresOn}`:"，此前未约定截止日期"}，价格、说明和额度保持不变。到期后才能重新定价。`);
-   if(v.revision!==old.revision)throw new HomeworkError(409,"商品已更新，请读取最新一期后再上架。你的填写保留。");
+   if(v.revision!==old.revision)throw new HomeworkError(409,"商品已更新，请读取最新约定后再保存。你的填写保留。");
+   if((!old.expiresOn||old.expiresOn>=s.today())&&!v.changeReason?.trim())throw new HomeworkError(409,"本期约定仍有效；家长可以更正价格或期限，请填写更正原因。已兑换记录保持原约定。");
   }else if((s.db.prepare("SELECT COUNT(*) AS n FROM rewards").get() as {n:number}).n>=100)throw new HomeworkError(409,"最多设置100项奖励。");
   const expiresOn=v.expiresOn||addDays(s.today(),v.offerDays-1);
   if(expiresOn<s.today())throw new HomeworkError(400,"新一期的截止日期不能早于今天。");
   if(v.kind==="shopping"&&!v.monthlyBudgetCents)throw new HomeworkError(400,"请设置购物卡的每月金额上限。");
-  const {revision:_revision,requestId:_requestId,...input}=v;
-  const contract:RewardContract={...input,expiresOn,startsOn:s.today(),version:(old?.version||0)+1};
+  const {revision:_revision,requestId:_requestId,changeReason,...input}=v;
+  const contract:RewardContract={...input,expiresOn,startsOn:s.today(),version:(old?.version||0)+1,...(old&&changeReason?{changeReason,changedAt:s.time()}:{})};
+  if(old?.legacy){const{id:_id,revision:_r,legacy:_l,usage:_u,...original}=old;s.db.prepare("INSERT OR IGNORE INTO reward_policy_versions VALUES(?,?,?,?,?)").run(key,0,JSON.stringify(original),hash(original),"legacy-snapshot");}
   s.db.prepare("INSERT INTO rewards(id,title,description,cost,active) VALUES(?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET title=excluded.title,description=excluded.description,cost=excluded.cost,active=excluded.active").run(key,v.title,v.description,v.cost,Number(v.active));
   s.db.prepare("INSERT INTO reward_deadlines VALUES(?,?) ON CONFLICT(reward_id) DO UPDATE SET expires_on=excluded.expires_on").run(key,expiresOn);
   s.db.prepare("INSERT INTO reward_policy_versions VALUES(?,?,?,?,?)").run(key,contract.version,JSON.stringify(contract),hash(contract),fingerprint);
   s.db.prepare("INSERT INTO reward_policies VALUES(?,?) ON CONFLICT(reward_id) DO UPDATE SET version=excluded.version").run(key,contract.version);
-  s.audit(actor,old?"renew-reward-offer":"publish-reward-offer",key+":"+contract.version);return this.reward(key);
+  s.audit(actor,old?changeReason?"correct-reward-offer":"renew-reward-offer":"publish-reward-offer",key+":"+contract.version);return this.reward(key);
  }
  redeem(input:RedemptionInput,viewer:Viewer){this.expire();const s=this.store;return s.transaction(()=>{
   const old=s.db.prepare("SELECT * FROM redemptions WHERE id=?").get(input.id) as RedemptionRow|undefined;
