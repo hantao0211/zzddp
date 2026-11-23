@@ -8,3 +8,8 @@ dialog :is(.dialog-body,.reading-dialog-body,.assistant-messages,.assistant-sett
 .study-refresh-status svg{flex-shrink:0}
 @media(max-width:360px){.study-topbar-actions{gap:4px}.study-refresh-button{width:44px}.study-login-caption{display:none}}
 @media print{.study-refresh-button,.study-refresh-status{display:none!important}}
+
+/* Foreground operation receipts remain in view, including above a modal. */
+.study-operation-feedback{position:fixed;inset:auto;top:calc(env(safe-area-inset-top,0px) + 12px);left:50%;transform:translateX(-50%);z-index:1000;display:flex;align-items:center;gap:10px;width:max-content;max-width:calc(100vw - 32px);box-sizing:border-box;margin:0;padding:14px 16px;border:1px solid var(--theme-border,var(--border));border-radius:16px;background:var(--theme-surface,var(--journal-paper,#fffdf7));color:var(--theme-ink,var(--ink));box-shadow:0 8px 30px #0002;font:inherit;font-size:15px;line-height:1.6;overflow-wrap:anywhere}
+.study-operation-feedback>svg{flex-shrink:0}.study-operation-feedback[data-phase=success]>svg{color:var(--theme-success-text,#48614e)}.study-operation-feedback[data-phase=error]{border-color:var(--theme-rose-text,#963a50)}.study-operation-feedback>button{border:0;background:transparent;color:inherit;padding:8px;display:flex;cursor:pointer;flex-shrink:0}.study-operation-feedback::backdrop{background:transparent;pointer-events:none}
+@supports not selector(:popover-open){.study-operation-feedback[popover]{display:flex}}

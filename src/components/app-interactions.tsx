@@ -1,6 +1,7 @@
 "use client";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ArrowDown, Check, CircleAlert, RefreshCw } from "lucide-react";
+import { OperationFeedback } from "./operation-feedback";
 import { installModalScrollGuard } from "@/services/modal-scroll";
 
 type Source = (signal: AbortSignal) => Promise<boolean | void>;
@@ -83,7 +84,7 @@ export function AppInteractions({ children }: { children: ReactNode }) {
   }, [refresh]);
   const context = useMemo(() => ({ register, refresh, refreshing: state === "loading", available }), [register, refresh, state, available]);
   const label = state === "pull" ? distance >= 64 ? "松开刷新" : "下拉刷新" : state === "loading" ? "正在刷新…" : state === "done" ? "已更新" : "刷新未完成，请点刷新按钮重试";
-  return <Refresh.Provider value={context}>{children}<div className="study-refresh-status" role="status" aria-live="polite" hidden={state === "idle"} data-state={state}>
+  return <Refresh.Provider value={context}>{children}<OperationFeedback/><div className="study-refresh-status" role="status" aria-live="polite" hidden={state === "idle"} data-state={state}>
     {state === "loading" ? <RefreshCw className="spin" size={18} aria-hidden="true" /> : state === "done" ? <Check size={18} aria-hidden="true" /> : state === "error" ? <CircleAlert size={18} aria-hidden="true" /> : <ArrowDown size={18} aria-hidden="true" />}{label}
   </div></Refresh.Provider>;
 }

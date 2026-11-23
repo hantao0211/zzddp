@@ -22,7 +22,7 @@ test("AI cannot claim content verification from book metadata or invent an excer
 test("editing during AI work cannot publish stale feedback; image submission retries and restart recovery are bounded",async()=>{const f=fixture();try{const input=f.input();const photo=Buffer.from([255,216,255,224,1,2,3]).toString("base64");const saved=f.store.save({...input,image:photo},child);assert.equal(f.store.save({...input,image:photo},child).log.version,1);assert.equal((f.store.db.prepare("SELECT COUNT(*) AS n FROM images").get() as any).n,1);const ai:StructuredAI={async run(_task,schema){f.store.save({...input,version:1,summary:"主人公先自己尝试，再找朋友一起想办法。",keepImage:false},child);return schema.parse(output);}};const worker=new ReadingWorker(f.store,()=>ai);await worker.tick();assert.equal(f.store.log(saved.log.id,child).version,2);assert.equal(f.store.log(saved.log.id,child).review,null);assert.equal(f.store.log(saved.log.id,child).reviewStatus,"queued");worker.stop();const job=f.store.claim()!;f.store.db.prepare("UPDATE review_jobs SET attempts=3 WHERE id=?").run(job.id);f.store.close();const reopened=new ReadingStore(f.directory,f.store.now);assert.equal(reopened.log(input.id,child).reviewStatus,"failed");reopened.close();(f.store as any).close=()=>{};}finally{f.cleanup();}});
 test("book lookup uses a fixed catalog origin, ISBN/edition metadata and bounded public results",async()=>{let url="";const request:typeof fetch=async input=>{url=String(input);return new Response(JSON.stringify({items:[{id:"synthetic-volume",volumeInfo:{title:"模拟书名",authors:["模拟作者"],publisher:"模拟出版社",industryIdentifiers:[{type:"ISBN_13",identifier:"9780000000002"}],pageCount:120,description:"<p>只有简介，不是原文。</p>"}}]}),{headers:{"Content-Type":"application/json"}});};const result=await lookupBooks("9780000000002",request);assert.ok(url.startsWith("https://www.googleapis.com/books/v1/volumes?"));assert.ok(decodeURIComponent(url).includes("isbn:9780000000002"));assert.equal(result[0].isbn,"9780000000002");assert.equal(result[0].description,"只有简介，不是原文。");});
 
-test("reading review has a persistent daily call budget and queued work resumes on the next Shanghai day",()=>{const f=fixture();try{for(let i=0;i<20;i++){f.store.save(f.input(),child);const job=f.store.claim()!;assert.ok(job);f.store.fail(job,false);}f.store.save(f.input("2026-11-19"),child);assert.equal(f.store.claim(),undefined);assert.equal(f.store.snapshot(child).reviewBudget.used,20);assert.equal(f.store.balance(),2);f.setTime("2026-11-20T16:01:00Z");assert.equal(f.store.today(),"2026-11-21");assert.ok(f.store.claim());assert.equal(f.store.snapshot(child).reviewBudget.used,1);}finally{f.cleanup();}});
+test("reading review has a persistent daily call budget and queued work resumes on the next Shanghai day",()=>{const f=fixture();try{for(let i=0;i<20;i++){f.store.save({...f.input(),separateSession:true},child);const job=f.store.claim()!;assert.ok(job);f.store.fail(job,false);}f.store.save(f.input("2026-11-19"),child);assert.equal(f.store.claim(),undefined);assert.equal(f.store.snapshot(child).reviewBudget.used,20);assert.equal(f.store.balance(),2);f.setTime("2026-11-20T16:01:00Z");assert.equal(f.store.today(),"2026-11-21");assert.ok(f.store.claim());assert.equal(f.store.snapshot(child).reviewBudget.used,1);}finally{f.cleanup();}});
 
 test("old reading records remain editable after a year without granting historic points again",()=>{const f=fixture();try{const input=f.input();f.store.save(input,child);f.setTime("2028-01-20T10:00:00+08:00");const updated=f.store.save({...input,version:1,minutes:20},child);assert.equal(updated.log.minutes,20);assert.equal(updated.pointsAdded,0);assert.equal(f.store.balance(),2);assert.throws(()=>f.store.save(f.input("2026-11-20"),child),/一年/);}finally{f.cleanup();}});
 
@@ -113,4 +113,38 @@ test("legacy databases gain only an empty deadline table and retain existing rew
  assert.equal(reopened.balance(),balance);assert.equal(reopened.rewards()[0].expiresOn,null);
  assert.equal((reopened.db.prepare("SELECT COUNT(*) AS n FROM reward_deadlines").get() as any).n,0);
  reopened.close();(f.store as any).close=()=>{};
+}finally{f.cleanup();}});
+
+test("rapid identical reading forms reuse the canonical log without more time, pages, images, awards or AI jobs",()=>{const f=fixture();try{
+ const image=Buffer.from([255,216,255,224,1,2,3]).toString("base64"),input={...f.input(),image};
+ const first=f.store.save(input,child),before=f.store.snapshot(child);
+ const tables=["logs","images","review_jobs","ledger","audit"],counts=()=>tables.map(t=>(f.store.db.prepare(`SELECT count(*) n FROM ${t}`).get() as any).n);
+ const originalCounts=counts();
+ const duplicate=f.store.save({...input,id:randomUUID(),summary:"  "+input.summary+"  "},child);
+ assert.equal(duplicate.log.id,first.log.id);assert.equal(duplicate.reused,true);assert.equal(duplicate.pointsAdded,0);
+ assert.deepEqual(counts(),originalCounts);assert.equal(f.store.snapshot(child).stats.minutes,before.stats.minutes);
+ // A retry retaining its original request id still works after the dedupe interval.
+ f.setTime("2026-11-20T10:30:00+08:00");assert.equal(f.store.save(input,child).log.id,first.log.id);assert.deepEqual(counts(),originalCounts);
+}finally{f.cleanup();}});
+test("reading dedupe preserves intentional rereading, different actors, content, dates, books, photos and elapsed sessions",()=>{const f=fixture();try{
+ const input=f.input(),first=f.store.save(input,child);
+ assert.notEqual(f.store.save({...input,id:randomUUID(),separateSession:true},child).log.id,first.log.id);
+ assert.notEqual(f.store.save({...input,id:randomUUID()},parent).log.id,first.log.id);
+ assert.notEqual(f.store.save({...input,id:randomUUID(),minutes:16},child).log.id,first.log.id);
+ assert.notEqual(f.store.save({...input,id:randomUUID(),chapter:"第二章"},child).log.id,first.log.id);
+ assert.notEqual(f.store.save({...input,id:randomUUID(),date:"2026-11-19"},child).log.id,first.log.id);
+ const second=f.store.addBook({title:"另一本模拟书"},child.id);
+ assert.notEqual(f.store.save({...input,id:randomUUID(),bookId:second.id},child).log.id,first.log.id);
+ const image=Buffer.from([255,216,255,224,7,8,9]).toString("base64");
+ assert.notEqual(f.store.save({...input,id:randomUUID(),image},child).log.id,first.log.id);
+ f.setTime("2026-11-20T10:11:00+08:00");assert.notEqual(f.store.save({...input,id:randomUUID()},child).log.id,first.log.id);
+ assert.equal(f.store.balance(),2);
+}finally{f.cleanup();}});
+test("editing a deduplicated reading uses its canonical version and never overwrites a concurrent edit",()=>{const f=fixture();try{
+ const input=f.input(),first=f.store.save(input,child);
+ const reused=f.store.save({...input,id:randomUUID()},child);
+ assert.equal(reused.log.id,first.log.id);
+ const updated=f.store.save({...input,id:reused.log.id,version:reused.log.version,minutes:18},child);
+ assert.equal(updated.log.version,2);assert.equal(f.store.snapshot(child).logs.length,1);
+ assert.throws(()=>f.store.save({...input,id:reused.log.id,version:1,minutes:22},child),/更新/);
 }finally{f.cleanup();}});
