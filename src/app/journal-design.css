@@ -103,8 +103,9 @@
   background: var(--journal-sage); color: var(--journal-green); align-items: center; justify-content: center; gap: 8px;
 }
 .study-shell .hw-primary-actions > button.study-primary-upload { background: var(--accent); color: #fffdf7; }
-.study-shell .hw-primary-actions > button > span { background: transparent; color: inherit; width: 22px; height: 24px; }
-.study-shell .hw-primary-actions > button > span svg { width: 20px; height: 20px; }
+/* Reset legacy icon padding so the SVG and label share a vertical center. */
+.study-shell .hw-primary-actions > button > span { display: grid; place-items: center; flex: 0 0 24px; width: 24px; height: 24px; padding: 0; line-height: 1; background: transparent; color: inherit; }
+.study-shell .hw-primary-actions > button > span svg { display: block; width: 20px; height: 20px; }
 .study-shell .hw-primary-actions strong { color: inherit; font-size: 16px; font-weight: 500; }
 .study-shell .hw-primary-actions small { display: none; }
 .study-shell .hw-primary-actions > button:hover { filter: brightness(.96); }
