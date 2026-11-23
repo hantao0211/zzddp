@@ -142,7 +142,6 @@
   .study-shell .growth-activities .economy-grid .activity-heading { display: flex; align-items: center; gap: 6px; width: 100%; min-width: 0; margin: 0; font-size: 16px; line-height: 1.5; }
   .study-shell .growth-activities .activity-heading > svg { width: 20px; height: 20px; flex-shrink: 0; color: var(--journal-green); }
   .study-shell .growth-activities .activity-heading > span { min-width: 0; overflow-wrap: anywhere; }
-  .study-shell .growth-activities .economy-grid p { margin-bottom: 16px; }
   .study-shell .growth-activities .activity-reward { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
   .study-shell .growth-activities .activity-frequency { white-space: nowrap; font-size: 12px; color: var(--muted); }
   /* Muted solid actions echo each tile, with the same readable tones at night. */
