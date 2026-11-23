@@ -6,10 +6,11 @@
 .study-brand>span{width:36px;height:39px;display:grid;place-items:center;border-radius:11px;background:var(--accent-soft);color:var(--accent)}
 .study-brand svg{width:23px;height:23px;stroke-width:1.8}
 .study-sidebar nav{display:flex;flex-direction:column;gap:8px}
-.study-nav-item{display:flex;align-items:center;gap:12px;min-height:48px;width:100%;padding:11px 14px;border-radius:12px;background:transparent;border:0;font:inherit;font-size:15px;font-weight:500;color:var(--muted);text-align:left;text-decoration:none}
+.study-nav-item{touch-action:manipulation;display:flex;align-items:center;gap:12px;min-height:48px;width:100%;padding:11px 14px;border-radius:12px;background:transparent;border:0;font:inherit;font-size:15px;font-weight:500;color:var(--muted);text-align:left;text-decoration:none}
 .study-nav-item svg{width:21px;height:21px;stroke-width:1.8}
 .study-nav-item.active{background:var(--accent-soft);color:var(--accent)}
-.study-nav-item:hover,.study-parent-link:hover{background:var(--theme-rose-soft, #f6eff3);color:var(--accent)}
+/* Touch taps select a page immediately; hover feedback belongs to a mouse. */
+@media (hover:hover) and (pointer:fine){.study-nav-item:hover,.study-parent-link:hover{background:var(--theme-rose-soft, #f6eff3);color:var(--accent)}}
 .study-sidebar-bottom{margin-top:auto;padding-top:24px;display:flex;flex-direction:column;gap:20px}
 .study-sidebar-bottom>p{padding:0 14px;font-size:13px;line-height:1.9;color:var(--muted)}
 .study-parent-link{display:flex;align-items:center;gap:10px;padding:10px 14px;min-height:46px;background:none;border:0;border-radius:11px;font-size:14px;text-decoration:none;color:var(--muted);text-align:left;position:relative}

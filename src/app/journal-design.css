@@ -24,8 +24,10 @@
 .study-sidebar nav { gap: 11px; }
 .study-nav-item { border-radius: 12px; font-size: 14px; gap: 10px; min-height: 47px; padding: 10px 14px; }
 .study-nav-item.active { background: var(--journal-paper); color: var(--accent-dark); font-weight: 500; }
-.study-nav-item:hover, .study-parent-link:hover { background: var(--theme-warm-soft, #ede4d8); }
-.study-nav-item.active:hover { background: var(--journal-paper); }
+@media (hover:hover) and (pointer:fine) {
+  .study-nav-item:hover, .study-parent-link:hover { background: var(--theme-warm-soft, #ede4d8); }
+  .study-nav-item.active:hover { background: var(--journal-paper); }
+}
 .study-workspace {
   position: relative;
   margin: 12px 12px 12px var(--study-sidebar-width);
