@@ -8,6 +8,7 @@ import "./reading.css";
 import "./study-design.css";
 import "./journal-design.css";
 import "./interactions.css";
+import "./theme.css";
 import { AppInteractions } from "@/components/app-interactions";
 
 export const metadata: Metadata = {
@@ -15,7 +16,7 @@ export const metadata: Metadata = {
   description: "家庭学习助手：上传备忘录和纸质作业，自动分科、整理清单与检查缺项。",
   robots: { index: false, follow: false },
 };
-export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: "#f5efe5" };
+export const viewport: Viewport = { width: "device-width", initialScale: 1, colorScheme: "light dark", themeColor: [{ media: "(prefers-color-scheme: light)", color: "#f5efe5" }, { media: "(prefers-color-scheme: dark)", color: "#1c191d" }] };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return <html lang="zh-CN"><body><AppInteractions>{children}</AppInteractions></body></html>;

@@ -7,7 +7,7 @@ const base = process.env.SMOKE_BASE_URL, output = process.env.SMOKE_OUTPUT_DIR;
 assert.ok(base?.endsWith(":3443")); await mkdir(output, { recursive: true });
 const browser = await chromium.launch({ headless: true, args: ["--no-sandbox", "--host-resolver-rules=MAP 14.103.24.55 127.0.0.1"] });
 try {
-  const page = await browser.newPage({ viewport: { width: 390, height: 670 }, isMobile: true, hasTouch: true });
+  const page = await browser.newPage({ colorScheme:process.env.SMOKE_COLOR_SCHEME || 'light', viewport: { width: 390, height: 670 }, isMobile: true, hasTouch: true });
   let pending = false, failed = false, photos = 0, child = false, quotaPaused = false; const errors = []; page.on("pageerror", e => errors.push(e.message));
   const counts = { correct: 2, wrong: 1, blank: 1, uncertain: 1, feedback: 1 };
   const summary = () => ({ ...counts, enabled: true, pages: 1, finished: pending || failed ? 0 : 1, pending: pending ? 1 : 0, failed: failed ? 1 : 0, incomplete: 0, tasks: { "synthetic-task": { ...counts, pending: pending ? 1 : 0, failed: failed ? 1 : 0, incomplete: 0 } } });

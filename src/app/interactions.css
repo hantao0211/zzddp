@@ -1,9 +1,9 @@
 /* Every native modal owns its scrolling, including the first/last pixel on iOS. */
 dialog[open]{overscroll-behavior:none}
 dialog :is(.dialog-body,.reading-dialog-body,.assistant-messages,.assistant-settings){overscroll-behavior:contain}
-.study-refresh-button{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;width:44px;height:44px;padding:0;border:1px solid var(--border,#eadce5);border-radius:12px;background:#fff;color:var(--accent,#a95476)}
-.study-refresh-button:focus-visible{outline:3px solid #a37191;outline-offset:3px}
-.study-refresh-status{position:fixed;z-index:100;left:50%;top:calc(10px + env(safe-area-inset-top,0px));transform:translateX(-50%);display:flex;align-items:center;gap:8px;max-width:calc(100vw - 24px);padding:11px 16px;background:#fff;color:#86536e;border:1px solid #dec7d5;border-radius:24px;box-shadow:0 3px 14px #493c4314;font-size:14px;pointer-events:none}
+.study-refresh-button{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;width:44px;height:44px;padding:0;border:1px solid var(--border,#eadce5);border-radius:12px;background:var(--theme-surface, #fff);color:var(--accent,#a95476)}
+.study-refresh-button:focus-visible{outline:3px solid var(--theme-border, #a37191);outline-offset:3px}
+.study-refresh-status{position:fixed;z-index:100;left:50%;top:calc(10px + env(safe-area-inset-top,0px));transform:translateX(-50%);display:flex;align-items:center;gap:8px;max-width:calc(100vw - 24px);padding:11px 16px;background:var(--theme-surface, #fff);color:var(--theme-rose-text, #86536e);border:1px solid var(--theme-border, #dec7d5);border-radius:24px;box-shadow:0 3px 14px #493c4314;font-size:14px;pointer-events:none}
 .study-refresh-status[hidden]{display:none}
 .study-refresh-status svg{flex-shrink:0}
 @media(max-width:360px){.study-topbar-actions{gap:4px}.study-refresh-button{width:44px}.study-login-caption{display:none}}

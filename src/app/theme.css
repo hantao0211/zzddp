@@ -1,0 +1,115 @@
+/* Shared surfaces and native controls follow the device without a saved override.
+   Legacy component colors keep light-mode fallbacks while using these roles at night. */
+:root {
+  color-scheme: light;
+  --field-bg: #f4eee5;
+  --field-focus-bg: #fff8ef;
+  --field-border: #d6c6b6;
+  --field-placeholder: #78665c;
+  --field-disabled-bg: #eae2d8;
+  --action-bg: #b44b64;
+  --action-hover-bg: #963a50;
+}
+
+:is(.study-shell, .reading-dialog, .hw-dialog, .assistant-dialog, .admin-app, .account-login)
+  :is(input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]), select, textarea) {
+  background-color: var(--field-bg);
+  border-color: var(--field-border);
+  color: var(--ink);
+  caret-color: var(--accent);
+}
+:is(.study-shell, .reading-dialog, .hw-dialog, .assistant-dialog, .admin-app, .account-login)
+  :is(input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]), select, textarea):focus {
+  background-color: var(--field-focus-bg);
+  border-color: var(--accent);
+}
+:is(input, textarea)::placeholder { color: var(--field-placeholder); opacity: 1; }
+:is(.study-shell, .reading-dialog, .hw-dialog, .assistant-dialog, .admin-app, .account-login)
+  :is(input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]), select, textarea):disabled { background-color: var(--field-disabled-bg); color: var(--muted); }
+:is(input, textarea):-webkit-autofill {
+  -webkit-box-shadow: 0 0 0 1000px var(--field-bg) inset;
+  -webkit-text-fill-color: var(--ink);
+  caret-color: var(--accent);
+}
+input:is([type=checkbox], [type=radio]), progress { accent-color: var(--accent); }
+
+@media screen and (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --bg: #1c191d;
+    --white: #2b252a;
+    --ink: #eee5e7;
+    --muted: #c5b2b9;
+    --accent: #eea0b7;
+    --accent-dark: #ffc0d1;
+    --accent-soft: #432b36;
+    --border: #57474f;
+    --journal-paper: #251f24;
+    --journal-pink: #593641;
+    --journal-sage: #2e3c31;
+    --journal-green: #b2cfaf;
+    --journal-yellow: #53432b;
+    --journal-lilac: #44364f;
+    --field-bg: #342c32;
+    --field-focus-bg: #3c2e37;
+    --field-border: #8f7783;
+    --field-placeholder: #bba7af;
+    --field-disabled-bg: #2b252a;
+    --theme-ink: var(--ink);
+    --theme-muted: var(--muted);
+    --theme-rose-text: #f1a6bc;
+    --theme-success-text: #a9d1b1;
+    --theme-info-text: #acc9e3;
+    --theme-purple-text: #cfbce3;
+    --theme-warm-text: #e4c38e;
+    --theme-surface: #2b252a;
+    --theme-rose-soft: #3c2b34;
+    --theme-green-soft: #2c3a30;
+    --theme-blue-soft: #293643;
+    --theme-purple-soft: #372e40;
+    --theme-warm-soft: #3c3228;
+    --theme-border: var(--border);
+    --theme-translucent-surface: #2b252ae6;
+    --theme-action-bg: var(--action-bg);
+  }
+
+  body { background: var(--bg); color: var(--ink); }
+  .button.primary, .primary, .study-shell .button.primary,
+  .reading-dialog .button.primary, .hw-dialog .button.primary,
+  .study-shell .hw-primary-actions > button.study-primary-upload,
+  .assistant-launcher {
+    background: var(--action-bg);
+    color: #fffdf7;
+  }
+  .button.primary:hover, .primary:hover, .study-shell .button.primary:hover,
+  .reading-dialog .button.primary:hover, .hw-dialog .button.primary:hover,
+  .assistant-launcher:hover { background: var(--action-hover-bg); }
+  .secondary, .study-shell .button.secondary {
+    background: var(--theme-surface);
+    border-color: var(--border);
+    color: var(--ink);
+  }
+  .text-button:hover { color: var(--accent-dark); }
+  .icon-button { color: var(--muted); }
+  .icon-button:hover, .study-nav-item:hover, .study-parent-link:hover { background: var(--accent-soft); color: var(--accent); }
+  .card, .dialog { background: var(--journal-paper); color: var(--ink); border-color: var(--border); }
+  .pill, .count-label { background: var(--accent-soft); color: var(--muted); }
+  .journal-stickers button:nth-child(2) { color: var(--theme-warm-text); }
+  .journal-stickers button:nth-child(3) { color: var(--theme-purple-text); }
+  .journal-pot { background: var(--action-bg); }
+  .journal-garden { background: repeating-linear-gradient(transparent 0 31px, #57474f66 31px 32px); }
+  .study-workspace::before { background: radial-gradient(circle, #756354 1.7px, transparent 2px) 0 0 / 4px 22px; }
+  :is(.reading-dialog, .hw-dialog, .assistant-dialog, .dialog)::backdrop { background: #0009; }
+
+  .status-indicator { --status-color: #c9b9c6; --status-bg: #352c34; --status-border: #65515e; }
+  .status-correct, .status-done, .status-received { --status-color: #a9d8b8; --status-bg: #253b30; --status-border: #476a53; }
+  .status-wrong { --status-color: #ffb1be; --status-bg: #442931; --status-border: #82505e; }
+  .status-blank, .status-missing, .status-partial { --status-color: #e9c58d; --status-bg: #403325; --status-border: #7e6441; }
+  .status-uncertain { --status-color: #b2d0ed; --status-bg: #29394b; --status-border: #526e8b; }
+  .status-feedback, .status-pending { --status-color: #d9bce1; --status-bg: #3c2e43; --status-border: #755c7f; }
+}
+
+@media print {
+  :root { color-scheme: light; }
+  body, .paper { background: #fff; color: #000; }
+}
