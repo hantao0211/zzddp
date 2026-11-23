@@ -280,3 +280,15 @@ test("book metadata HTTP editing is authenticated, same-origin, versioned and av
  const conflict=await f.send(path,"PATCH",{...edit,title:"过期修改"},parent.cookie);assert.equal(conflict.status,409);assert.equal(conflict.data.code,"BOOK_UPDATED");
  assert.equal((await f.send(path,"PATCH",{...edit,revision:saved.data.revision,totalPages:130},parent.cookie)).status,200);assert.equal(f.reading.snapshot(child.data.viewer).books.length,1);assert.equal(f.calls(),0);
  }finally{await f.cleanup();}});
+
+test("book lookup reports invalid ISBN before spending quota; successful empty search is not a service error",async()=>{
+ const f=await fixture();try{
+  const admin=await f.bootstrap();
+  const invalid=await f.send("reading/lookup","POST",{query:"01-2024-1017"},admin.cookie);
+  assert.equal(invalid.status,200);assert.equal(invalid.data.status,"invalid_query");assert.match(invalid.data.note,/ISBN/);
+  assert.equal(f.reading.db.prepare("SELECT count(*) AS n FROM lookup_budget").get()!.n,0);
+  const absent=await f.send("reading/lookup","POST",{query:"模拟书名"},admin.cookie);
+  assert.equal(absent.data.status,"not_found");assert.match(absent.data.note,/暂没查到/);
+  assert.equal(f.reading.db.prepare("SELECT calls FROM lookup_budget").get()!.calls,1);assert.equal(f.calls(),0);
+ }finally{await f.cleanup();}
+});

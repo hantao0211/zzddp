@@ -6,6 +6,7 @@ import {isParent,type Viewer} from "../../domain/accounts";
 import {ReadingStore,BookEditConflict} from "./store";
 import {HomeworkError} from "../homework/store";
 import {lookupBooks} from "./catalog";
+import {parseBookQuery,BookQueryError} from "../../domain/book-query";
 import {TutorAnswerSchema} from "../../domain/ai-contracts";
 import type {ChatInput} from "../../domain/assistant";
 import {AIServiceError,type StructuredAI} from "../ai/provider";
@@ -17,7 +18,16 @@ export class ReadingHTTP{
  try{
  if(path==="/state"&&req.method==="GET"){send(res,this.store.snapshot(viewer));return;}
  if(path==="/logs"&&req.method==="GET"){const bookId=url.searchParams.get("bookId"),date=url.searchParams.get("date"),offset=Number(url.searchParams.get("offset")||0);if((bookId&&!z.string().uuid().safeParse(bookId).success)||(date&&!DaySchema.safeParse(date).success)||!Number.isSafeInteger(offset)||offset<0||offset>20000)throw new HomeworkError(400,"阅读筛选条件无效。");const where="WHERE (? IS NULL OR book_id=?) AND (? IS NULL OR date=?)",args=[bookId,bookId,date,date];const rows=this.store.db.prepare(`SELECT id FROM logs ${where} ORDER BY date DESC,rowid DESC LIMIT 100 OFFSET ?`).all(...args,offset) as {id:string}[];const total=(this.store.db.prepare(`SELECT COUNT(*) AS n FROM logs ${where}`).get(...args) as {n:number}).n;send(res,{items:rows.map(r=>this.store.log(r.id,viewer)),total});return;}
- if(path==="/lookup"&&req.method==="POST"){const v=z.object({query:z.string().trim().min(2).max(100)}).strict().parse(await body());if(this.lookups>=2)throw new HomeworkError(429,"正在查书，请稍等。");this.store.reserveLookup();this.lookups++;try{const items=await this.lookup(v.query);this.store.cache(items);send(res,{items,note:items.length?"请核对作者、出版社和ISBN，确保版本一致。":"暂没找到，可以手动添加。"});}catch{send(res,{items:[],note:"图书资料服务暂时不可用，可以直接填写书名添加，不影响阅读记录。"});}finally{this.lookups--;}return;}
+ if(path==="/lookup"&&req.method==="POST"){
+  const v=z.object({query:z.string().trim().min(2).max(100)}).strict().parse(await body());
+  try{parseBookQuery(v.query);}catch(e){if(e instanceof BookQueryError){send(res,{items:[],status:"invalid_query",note:e.message});return;}throw e;}
+  if(this.lookups>=2)throw new HomeworkError(429,"正在查书，请稍等。");
+  this.store.reserveLookup();this.lookups++;
+  try{const items=await this.lookup(v.query);this.store.cache(items);send(res,{items,status:items.length?"found":"not_found",note:items.length?"选一本填入，再核对版本；留空的信息可以自己补充。":"暂没查到这本书，试试完整书名，或直接填写下方书名添加。"});}
+  catch{send(res,{items:[],status:"unavailable",note:"暂时连不上图书资料服务，已尝试备用来源。可稍后重试，或直接填写下方书名添加。"});}
+  finally{this.lookups--;}return;
+ }
+
  if(path==="/books"&&req.method==="POST"){send(res,this.store.addBook(await body(),viewer.id));return;}
  const bookInfo=path.match(/^\/books\/([a-f0-9-]{36})$/);if(bookInfo){if(req.method==="GET"){send(res,this.store.book(bookInfo[1]));return;}if(req.method==="PATCH"){send(res,this.store.editBook(bookInfo[1],await body(),viewer.id));return;}}
  const book=path.match(/^\/books\/([a-f0-9-]{36})\/finished$/);if(book&&req.method==="POST"){const v=z.object({finished:z.boolean()}).strict().parse(await body());send(res,this.store.finishBook(book[1],v.finished,viewer.id));return;}
