@@ -254,10 +254,6 @@
   .student-profile-dialog h3 { margin: 0 0 5px; font-size: 16px; }
 }
 
-@media screen and (max-width: 360px) {
-  .study-shell .study-page-heading .reading-points .reading-token > span > small { display: block; margin-left: 0; font-size: 11px; line-height: 1.4; }
-}
-
 /* Shared first rows: identical baselines and one icon note, followed by open space. */
 @media screen {
   .study-shell .study-page-heading {
@@ -301,4 +297,22 @@
 @media screen and (max-width: 600px) {
   .study-shell .reading-main .reading-checkin > .reading-section-heading > h2,
   .study-shell .reading-main > :is(.growth-activities, [id="family-reward-shop"]) > h2 { font-size: 18px; }
+}
+
+/* Streak and balance are peers: same badge footprint and type hierarchy. */
+@media screen {
+  .study-shell .study-page-heading .study-heading-badge {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    width: 128px; min-width: 128px; height: 44px; min-height: 44px; flex: 0 0 128px;
+    box-sizing: border-box; padding: 8px 6px; border: 0; border-radius: 12px;
+    font-size: 12px; font-weight: 400; line-height: 20px; white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+  .study-shell .study-page-heading .study-heading-badge svg { display: block; flex-shrink: 0; width: 20px; height: 20px; }
+  .study-shell .study-page-heading .study-heading-badge .reading-token { display: contents; color: inherit; }
+  .study-shell .study-page-heading .study-heading-badge .reading-token > span,
+  .study-shell .study-page-heading .study-heading-badge .study-streak-value strong { font-size: 14px; font-weight: 600; line-height: 20px; color: inherit; }
+  .study-shell .study-page-heading .study-heading-badge .reading-token small { display: inline; font-size: 12px; font-weight: 400; line-height: 20px; margin-left: 3px; }
+  .study-streak-value { line-height: 20px; }
+  .study-streak-value strong { margin-inline: 2px; }
 }
