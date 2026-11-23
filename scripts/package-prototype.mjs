@@ -11,6 +11,13 @@ const temporary = mkdtempSync(join(tmpdir(), "xiaobu-prototype-"));
 try {
   const release = join(temporary, "xiaobu-prototype");
   mkdirSync(release);
+  copyFileSync(join(root, "LICENSE"), join(release, "LICENSE"));
+  mkdirSync(join(release, "docs"));
+  copyFileSync(join(root, "docs/licensing.md"), join(release, "docs/licensing.md"));
+  mkdirSync(join(release, "third-party-licenses"));
+  for (const [dependency, file] of [["next", "license.md"], ["react", "LICENSE"], ["react-dom", "LICENSE"], ["lucide-react", "LICENSE"], ["zod", "LICENSE"]]) {
+    copyFileSync(join(root, "node_modules", dependency, file), join(release, "third-party-licenses", dependency + ".txt"));
+  }
   cpSync(join(root, "out"), join(release, "public"), { recursive: true });
   copyFileSync(join(root, "scripts/serve-preview.cjs"), join(release, "server.cjs"));
   copyFileSync(join(root, "dist/assistant/server.cjs"), join(release, "assistant.cjs"));
@@ -26,5 +33,5 @@ try {
   mkdirSync(resolve(output, ".."), { recursive: true });
   const result = spawnSync("tar", ["-czf", output, "-C", temporary, "xiaobu-prototype"], { stdio: "inherit" });
   if (result.status !== 0) throw new Error("Unable to create deployment archive");
-  console.log(JSON.stringify({ version, archive: output, includes: ["compiled public assets", "static server", "assistant backend (no credentials)", "deployment instructions", "service template"] }));
+  console.log(JSON.stringify({ version, archive: output, includes: ["compiled public assets", "static server", "assistant backend (no credentials)", "deployment instructions", "service template", "project license and usage guidance", "direct runtime dependency license texts"] }));
 } finally { rmSync(temporary, { recursive: true, force: true }); }
