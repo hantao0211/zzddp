@@ -104,4 +104,31 @@
     .study-chat-avatar > .study-chat-mark { right: -1px; width: 18px; height: 18px; }
     .study-chat-mark > svg { width: 12px; height: 12px; }
   }
+
+  /* Mobile tools have square faces; transparent vertical space keeps a 44px tap target. */
+  @media (max-width: 899px) {
+    .study-topbar-actions { --topbar-icon-size: 40px; min-height: 44px; gap: 5px; }
+    .study-topbar :is(.study-chat-button, .study-help, .study-refresh-button, .study-parent-mobile) {
+      position: relative;
+      width: var(--topbar-icon-size);
+      min-width: var(--topbar-icon-size);
+      height: var(--topbar-icon-size);
+      min-height: var(--topbar-icon-size);
+      border: 0;
+      padding: 0;
+      border-radius: 11px;
+      flex-shrink: 0;
+      align-items: center;
+      justify-content: center;
+    }
+    .study-topbar :is(.study-chat-button, .study-help, .study-refresh-button, .study-parent-mobile)::after {
+      content: "";
+      position: absolute;
+      inset: calc((var(--topbar-icon-size) - 44px) / 2) 0;
+    }
+    .study-topbar .study-account > summary { min-height: 44px; }
+  }
+  @media (max-width: 359px) {
+    .study-topbar-actions { --topbar-icon-size: 34px; gap: 3px; }
+  }
 }
