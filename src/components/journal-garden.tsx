@@ -57,7 +57,6 @@ export function JournalGarden({ hint, sticker, onChoose }: { hint: string; stick
   return <section className="journal-garden" aria-label="手帐花园">
     <span className="journal-tape-label">今天也在长大</span>
     <div className="journal-garden-copy">
-      <span className="journal-eyebrow"><Sun size={16} aria-hidden="true" />新的一页，开始啦</span>
       <h2 className="journal-motto"><span className="journal-motto-line">让<span className="journal-motto-small">小小</span>的<span className="journal-motto-effort">努力</span></span><span className="journal-motto-line">开出自己的<span className="journal-motto-flower">花</span></span></h2>
       <p className="study-next-step">{hint}</p>
     </div>

@@ -5,7 +5,7 @@ import { HomeworkDaySettings } from "./homework-day-settings";
 import { resolveHomeworkDayPlan } from "@/domain/homework-calendar";
 import { taskSubmission } from "@/domain/task-submission";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { BookOpen, Camera, ClipboardList, Download, FolderOpen, Heart, LoaderCircle, LogOut, RefreshCw, ShieldCheck, Sparkles, Sprout, Upload, X, MessageCircle, Pencil, CircleAlert, CalendarDays } from "lucide-react";
+import { BookOpen, Camera, ClipboardList, Download, FolderOpen, Heart, LoaderCircle, LogOut, RefreshCw, ShieldCheck, Sparkles, Sprout, Upload, X, MessageCircle, Pencil, CircleAlert, CalendarDays, Sun } from "lucide-react";
 import type { HomeworkSnapshot, UploadView, UploadTarget } from "@/domain/homework";
 import { DaySchema, shanghaiDay } from "@/domain/homework";
 import { reviewActivityLabel, needsReviewTraceUpdate } from "@/domain/review-policy";
@@ -14,6 +14,7 @@ import { GradingPanel, MistakeBook } from "./grading-panel";
 import { useStudyNavigation } from "./study-navigation";
 import { useStudyRefresh } from "./app-interactions";
 import { StudyShell } from "./study-shell";
+import { StudyPageHeading } from "./study-page-heading";
 import { HomeCompanion } from "./study-companion";
 import { JournalGarden, useJournalDecoration } from "./journal-garden";
 import { FamilyNotes } from "./family-notes";
@@ -142,7 +143,7 @@ export function HomeworkApp({ onDemo, onDateChange, active=true }: { onDemo: () 
     <main className="hw-main">
       {auth === "insecure" ? <section className="card hw-login"><ShieldCheck size={35} /><h1>安全打开学习空间</h1><p>真实作业上传和AI整理需要使用安全地址。</p><a className="button primary" href="https://14.103.24.55/">打开安全地址</a><p>以前在此浏览器保存的文件仍然保留。可在下方示例空间查看、下载，再到安全地址上传。</p><button className="text-button" onClick={onDemo}>查看此浏览器的旧记录</button></section> : auth === "locked" ? <section className="card hw-login"><span className="hw-login-icon"><Heart size={32} /></span><div className="eyebrow">欢迎回到小步学习</div><h1>今天，也向前一小步</h1><p>{accounts ? "使用家长或孩子的独立账号登录，与小助手共用登录状态。" : "输入家庭访问码，查看作业和学习资料。与小助手使用同一个访问码。"}</p>{accounts ? <AccountLogin legacy onSignedIn={() => void refresh()} /> : <form onSubmit={login}><label htmlFor="family-code">8位家庭访问码</label><input id="family-code" name="code" type="password" inputMode="numeric" autoComplete="off" pattern="[0-9]{8}" maxLength={8} value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))} required /><button className="button primary" disabled={busy}>{busy ? <LoaderCircle className="spin" size={18} /> : <ShieldCheck size={18} />}进入学习空间</button></form>}<p className="hw-secondary">这台设备会记住登录状态。公共设备使用后请退出。</p><a className="hw-account-entry" href="/admin/">家长登录与管理</a></section> : auth === "loading" ? <section className="card hw-login"><LoaderCircle className="spin" /><p>正在打开家庭学习空间…</p><button className="text-button" onClick={() => void refresh()}>重新连接</button></section> : <>
         {!detailsOpen ? <section className={`hw-simple-home ${summary ? "hw-home-with-summary" : ""}`} aria-label="交作业首页">
-          <div className="hw-heading hw-simple-heading"><div><h1>我的小步手帐</h1></div><label className="hw-date journal-date"><span>作业日期</span><input type="date" value={date} onChange={(e) => { if (e.target.value) { setDate(e.target.value); setDetailId(null); setMemoEdit(null); setRowStatusId(null); } }} /></label></div>
+          <StudyPageHeading className="hw-heading hw-simple-heading" title="我的小步手帐" subtitle={<><Sun size={16} aria-hidden="true"/><span>新的一页，开始啦</span></>} aside={<label className="hw-date journal-date"><span>作业日期</span><input type="date" value={date} onChange={(e) => { if (e.target.value) { setDate(e.target.value); setDetailId(null); setMemoEdit(null); setRowStatusId(null); } }} /></label>} />
           <JournalGarden sticker={journal.sticker} onChoose={journal.choose} hint={snapshot && dayPlan.noHomework ? "今天没有作业，留点时间给喜欢的事。" : "今天的作业，小步陪你整理。"} />
           <div className="study-home-grid"><div className="study-home-main">{(!snapshot || !dayPlan.noHomework) && <div className="hw-upload-actions hw-primary-actions"><button onClick={() => chooseUpload("homework")} className="study-primary-upload"><span><Camera size={25} aria-hidden="true"/></span><div><strong>交作业</strong><small>照片、扫描件都可以</small></div></button><button onClick={() => chooseUpload("memo")}><span><ClipboardList size={25} aria-hidden="true"/></span><div><strong>拍备忘录</strong><small>记下今天要做什么</small></div></button></div>}
           {summary && <section className="hw-home-summary" aria-label="作业概况">

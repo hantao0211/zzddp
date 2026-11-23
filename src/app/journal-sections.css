@@ -239,8 +239,6 @@
 
 /* The learning stage belongs to the growth title, alongside its balance. */
 @media screen {
-  .study-shell .growth-heading { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
-  .study-shell .growth-heading > .growth-heading-copy { min-width: 0; }
   .student-profile-summary { display: inline-flex; align-items: center; gap: 5px; position: relative; min-width: 0; max-width: 100%; min-height: 28px; padding: 4px 0; margin-top: 2px; border: 0; background: transparent; color: var(--muted); font-size: 12px; line-height: 1.5; text-align: start; }
   .student-profile-summary::after { content: ""; position: absolute; inset: -8px 0; }
   .student-profile-summary > svg { flex-shrink: 0; }
@@ -258,5 +256,27 @@
 }
 
 @media screen and (max-width: 360px) {
-  .study-shell .growth-heading .reading-points .reading-token > span > small { display: block; margin-left: 0; font-size: 11px; line-height: 1.4; }
+  .study-shell .study-page-heading .reading-points .reading-token > span > small { display: block; margin-left: 0; font-size: 11px; line-height: 1.4; }
+}
+
+/* Shared first rows: identical baselines, one icon note, and the same separator. */
+@media screen {
+  .study-shell .study-page-heading {
+    display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center;
+    gap: 12px; padding: 5px 0 18px; margin: 0 0 22px;
+    border-bottom: 1px solid var(--border);
+  }
+  .study-shell .study-page-heading > div { min-width: 0; }
+  .study-page-heading-copy { display: grid; gap: 2px; }
+  .study-page-heading-copy > h1 { white-space: nowrap; }
+  .study-page-subtitle {
+    display: flex; align-items: center; gap: 5px; height: 28px;
+    min-width: 0; color: var(--muted); font-size: 12px; line-height: 1.5; white-space: nowrap;
+  }
+  .study-page-subtitle > svg { display: block; width: 16px; height: 16px; flex-shrink: 0; }
+  .study-page-subtitle > .student-profile-summary { padding: 0; margin: 0; font: inherit; color: inherit; }
+  .study-page-heading-aside { display: flex; align-items: center; justify-content: flex-end; min-height: 64px; }
+  .study-shell .study-page-heading .journal-date { display: block; margin: 0; }
+  .study-page-heading-aside .reading-points { line-height: 1.2; }
+  .study-page-heading + .journal-garden { margin-top: 0; }
 }
