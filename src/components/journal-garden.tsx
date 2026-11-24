@@ -33,6 +33,29 @@ function FaceOpacity({ pose, from, to }: { pose: Expression; from: number; to: n
     keyTimes="0;.04;.11;.93;1" values={[from, from, to, to, from].join(";")} />;
 }
 
+function OpenFlowerEye() {
+  return <>
+    <ellipse cx="-1" cy="0" rx="7.8" ry="8" fill="#fff9ed" />
+    <ellipse cx="0.9" cy="0" rx="6.2" ry="7.6" fill="currentColor" />
+    <path d="M-11 -4 Q-11 -1 -8 0 Q-5 -10 2 -7 Q6 -6 7 -2" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    <circle cx="-0.3" cy="-2.8" r="2.45" fill="#fffdf7" />
+    <circle cx="3" cy="2.9" r="1.15" fill="#fffdf7" />
+  </>;
+}
+
+function WorriedFlowerFace() {
+  return <g className="journal-worried-face">
+    {[false, true].map(right => <g key={String(right)} transform={right ? "translate(60 42) scale(-1 1)" : "translate(28 42)"}>
+      <path d="M-7 -12 Q-1 -12 4 -17" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/>
+      <OpenFlowerEye />
+      <ellipse cx="-7" cy="11" rx="5.5" ry="2.5" fill="#f5a49a"/>
+    </g>)}
+    <ellipse cx="44" cy="57" rx="4.8" ry="5.6" fill="#a04459"/>
+    <ellipse cx="44" cy="60" rx="2.8" ry="1.6" fill="#ff98a6"/>
+    <path d="M73 22 Q73 26 76 29 C79 34 72 37 70 32 Q69 30 73 22Z" fill="#77b9c2"/>
+  </g>;
+}
+
 function FlowerEye({ right = false }: { right?: boolean }) {
   function opacityFrames(pose: Expression, layer: "eye" | "arc" | "wink") {
     const beat = eyeBeats[pose];
@@ -54,11 +77,7 @@ function FlowerEye({ right = false }: { right?: boolean }) {
       {expressions.map(pose => <animateTransform key={pose} data-pose={pose} attributeName="transform"
         type="scale" begin="indefinite" dur={faceDuration} keyTimes={eyeBeats[pose].times}
         values={opacityFrames(pose, "eye").map(open => open ? "1 1" : "1 .16").join(";")} />)}
-      <ellipse cx="-1" cy="0" rx="7.8" ry="8" fill="#fff9ed" />
-      <ellipse cx="0.9" cy="0" rx="6.2" ry="7.6" fill="currentColor" />
-      <path d="M-11 -4 Q-11 -1 -8 0 Q-5 -10 2 -7 Q6 -6 7 -2" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-      <circle cx="-0.3" cy="-2.8" r="2.45" fill="#fffdf7" />
-      <circle cx="3" cy="2.9" r="1.15" fill="#fffdf7" />
+      <OpenFlowerEye />
     </g>
     <path data-eyelid="laugh" fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round"
       d="M-8 4 Q-5 -4 0 -4 Q5 -4 8 3">{animateOpacity("arc")}</path>
@@ -67,10 +86,10 @@ function FlowerEye({ right = false }: { right?: boolean }) {
   </g>;
 }
 
-function FlowerFace() {
+function FlowerFace({ reminder }: { reminder?: "waiting" | "speaking" }) {
   const mouthClip = useId();
   const face = useIllustrationMotion<SVGSVGElement>(chooseFlowerExpression, 3200, 4800);
-  return <svg ref={face} className="journal-flower-face" viewBox="0 0 88 82" aria-hidden="true" focusable="false">
+  return <svg ref={face} data-reminder={reminder} className="journal-flower-face" viewBox="0 0 88 82" aria-hidden="true" focusable="false">
     <defs>
       <clipPath id={mouthClip}>
         <path data-feature="mouth" d={mouths.laugh}>
@@ -81,38 +100,50 @@ function FlowerFace() {
         </path>
       </clipPath>
     </defs>
-    <FlowerEye /><FlowerEye right />
-    {[21, 67].map(x => <g key={x} transform={`translate(${x} 55) rotate(-6)`}>
-      <ellipse rx="7.2" ry="3.4" fill="#f5a49a" opacity=".15">
-        {expressions.map(pose => <FaceOpacity key={pose} pose={pose} from={0.15} to={1} />)}
-      </ellipse>
-      <path d="M-5 2l2-4 M-.5 2l2-4 M4 2l2-4" fill="none" stroke="#ef7f8a" strokeWidth="1.5" strokeLinecap="round">
-        {expressions.map(pose => <FaceOpacity key={pose} pose={pose} from={1} to={0} />)}
-      </path>
-      <path d="M-3 1l1-2 M0 1l1-2 M3 1l1-2" fill="none" stroke="#d77379" strokeWidth=".8" strokeLinecap="round" />
-    </g>)}
-    <g clipPath={`url(#${mouthClip})`}>
-      <rect x="33" y="47" width="22" height="22" fill="#af405a" />
-      <ellipse cx="44" cy="63.5" rx="7.2" ry="5.8" fill="#ff98a6" />
+    <g className="journal-idle-face">
+      <FlowerEye /><FlowerEye right />
+      {[21, 67].map(x => <g key={x} transform={`translate(${x} 55) rotate(-6)`}>
+        <ellipse rx="7.2" ry="3.4" fill="#f5a49a" opacity=".15">
+          {expressions.map(pose => <FaceOpacity key={pose} pose={pose} from={0.15} to={1} />)}
+        </ellipse>
+        <path d="M-5 2l2-4 M-.5 2l2-4 M4 2l2-4" fill="none" stroke="#ef7f8a" strokeWidth="1.5" strokeLinecap="round">
+          {expressions.map(pose => <FaceOpacity key={pose} pose={pose} from={1} to={0} />)}
+        </path>
+        <path d="M-3 1l1-2 M0 1l1-2 M3 1l1-2" fill="none" stroke="#d77379" strokeWidth=".8" strokeLinecap="round" />
+      </g>)}
+      <g clipPath={`url(#${mouthClip})`}>
+        <rect x="33" y="47" width="22" height="22" fill="#af405a" />
+        <ellipse cx="44" cy="63.5" rx="7.2" ry="5.8" fill="#ff98a6" />
+      </g>
     </g>
+    <WorriedFlowerFace />
   </svg>;
 }
 
 const flowerPhrases = ["哈哈！", "嘻嘻！", "加油！"] as const;
 const uploadReminder = "记得交作业哦";
-function FlowerSpeech({ remindUpload }: { remindUpload: boolean }) {
+function FlowerSpeech({ remindUpload, onReminderSpeech }: { remindUpload: boolean; onReminderSpeech: (speaking: boolean) => void }) {
   const nextReminder = useRef(0);
   const play = useCallback((bubble: HTMLSpanElement) => {
     const now = Date.now();
-    if (remindUpload && now >= nextReminder.current) {
+    const reminder = remindUpload && now >= nextReminder.current;
+    if (reminder) {
       bubble.textContent = uploadReminder;
       nextReminder.current = now + 5 * 60 * 1000;
     } else {
       const index = (flowerPhrases.findIndex(phrase => phrase === bubble.textContent) + 1) % flowerPhrases.length;
       bubble.textContent = flowerPhrases[index];
     }
-    return animateFlowerSpeech(bubble);
-  }, [remindUpload]);
+    const animation = animateFlowerSpeech(bubble);
+    if (reminder) {
+      onReminderSpeech(true);
+      animation.onfinish = () => onReminderSpeech(false);
+    }
+    return () => {
+      animation.cancel();
+      if (reminder) onReminderSpeech(false);
+    };
+  }, [remindUpload, onReminderSpeech]);
   const speech = useIllustrationMotion(play, 4000, 7000);
   return <>
     <span ref={speech} className="journal-flower-speech"/>
@@ -121,17 +152,17 @@ function FlowerSpeech({ remindUpload }: { remindUpload: boolean }) {
 }
 
 function animateFlowerSpeech(bubble: HTMLSpanElement) {
-  const speech = bubble.animate([
+  return bubble.animate([
     { opacity: 0, transform: "translateY(3px) scale(.94)" },
     { opacity: 1, transform: "translateY(0) scale(1)", offset: .075 },
     { opacity: 1, offset: .925 },
     { opacity: 0, transform: "translateY(-2px)" },
   ], { duration: 2000, easing: "linear" });
-  return () => speech.cancel();
 }
 
 const playedGestures = new WeakMap<SVGSVGElement, Set<Expression>>();
 function chooseFlowerExpression(flower: SVGSVGElement) {
+  if (flower.dataset.reminder === "speaking") return;
   const played = playedGestures.get(flower) ?? new Set<Expression>();
   if (played.size === expressions.length) played.clear();
   const choices = expressions.filter(face => !played.has(face) && face !== flower.dataset.expression);
@@ -188,6 +219,7 @@ const mottoLines = [
 
 export function JournalGarden({ hint, sticker, onChoose, remindUpload }: { remindUpload: boolean; hint: string; sticker: JournalSticker; onChoose: (next: JournalSticker) => void }) {
   const [open, setOpen] = useState(false);
+  const [speakingReminder, setSpeakingReminder] = useState(false);
   const tools = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const flower = useIllustrationMotion(undefined, 7000, 15000);
@@ -229,12 +261,12 @@ export function JournalGarden({ hint, sticker, onChoose, remindUpload }: { remin
         <span className="journal-garden-decoration" role="img" aria-label={`花盆贴着${selected.label}贴纸`}>
           <span ref={flower} className="journal-flower" aria-hidden="true">
             <span className="journal-ground" />
-            <FlowerSpeech remindUpload={remindUpload}/>
+            <FlowerSpeech remindUpload={remindUpload} onReminderSpeech={setSpeakingReminder}/>
             <span className="journal-flower-stalk">
               <span className="journal-stem" />
               {[1, 2, 3, 4, 5].map(n => <span className={`journal-petal p${n}`} key={n} />)}
               <span className="journal-flower-center" />
-              <FlowerFace />
+              <FlowerFace reminder={remindUpload ? (speakingReminder ? "speaking" : "waiting") : undefined} />
               <span className="journal-leaf"><span className="journal-leaf-blade" /></span>
               <span className="journal-leaf l2"><span className="journal-leaf-blade" /></span>
             </span>

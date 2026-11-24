@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
 
 /** Each visible illustration plays on arrival, then occasionally while the reader stays. */
 export function useIllustrationMotion<T extends Element = HTMLSpanElement>(
-  onPlay?: (art: T) => () => void, minDelay = 3000, maxDelay = 6000,
+  onPlay?: (art: T) => (() => void) | undefined, minDelay = 3000, maxDelay = 6000,
 ) {
   const ref = useRef<T>(null);
 

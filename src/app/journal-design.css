@@ -519,3 +519,11 @@
 @media (prefers-reduced-motion: reduce) {
   .journal-flower .journal-quiet-reminder { display: inline-block; opacity: 1; }
 }
+
+.journal-worried-face { display: none; }
+.journal-flower-face[data-reminder="speaking"] .journal-worried-face { display: inline; }
+.journal-flower-face[data-reminder="speaking"] .journal-idle-face { display: none; }
+@media (prefers-reduced-motion: reduce) {
+  .journal-flower-face[data-reminder] .journal-worried-face { display: inline; }
+  .journal-flower-face[data-reminder] .journal-idle-face { display: none; }
+}
