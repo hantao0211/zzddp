@@ -2,7 +2,7 @@ import {z} from "zod";
 import {createReadStream} from "node:fs";
 import type {IncomingMessage,ServerResponse} from "node:http";
 import {isParent,type Viewer} from "../../domain/accounts";
-import {PracticeSubjectSchema,LearningScopeSchema,type PracticePaper,type LearningScope,type PracticeSubject,type PracticeCandidate} from "../../domain/practice";
+import {PracticeSubjectSchema,LearningScopeSchema,type PracticePaper,type PracticeGrade,type LearningScope,type PracticeSubject,type PracticeCandidate} from "../../domain/practice";
 import type {MistakeView,MistakeProvenance,GradedQuestion} from "../../domain/grading";
 import {studentProfile} from "../reading/student-profile";
 import {HomeworkError} from "../homework/store";
@@ -131,7 +131,24 @@ export class PracticeHTTP{
  const item=path.match(/^\/items\/([a-f0-9-]{36})(?:\/(submit|retry|document|complete|answers)(?:\/([^/]+))?)?$/);
  if(item){const id=item[1],action=item[2];if(!action&&req.method==="GET"){send(res,this.store.view(id));return;}
  if(action==="submit"&&req.method==="POST"){send(res,this.store.submit(id,await body(req),viewer));return;}
- if(action==="document"&&req.method==="GET"){const r=this.store.row(id);if(!r.paper)throw new HomeworkError(409,"练习尚未通过校验，请稍等。");const answers=url.searchParams.get("answers")==="1";if(answers&&!isParent(viewer))throw new HomeworkError(403,"参考答案由家长单独保存，练习结果可在批改后查看。");res.writeHead(200,{"Content-Type":"text/html; charset=utf-8","Content-Security-Policy":"default-src 'none'; style-src 'unsafe-inline'; sandbox allow-modals","Cache-Control":"private, no-store"});const paper=JSON.parse(r.paper) as PracticePaper;if(answers&&r.result){const result=JSON.parse(r.result);paper.questions=paper.questions.map(q=>{const correction=result.answers.find((a:any)=>a.questionId===q.id&&a.explanation.startsWith("家长核对：")&&a.expectedAnswer.trim());return correction?{...q,answer:correction.expectedAnswer,explanation:correction.explanation}:q;});}res.end(practiceDocument(paper,this.store.view(id).profileLabel,r.date,answers));return;}
+ if(action==="document"&&req.method==="GET"){
+  const answers=url.searchParams.get("answers")==="1";
+  if(answers&&!isParent(viewer))throw new HomeworkError(403,"参考答案仅供家长查看。");
+  const row=this.store.row(id);
+  if(!row.paper)throw new HomeworkError(409,"练习尚未通过校验，请稍等。");
+  const paper=JSON.parse(row.paper) as PracticePaper;
+  if(answers&&row.result){
+   const result=JSON.parse(row.result) as PracticeGrade;
+   paper.questions=paper.questions.map(question=>{
+    const correction=result.answers.find(answer=>answer.questionId===question.id&&answer.explanation.startsWith("家长核对：")&&answer.expectedAnswer.trim());
+    return correction?{...question,answer:correction.expectedAnswer,explanation:correction.explanation}:question;
+   });
+  }
+  res.setHeader("Cache-Control","private, no-store");
+  if(answers&&url.searchParams.get("format")==="json"){send(res,paper);return;}
+  res.writeHead(200,{"Content-Type":"text/html; charset=utf-8","Content-Security-Policy":"default-src 'none'; style-src 'unsafe-inline'; sandbox allow-modals"});
+  res.end(practiceDocument(paper,this.store.view(id).profileLabel,row.date,answers));return;
+ }
  if(action==="retry"&&req.method==="POST"){z.object({}).strict().parse(await body(req));send(res,this.store.retry(id,viewer));return;}
  if(action==="complete"&&req.method==="POST"){const v=z.object({reason:z.string().trim().min(1).max(500)}).strict().parse(await body(req));send(res,this.store.manualComplete(id,v.reason,viewer));return;}
  if(action==="answers"&&item[3]&&req.method==="PATCH"){send(res,this.store.reviewAnswer(id,decodeURIComponent(item[3]),await body(req),viewer));return;}}

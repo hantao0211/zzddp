@@ -31,11 +31,11 @@ export function PracticeCenter({active=true,openSource}:{active?:boolean;openSou
 function PracticeDetail({item:p,parent,close,refresh}:{item:PracticeView;parent:boolean;close:()=>void;refresh:(text:string)=>Promise<void>}){const ref=useRef<HTMLDialogElement>(null),[photos,setPhotos]=useState<{name:string;image:string}[]>([]),[busy,setBusy]=useState(false),[error,setError]=useState(""),[review,setReview]=useState<PracticeAnswer|null>(null);
  useEffect(()=>{ref.current?.showModal();return()=>ref.current?.close();},[]);
  async function run(work:()=>Promise<unknown>,text:string){setBusy(true);setError("");try{await work();await refresh(text);}catch(e){setError(message(e));}finally{setBusy(false);}}
- async function downloadDocument(answers = false) {
+ async function downloadDocument() {
   setBusy(true);
   setError("");
   try {
-   const response = await fetch(`/assistant-api/learning/practice/items/${p.id}/document${answers ? "?answers=1" : ""}`, { credentials: "same-origin" });
+   const response = await fetch(`/assistant-api/learning/practice/items/${p.id}/document`, { credentials: "same-origin" });
    if (!response.ok) {
     const result = await response.json();
     throw Error(result.error || "题单暂时无法打开。");
@@ -44,7 +44,7 @@ function PracticeDetail({item:p,parent,close,refresh}:{item:PracticeView;parent:
    const url = URL.createObjectURL(blob);
    const link = window.document.createElement("a");
    link.href = url;
-   link.download = `小步学习-${p.subject}-${p.date}${answers ? "-参考答案" : "-练习单"}.html`;
+   link.download = `小步学习-${p.subject}-${p.date}-练习单.html`;
    link.click();
    setTimeout(() => URL.revokeObjectURL(url), 30000);
   } catch (e) {
@@ -53,7 +53,8 @@ function PracticeDetail({item:p,parent,close,refresh}:{item:PracticeView;parent:
    setBusy(false);
   }
  }
- const [previewOpen, setPreviewOpen] = useState(false);
+ const [preview, setPreview] = useState<"worksheet" | "answers" | null>(null);
+ const answerButton = useRef<HTMLButtonElement>(null);
  const printButton = useRef<HTMLButtonElement>(null);
  const working=["queued","generating","grading"].includes(p.status),complete=p.status==="graded"&&p.result?.scopeComplete&&p.result.answers.every(a=>!["blank","uncertain"].includes(a.verdict));
  return <dialog ref={ref} className="reading-dialog practice-dialog" aria-labelledby="practice-detail-title" onCancel={e=>{e.preventDefault();if(!busy)close();}}><header><h2 id="practice-detail-title">{p.subject} · 课内小练习</h2><div className="economy-actions"><TutorialButton topic="practice"/><button className="icon-button" disabled={busy} aria-label="关闭小练习" onClick={close}><X/></button></div></header><div className="reading-dialog-body"><p>{p.date} · {p.profileLabel} · {labels[p.status]}</p>{p.note&&<p className="practice-status-note">{p.note}</p>}{error&&<p className="form-error" role="alert">{error}</p>}{p.rewarded>0?<p className="reading-notice"><Check size={18}/>完成奖励已到账 <StepAmount value={p.rewarded} signed/></p>:!p.rewardEligible?<p className="reading-muted">今天这科奖励已领取，本次继续记录学习，不重复发放。</p>:<p className="reading-muted">真实做完这一套可攒 <StepAmount value={2}/>，批改正确率不影响奖励。</p>}
@@ -61,11 +62,11 @@ function PracticeDetail({item:p,parent,close,refresh}:{item:PracticeView;parent:
  {p.paper && <>
    <h3>{p.paper.title}</h3>
    <div className="economy-actions">
-     <button ref={printButton} className="button primary" disabled={busy} aria-haspopup="dialog" onClick={() => setPreviewOpen(true)}>
+     <button ref={printButton} className="button primary" disabled={busy} aria-haspopup="dialog" onClick={() => setPreview("worksheet")}>
        <Printer size={18} />打印／另存PDF
      </button>
      <button className="button secondary" disabled={busy} onClick={() => void downloadDocument()}><Download size={18} />下载题单</button>
-     {parent && <button className="text-button" disabled={busy} onClick={() => void downloadDocument(true)}><Download size={17} />单独保存参考答案</button>}
+     {parent && <button ref={answerButton} className="button secondary" disabled={busy} aria-haspopup="dialog" onClick={() => setPreview("answers")}><BookOpen size={17} />查看参考答案</button>}
    </div>
    <details className="practice-paper-preview">
      <summary>先看看这套题 · 约{p.paper.questions.reduce((minutes, question) => minutes + question.estimatedMinutes, 0)}分钟</summary>
@@ -80,9 +81,9 @@ function PracticeDetail({item:p,parent,close,refresh}:{item:PracticeView;parent:
  {!!p.photos.length&&<details><summary>这次对应的答卷 · {p.photos.length}张</summary><div className="practice-photo-grid">{p.photos.map(photo=><PhotoPreviewButton key={photo.id} className="photo-preview-thumbnail" src={"/assistant-api/learning/practice/photos/"+photo.id} alt={photo.name}><img src={"/assistant-api/learning/practice/photos/"+photo.id} alt={photo.name} loading="lazy" /><span>查看完整答卷</span></PhotoPreviewButton>)}</div></details>}
  {p.result&&<section className="practice-results"><h3>逐题结果</h3><p className="reading-muted">复测通过率只统计已确认的对错；待确认的题先核对，不直接算错。</p>{p.result.answers.map((a,i)=><article key={a.questionId} className={"practice-verdict-"+a.verdict}><header><strong>第{i+1}题</strong><span>{{correct:"正确",wrong:"需要订正",blank:"未作答",uncertain:"待确认"}[a.verdict]}</span></header><p>{p.paper?.questions.find(q=>q.id===a.questionId)?.question}</p><p>识别到的作答：{a.studentAnswer||"未填写或未识别清楚"}</p>{a.verdict!=="uncertain"&&<p>参考答案：{a.expectedAnswer}</p>}<p>{a.explanation}</p>{parent&&<button className="text-button" onClick={()=>setReview(a)}>家长核对／更正</button>}</article>)}</section>}
  {parent&&p.status==="failed"&&p.retryAllowed&&<button className="button primary" disabled={busy} onClick={()=>void run(()=>call(`items/${p.id}/retry`,{}),"已重新排队，本轮最多尝试两次。")}><RefreshCw size={18}/>重试未完成处理</button>}{p.status==="failed"&&!parent&&<p className="reading-muted">请家长看看未完成原因并决定是否重试。</p>}{parent&&p.photos.length>0&&!working&&!p.rewarded&&p.rewardEligible&&<button className="text-button" disabled={busy} onClick={()=>{const reason=prompt("请核对完整答卷，说明确认实际完成的依据（这不会把待确认答案改为正确）：");if(reason?.trim())void run(()=>call(`items/${p.id}/complete`,{reason:reason.trim().slice(0,500)}),"已按家长确认记录完成，奖励仍受每科每日一次限制。");}}>识别有疑问，家长确认实际完成</button>}
- </div>{previewOpen && p.paper && <PracticePrintPreview paper={p.paper} date={p.date} profileLabel={p.profileLabel} close={() => {
-   setPreviewOpen(false);
-   printButton.current?.focus({ preventScroll: true });
+ </div>{preview && (preview === "worksheet" || parent) && p.paper && <PracticePrintPreview answerItemId={preview === "answers" ? p.id : undefined} paper={p.paper} date={p.date} profileLabel={p.profileLabel} close={() => {
+   setPreview(null);
+   (preview === "answers" ? answerButton : printButton).current?.focus({ preventScroll: true });
  }}/>}{review&&<PracticeAnswerEditor itemId={p.id} answer={review} close={()=>setReview(null)} saved={async()=>{setReview(null);await refresh("家长更正已保存，复测统计已更新；不会重复发奖励。");}}/>}</dialog>;
 }
 function PracticeAnswerEditor({itemId,answer,close,saved}:{itemId:string;answer:PracticeAnswer;close:()=>void;saved:()=>Promise<void>}){const ref=useRef<HTMLDialogElement>(null),[form,setForm]=useState({verdict:answer.verdict,studentAnswer:answer.studentAnswer,expectedAnswer:answer.expectedAnswer,reason:""}),[busy,setBusy]=useState(false),[error,setError]=useState("");useEffect(()=>{ref.current?.showModal();return()=>ref.current?.close();},[]);return <dialog ref={ref} className="reading-dialog" aria-labelledby="practice-review-title" onCancel={e=>{e.preventDefault();e.stopPropagation();if(!busy)close();}}><header><h2 id="practice-review-title">家长核对这道题</h2><button className="icon-button" disabled={busy} onClick={close} aria-label="关闭更正"><X/></button></header><form className="reading-dialog-body" onSubmit={async e=>{e.preventDefault();setBusy(true);setError("");try{await call(`items/${itemId}/answers/${encodeURIComponent(answer.questionId)}`,form,"PATCH");await saved();}catch(e){setError(message(e));}finally{setBusy(false);}}}><label>核对结论<select value={form.verdict} onChange={e=>setForm({...form,verdict:e.target.value as PracticeAnswer["verdict"]})}>{Object.entries({correct:"正确",wrong:"错误",blank:"未作答",uncertain:"待确认"}).map(([key,label])=><option key={key} value={key}>{label}</option>)}</select></label><label>实际作答<textarea value={form.studentAnswer} maxLength={2500} onChange={e=>setForm({...form,studentAnswer:e.target.value})}/></label><label>参考答案<textarea value={form.expectedAnswer} maxLength={1500} onChange={e=>setForm({...form,expectedAnswer:e.target.value})}/></label><label>更正依据<textarea value={form.reason} maxLength={500} required onChange={e=>setForm({...form,reason:e.target.value})}/></label>{error&&<p className="form-error" role="alert">{error}</p>}<button className="button primary" disabled={busy}>保存家长核对</button></form></dialog>;}
