@@ -122,28 +122,25 @@ function FlowerFace({ reminder }: { reminder?: "waiting" | "speaking" }) {
 
 const flowerPhrases = ["哈哈！", "嘻嘻！", "加油！"] as const;
 const uploadReminder = "记得交作业哦";
+const eveningPhrases = [uploadReminder, ...flowerPhrases] as const;
 function FlowerSpeech({ remindUpload, onReminderSpeech }: { remindUpload: boolean; onReminderSpeech: (speaking: boolean) => void }) {
-  const nextReminder = useRef(0);
+  const phrases = remindUpload ? eveningPhrases : flowerPhrases;
+  const nextPhrase = useRef(0);
+  useEffect(() => { nextPhrase.current = 0; }, [phrases]);
   const play = useCallback((bubble: HTMLSpanElement) => {
-    const now = Date.now();
-    const reminder = remindUpload && now >= nextReminder.current;
-    if (reminder) {
-      bubble.textContent = uploadReminder;
-      nextReminder.current = now + 5 * 60 * 1000;
-    } else {
-      const index = (flowerPhrases.findIndex(phrase => phrase === bubble.textContent) + 1) % flowerPhrases.length;
-      bubble.textContent = flowerPhrases[index];
-    }
+    const phrase = phrases[nextPhrase.current];
+    nextPhrase.current = (nextPhrase.current + 1) % phrases.length;
+    bubble.textContent = phrase;
     const animation = animateFlowerSpeech(bubble);
-    if (reminder) {
+    if (phrase === uploadReminder) {
       onReminderSpeech(true);
       animation.onfinish = () => onReminderSpeech(false);
     }
     return () => {
       animation.cancel();
-      if (reminder) onReminderSpeech(false);
+      if (phrase === uploadReminder) onReminderSpeech(false);
     };
-  }, [remindUpload, onReminderSpeech]);
+  }, [phrases, onReminderSpeech]);
   const speech = useIllustrationMotion(play, 4000, 7000);
   return <>
     <span ref={speech} className="journal-flower-speech"/>
