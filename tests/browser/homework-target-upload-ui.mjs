@@ -52,7 +52,10 @@ try{
  async function choose(button,name){const chooser=page.waitForEvent('filechooser');await button.click();await(await chooser).setFiles({name,mimeType:'image/png',buffer:png});return page.getByRole('dialog',{name:'交作业',exact:true});}
  // Optional photos have a direct picker even after manual completion.
  const oralRow=rows.filter({hasText:oralTask.title});
- const optionalButton=oralRow.getByRole('button',{name:'为背诵P55–56上传作业',exact:true});
+ const optionalButton=oralRow.getByRole('button',{name:'为背诵P55–56选传作业',exact:true});
+ const writtenButton=rows.filter({hasText:'数学P74'}).getByRole('button',{name:'为数学P74上传作业',exact:true});
+ assert.equal(await writtenButton.innerText(),'上传作业');
+ for(const action of [writtenButton,optionalButton])await action.locator('svg.lucide-image-plus').waitFor();
  for(const width of [320,390,1280]){
    await page.setViewportSize({width,height:844});
    const fits=await optionalButton.evaluate(el=>el.getBoundingClientRect().right<=el.closest('td').getBoundingClientRect().right+1 && el.scrollWidth<=el.clientWidth+1);
@@ -61,7 +64,7 @@ try{
  await page.setViewportSize({width:390,height:844});
  await oralRow.getByText('已完成（手动）',{exact:true}).waitFor();
  await page.locator('.hw-home-summary').screenshot({path:output+'/optional-home.png'});
- assert.equal(await optionalButton.innerText(),'上传作业');
+ assert.equal(await optionalButton.innerText(),'选传作业');
  const optionalDialog=await choose(optionalButton,'oral.png');
  await optionalDialog.getByText('照片可选，做完后也可以直接确认完成。',{exact:true}).waitFor();
  await optionalDialog.getByText('交到：英语 · 背诵P55–56',{exact:true}).waitFor();
