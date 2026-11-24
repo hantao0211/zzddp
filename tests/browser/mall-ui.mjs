@@ -20,6 +20,11 @@ try{const[pc,parent]=await context('qa-admin');assert.equal((await api(parent,'r
  await grid.getByText('本月名额已用完',{exact:true}).waitFor();
  await child.getByRole('button',{name:'查看一起看电影详情',exact:true}).tap();
  await detail.getByRole('status').filter({hasText:'本月名额已用完'}).waitFor();
+ const historyButton=detail.getByRole('button',{name:'查看约定与更正记录',exact:true});
+ assert.equal(await historyButton.evaluate(b=>getComputedStyle(b).backgroundColor),'rgb(128, 86, 108)');
+ assert.ok((await historyButton.boundingBox()).height>=44);
+ assert.equal(await detail.getByRole('status').evaluate(el=>getComputedStyle(el).backgroundColor),'rgba(0, 0, 0, 0)');
+
  assert.equal(await detail.getByRole('button',{name:'确认申请兑换',exact:true}).count(),0);
  await detail.getByRole('button',{name:'关闭兑换',exact:true}).tap();
  await parent.getByRole('link',{name:'心愿商城',exact:true}).tap();await parent.getByRole('heading',{name:'我的心愿商城',exact:true}).waitFor();await parent.getByRole('button',{name:'家长设置',exact:true}).tap();const section=parent.locator('section.card').filter({has:parent.getByRole('heading',{name:'家庭商品与本期约定',exact:true})});await section.locator('.economy-row').filter({hasText:'一起看电影'}).getByRole('button',{name:'更正价格或期限',exact:true}).tap();await section.getByLabel('所需小脚步',{exact:true}).fill('8');await section.getByLabel('同意兑换后使用天数',{exact:true}).fill('20');await section.getByLabel('更正原因（必填）',{exact:true}).fill('模拟：之前定价误填，已和孩子说明。');await section.getByRole('button',{name:'发布更正版本',exact:true}).tap();await parent.getByText('约定已保存，孩子可查看当前版本，旧兑换按原约定兑现。',{exact:true}).waitFor();state=(await api(parent,'reading/state')).data;const next=state.rewards.find(r=>r.id===old.id);assert.equal(next.cost,8);assert.equal(next.useDays,20);assert.equal(next.version,2);assert.equal(state.redemptions.find(r=>r.id===request.id).cost,10);assert.equal((await api(child,'reading/rewards/'+old.id,'PATCH',{})).status,403);

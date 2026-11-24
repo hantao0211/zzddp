@@ -40,12 +40,13 @@
 .mall-item-footer .mall-item-more{margin:0;flex-shrink:0;white-space:nowrap}
 .mall-grid .mall-item .mall-item-footer small{font-size:11px;line-height:1.35}
 
-.exchange-unavailable {
-  display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border-radius:10px;
-  background:var(--theme-warm-soft,#f3ead7);color:var(--theme-warm-text,#6a4c2c);
+.reading-dialog .exchange-unavailable {
+  display: flex; align-items: baseline; gap: 6px; margin: 6px 0 0;
+  color: var(--theme-warm-text, #6a4c2c); font-size: 14px;
 }
-.exchange-unavailable > svg { flex-shrink:0;margin-top:3px }
-.exchange-unavailable p { margin:2px 0 0;font-size:14px }
+.exchange-unavailable > svg { flex: none; align-self: flex-start; margin-top: 3px; }
+.exchange-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; }
+.exchange-actions > button { min-height: 44px; }
 
 .activity-management-header,.activity-rule-row { display:flex; justify-content:space-between; align-items:center; gap:10px; }
 .activity-management-header h2,.activity-rule-row p { margin:0; }

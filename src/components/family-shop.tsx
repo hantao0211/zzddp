@@ -1,6 +1,6 @@
 "use client";
 import {useEffect,useRef,useState} from "react";
-import {Gift,ShoppingBag,Pencil,Plus,X,Footprints,ChevronRight,LockKeyhole,Trash2} from "lucide-react";
+import {Gift,ShoppingBag,Pencil,Plus,X,Footprints,ChevronRight,History,LockKeyhole,Trash2} from "lucide-react";
 import {RewardIcon} from "./reward-icon";
 import {REWARD_ICONS,defaultRewardIcon,type RewardIconId} from "@/domain/reward-icons";
 import {accountRequest} from "./account-login";
@@ -16,6 +16,14 @@ function blocked(r:Reward,data:ReadingState){return rewardExpired(r,data.today)?
 function Exchange({reward:r,data,refresh,close}:Props&{reward:Reward;close:()=>void}){
  const ref=useRef<HTMLDialogElement>(null),[amount,setAmount]=useState(""),[busy,setBusy]=useState(false),[error,setError]=useState("");
  const request=useRef<{id:string;amountCents?:number}|null>(null),[history,setHistory]=useState<RewardContract[]|null>(null);
+ const [loadingHistory,setLoadingHistory]=useState(false);
+ async function openHistory(){
+  if(loadingHistory)return;
+  setError("");setLoadingHistory(true);
+  try{const result=await call("rewards/"+r.id+"/history",undefined,"GET");setHistory(result.items);}
+  catch(e){setError(message(e));}
+  finally{setLoadingHistory(false);}
+ }
  const shopping=r.kind==="shopping",amountCents=Math.round(Number(amount)*100);
  const valid=/^\d+(\.\d{1,2})?$/.test(amount)&&amountCents>0;
  const budget=r.usage?.remainingCents??r.monthlyBudgetCents??10000;
@@ -58,14 +66,19 @@ function Exchange({reward:r,data,refresh,close}:Props&{reward:Reward;close:()=>v
     </>}
     <p>{needsAmount ? "填写金额后显示本次消耗" : <>本次暂扣 <StepAmount value={cost}/></>}，当前余额 <StepAmount value={data.growth.balance}/>。</p>
     {error&&<p role="alert" className="form-error">{error}</p>}
-    {!busy&&unavailable?<div className="exchange-unavailable" role="status">
-     <LockKeyhole size={19} aria-hidden="true"/>
-     <div><strong>{unavailable}</strong>{unavailable==="小脚步还不够"&&<p>还差 {shortfall} 个小脚步。</p>}</div>
-    </div>:<button type="submit" className="button primary" disabled={busy||needsAmount}>
-     {busy?"正在申请…":needsAmount?"填写金额后可申请":"确认申请兑换"}
-    </button>}
+    {!busy&&unavailable&&<p className="exchange-unavailable" role="status">
+     <LockKeyhole size={16} aria-hidden="true"/>
+     <span>{unavailable}{unavailable==="小脚步还不够" && `，还差 ${shortfall} 个小脚步。`}</span>
+    </p>}
+    <div className="exchange-actions">
+     {(busy||!unavailable)&&<button type="submit" className="button primary" disabled={busy||needsAmount}>
+      {busy?"正在申请…":needsAmount?"填写金额后可申请":"确认申请兑换"}
+     </button>}
+     {!!r.version&&<button type="button" className="button primary plum-action" onClick={openHistory} disabled={loadingHistory||busy} aria-busy={loadingHistory}>
+      <History size={17} aria-hidden="true"/>{loadingHistory?"正在读取记录…":"查看约定与更正记录"}
+     </button>}
+    </div>
    </form>
-   {!!r.version&&<button type="button" className="text-button" onClick={async()=>{try{const v=await call("rewards/"+r.id+"/history",undefined,"GET");setHistory(v.items);}catch(e){setError(message(e));}}}>查看约定与更正记录</button>}
   </div>
   {history&&<OfferHistory title={r.title} items={history} close={()=>setHistory(null)}/>}
  </dialog>;
