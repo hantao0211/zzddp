@@ -138,28 +138,30 @@ try{const page=await browser.newPage({colorScheme:process.env.SMOKE_COLOR_SCHEME
  assert.ok(Math.abs(breeze.start)<.1&&Math.abs(breeze.left+4)<.1&&Math.abs(breeze.right-3.5)<.1);
  const flower=page.locator('.journal-flower');
  const firstFace=await flower.getAttribute('data-expression');
- assert.ok(['blink','wink','grin'].includes(firstFace));
+ const expressions=['wink','laugh','surprised'];
+ assert.ok(expressions.includes(firstFace));
  await page.waitForFunction(previous=>document.querySelector('.journal-flower')?.dataset.expression!==previous,firstFace,{timeout:17500});
- const expressions=await flower.evaluate(el=>{
-  const original=el.dataset.expression;
-  const faces=['blink','wink','grin'].map(face=>{
-   el.dataset.expression=face;
-   return [...el.querySelectorAll('.journal-eye,.journal-smile')].map(part=>getComputedStyle(part).animationName);
-  });
-  el.dataset.expression=original;
-  return faces;
- });
- assert.deepEqual(expressions,[['journal-blink','journal-blink','none'],['none','journal-blink','none'],['none','none','journal-grin']]);
+ for(const pose of expressions){
+  const visible=await flower.evaluate((el,name)=>{
+   el.dataset.expression=name;
+   const svg=el.querySelector('.journal-flower-face');
+   for(const animation of svg.getAnimations({subtree:true})){animation.pause();animation.currentTime=1000;}
+   return [...svg.children].filter(g=>Number(getComputedStyle(g).opacity)===1).map(g=>g.dataset.pose);
+  },pose);
+  assert.deepEqual(visible,[pose]);
+  await flower.screenshot({path:output+'/flower-'+pose+'.png'});
+ }
  await page.emulateMedia({reducedMotion:'reduce'});
  assert.equal(await stalk.evaluate(el=>getComputedStyle(el).animationName),'none');
- assert.equal(await flower.locator('.journal-flower-center').evaluate(center=>center.getAnimations({subtree:true}).length),0);
- const spansPetals=await flower.locator('.journal-flower-center').evaluate(center=>{
-  const disk=center.getBoundingClientRect();
-  const [left,right]=[...center.querySelectorAll('.journal-eye')].map(eye=>eye.getBoundingClientRect());
-  return left.left<disk.left && right.right>disk.right;
+ const resting=await flower.evaluate(el=>{
+  const svg=el.querySelector('.journal-flower-face'),disk=el.querySelector('.journal-flower-center').getBoundingClientRect();
+  const smile=svg.querySelector('[data-pose="smile"]');
+  const [eyes,mouth]=[...smile.children].map(path=>path.getBoundingClientRect());
+  return {visible:[...svg.children].filter(g=>getComputedStyle(g).opacity==='1').map(g=>g.dataset.pose),
+   static:svg.getAnimations({subtree:true}).length===0,lines:[...svg.querySelectorAll('path')].every(path=>getComputedStyle(path).fill==='none'),
+   eyesSpanPetals:eyes.width>disk.width*2,mouthSpansPetals:mouth.width>disk.width*1.5 && mouth.bottom>disk.bottom};
  });
- assert.ok(spansPetals,'Eyes should extend slightly onto the petals');
- assert.equal(await flower.locator('.journal-smile').evaluate(el=>getComputedStyle(el).borderBottomWidth),'3px');
+ assert.deepEqual(resting,{visible:['smile'],static:true,lines:true,eyesSpanPetals:true,mouthSpansPetals:true});
  await flower.screenshot({path:output+'/flower-face.png'});
  const illustrations=[
   ['课外阅读','tab-book','tab-book-page','journal-turn-page',.35],

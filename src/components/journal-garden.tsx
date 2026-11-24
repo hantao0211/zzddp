@@ -12,7 +12,24 @@ const stickers = [
 ] as const;
 export type JournalSticker = typeof stickers[number]["id"];
 
-const expressions = ["blink", "wink", "grin"] as const;
+const expressions = ["wink", "laugh", "surprised"] as const;
+
+// Coordinates span the blossom. The pollen disk sits at (44, 45).
+const faces = {
+  smile: { eyes: "M18 37 Q24 34 28 26 Q31 29 35 36 M53 36 Q59 33 64 27 L70 36", mouth: "M23 54 Q29 63 34 66 Q49 64 65 54" },
+  wink: { eyes: "M17 31 L29 35 L18 39 M52 36 Q60 22 69 33", mouth: "M24 56 Q40 73 65 51" },
+  laugh: { eyes: "M16 37 L26 25 L35 35 M52 35 L62 24 L72 34", mouth: "M23 52 Q43 59 66 50 Q49 80 32 65 Q26 61 23 52 Z" },
+  surprised: { eyes: "M18 32 Q25 20 34 30 M53 27 Q61 15 69 27", mouth: "M34 57 C38 49 54 49 57 56 C60 64 44 72 37 66 Q31 63 34 57 Z" },
+} as const;
+
+function FlowerFace() {
+  return <svg className="journal-flower-face" viewBox="0 0 88 82" aria-hidden="true" focusable="false"
+    fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+    {Object.entries(faces).map(([name, face]) => <g key={name} data-pose={name}>
+      <path d={face.eyes} /><path d={face.mouth} />
+    </g>)}
+  </svg>;
+}
 
 function chooseFlowerExpression(flower: HTMLSpanElement) {
   const choices = expressions.filter(face => face !== flower.dataset.expression);
@@ -80,10 +97,8 @@ export function JournalGarden({ hint, sticker, onChoose }: { hint: string; stick
             <span className="journal-flower-stalk">
               <span className="journal-stem" />
               {[1, 2, 3, 4, 5].map(n => <span className={`journal-petal p${n}`} key={n} />)}
-              <span className="journal-flower-center">
-                <span className="journal-eye left-eye" /><span className="journal-eye right-eye" />
-                <span className="journal-smile" />
-              </span>
+              <span className="journal-flower-center" />
+              <FlowerFace />
               <span className="journal-leaf" /><span className="journal-leaf l2" />
             </span>
             <span className="journal-book-stack" /><span className="journal-book-stack s2" />
