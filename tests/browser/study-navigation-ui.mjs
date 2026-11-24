@@ -153,6 +153,13 @@ try{const page=await browser.newPage({colorScheme:process.env.SMOKE_COLOR_SCHEME
  await page.emulateMedia({reducedMotion:'reduce'});
  assert.equal(await stalk.evaluate(el=>getComputedStyle(el).animationName),'none');
  assert.equal(await flower.locator('.journal-flower-center').evaluate(center=>center.getAnimations({subtree:true}).length),0);
+ const spansPetals=await flower.locator('.journal-flower-center').evaluate(center=>{
+  const disk=center.getBoundingClientRect();
+  const [left,right]=[...center.querySelectorAll('.journal-eye')].map(eye=>eye.getBoundingClientRect());
+  return left.left<disk.left && right.right>disk.right;
+ });
+ assert.ok(spansPetals,'Eyes should extend slightly onto the petals');
+ assert.equal(await flower.locator('.journal-smile').evaluate(el=>getComputedStyle(el).borderBottomWidth),'3px');
  await flower.screenshot({path:output+'/flower-face.png'});
  const illustrations=[
   ['课外阅读','tab-book','tab-book-page','journal-turn-page',.35],
