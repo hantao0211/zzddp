@@ -500,7 +500,7 @@
   border-radius: 53% 48% 47% 44% / 60% 48% 52% 45%;
   background: var(--speech-paper); color: var(--speech-ink);
   rotate: -7deg; transform-origin: 90% 85%;
-  font-size: max(20px, calc(16px / var(--garden-scale)));
+  font-size: max(19px, calc(15px / var(--garden-scale)));
   font-weight: 400; line-height: 1.12; white-space: nowrap;
 }
 .journal-flower-speech::after {
