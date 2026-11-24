@@ -530,9 +530,26 @@
 }
 
 .study-shell .hw-home-summary .study-optional-upload {
-  display: inline-flex; align-items: center; justify-content: center; gap: 3px;
-  min-height: 44px; padding: 4px 5px; max-width: 100%; white-space: nowrap; font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 44px;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
 }
-@media (max-width: 389px) {
-  .study-optional-upload svg { display: none; }
+.study-optional-upload > span:first-child {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
+}
+.study-optional-upload:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
 }
