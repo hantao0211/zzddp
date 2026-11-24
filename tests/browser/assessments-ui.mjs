@@ -20,6 +20,15 @@ try{
  await api("admin/accounts","POST",{username:"exam-child",name:"模拟孩子",role:"child",password});
  await api("reading/student-profile","PATCH",{grade:4,semester:1,school:"",region:""});
  await page.reload();await page.getByRole("heading",{name:"我的课业手账"}).waitFor();
+ async function checkSectionDivider(){
+  const edges=await page.locator(".exam-shelf").evaluate(shelf=>{
+   const next=shelf.nextElementSibling;
+   return {next:next.className,bottom:getComputedStyle(shelf).borderBottomWidth,top:getComputedStyle(next).borderTopWidth,
+    bottomPadding:getComputedStyle(shelf).paddingBottom,bottomMargin:getComputedStyle(shelf).marginBottom};
+  });
+  assert.deepEqual(edges,{next:"home-study-tools",bottom:"0px",top:"1px",bottomPadding:"0px",bottomMargin:"0px"});
+ }
+ await checkSectionDivider();
  await page.getByRole("button",{name:"上传试卷",exact:true}).click();
  const dialog=page.getByRole("dialog",{name:"试卷档案"});
  await dialog.getByLabel("试卷名称").fill("模拟英语期中考");await dialog.getByLabel("科目").selectOption("英语");
@@ -33,6 +42,7 @@ try{
  await page.getByRole("button",{name:"关闭照片"}).click();
  assert.equal(await dialog.locator("summary").filter({hasText:"待核对"}).count(),2);
  await dialog.getByRole("button",{name:"关闭试卷档案"}).click();
+ await page.locator(".exam-shelf .exam-line").waitFor();await checkSectionDivider();
  await page.getByRole("button",{name:"我的错题本",exact:true}).click();
  const book=page.getByRole("region",{name:"错题本",exact:true});
  await book.getByText("题型、阶段与更多筛选",{exact:true}).click();
