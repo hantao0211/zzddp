@@ -514,3 +514,8 @@
 @media (max-width: 359px) {
   .journal-flower-speech { right: 166px; top: -2px; }
 }
+
+.journal-flower .journal-quiet-reminder { display: none; }
+@media (prefers-reduced-motion: reduce) {
+  .journal-flower .journal-quiet-reminder { display: inline-block; opacity: 1; }
+}

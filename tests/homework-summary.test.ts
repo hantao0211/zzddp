@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { DailyReportSchema, type HomeworkSnapshot } from "../src/domain/homework";
+import { shouldRemindHomeworkUpload } from "../src/domain/homework-home";
 import { homeworkSummary } from "../src/domain/homework-summary";
 import { readReviewPolicy } from "../src/domain/review-policy";
 function snapshot(): HomeworkSnapshot {
@@ -68,4 +69,25 @@ test("uncertain tasks with linked evidence do not claim the photos have never be
   task.evidence = [{ fileId: "synthetic-page", page: 1, excerpt: "已交到本项但范围不清" }];
   assert.match(homeworkSummary(s)!.rows[1].photoDetail, /已关联/);
   assert.doesNotMatch(homeworkSummary(s)!.rows[1].photoDetail, /AI还没把照片与这一项对应/);
+});
+
+test("flower reminds only on the current Shanghai evening when homework still needs uploading", () => {
+  const day = snapshot();
+  day.uploads = day.uploads.filter(upload => upload.kind === "memo");
+  const at = (iso: string) => Date.parse(iso + "+08:00");
+  day.homeworkReward = { eligible: true, earned: false, points: 1 };
+  const eight = at("2026-11-17T20:00:00");
+  assert.equal(shouldRemindHomeworkUpload(day, false, eight - 1), false);
+  assert.equal(shouldRemindHomeworkUpload(day, false, eight), true);
+  assert.equal(shouldRemindHomeworkUpload(day, true, eight), false);
+  assert.equal(shouldRemindHomeworkUpload(null, false, eight), false);
+  assert.equal(shouldRemindHomeworkUpload(day, false, at("2026-11-18T00:00:00")), false);
+  assert.equal(shouldRemindHomeworkUpload(snapshot(), false, eight), false);
+  day.report!.tasks = [day.report!.tasks[0]];
+  assert.equal(shouldRemindHomeworkUpload(day, false, eight), false);
+  day.report = null;
+  day.uploads = [];
+  assert.equal(shouldRemindHomeworkUpload(day, false, eight), true);
+  day.homeworkReward = { eligible: true, earned: true, points: 1 };
+  assert.equal(shouldRemindHomeworkUpload(day, false, eight), false);
 });

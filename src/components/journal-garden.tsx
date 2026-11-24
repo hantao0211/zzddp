@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { Flower2, Pencil, Star, Sun } from "lucide-react";
 
 import { useIllustrationMotion } from "./use-illustration-motion";
@@ -99,9 +99,28 @@ function FlowerFace() {
 }
 
 const flowerPhrases = ["哈哈！", "嘻嘻！", "加油！"] as const;
-function playFlowerSpeech(bubble: HTMLSpanElement) {
-  const index = (flowerPhrases.findIndex(phrase => phrase === bubble.textContent) + 1) % flowerPhrases.length;
-  bubble.textContent = flowerPhrases[index];
+const uploadReminder = "记得交作业哦";
+function FlowerSpeech({ remindUpload }: { remindUpload: boolean }) {
+  const nextReminder = useRef(0);
+  const play = useCallback((bubble: HTMLSpanElement) => {
+    const now = Date.now();
+    if (remindUpload && now >= nextReminder.current) {
+      bubble.textContent = uploadReminder;
+      nextReminder.current = now + 5 * 60 * 1000;
+    } else {
+      const index = (flowerPhrases.findIndex(phrase => phrase === bubble.textContent) + 1) % flowerPhrases.length;
+      bubble.textContent = flowerPhrases[index];
+    }
+    return animateFlowerSpeech(bubble);
+  }, [remindUpload]);
+  const speech = useIllustrationMotion(play, 4000, 7000);
+  return <>
+    <span ref={speech} className="journal-flower-speech"/>
+    {remindUpload && <span className="journal-flower-speech journal-quiet-reminder">{uploadReminder}</span>}
+  </>;
+}
+
+function animateFlowerSpeech(bubble: HTMLSpanElement) {
   const speech = bubble.animate([
     { opacity: 0, transform: "translateY(3px) scale(.94)" },
     { opacity: 1, transform: "translateY(0) scale(1)", offset: .075 },
@@ -167,12 +186,11 @@ const mottoLines = [
   [["开", 5, "open"], ["出", -4, "open"], ["自", -7, "own"], ["己", 8, "own"], ["的", -3, "own"], ["花", 13, "flower"]],
 ] as const;
 
-export function JournalGarden({ hint, sticker, onChoose }: { hint: string; sticker: JournalSticker; onChoose: (next: JournalSticker) => void }) {
+export function JournalGarden({ hint, sticker, onChoose, remindUpload }: { remindUpload: boolean; hint: string; sticker: JournalSticker; onChoose: (next: JournalSticker) => void }) {
   const [open, setOpen] = useState(false);
   const tools = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const flower = useIllustrationMotion(undefined, 7000, 15000);
-  const speech = useIllustrationMotion(playFlowerSpeech, 4000, 7000);
   const pickerId = useId();
   useEffect(() => {
     if (!open) return;
@@ -202,6 +220,7 @@ export function JournalGarden({ hint, sticker, onChoose }: { hint: string; stick
         </span>)}
       </h2>
       <p className="study-next-step">{hint}</p>
+      {remindUpload && <span className="visually-hidden">花花提醒：记得交今天的作业哦。</span>}
     </div>
     <div className="journal-garden-tools" ref={tools} onBlur={event => {
       if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false);
@@ -210,7 +229,7 @@ export function JournalGarden({ hint, sticker, onChoose }: { hint: string; stick
         <span className="journal-garden-decoration" role="img" aria-label={`花盆贴着${selected.label}贴纸`}>
           <span ref={flower} className="journal-flower" aria-hidden="true">
             <span className="journal-ground" />
-            <span ref={speech} className="journal-flower-speech" />
+            <FlowerSpeech remindUpload={remindUpload}/>
             <span className="journal-flower-stalk">
               <span className="journal-stem" />
               {[1, 2, 3, 4, 5].map(n => <span className={`journal-petal p${n}`} key={n} />)}

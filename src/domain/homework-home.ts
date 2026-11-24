@@ -4,6 +4,16 @@ import { reviewReportConclusion } from "./review-conclusion";
 import type { HomeworkSnapshot } from "./homework";
 import { needsReviewTraceUpdate } from "./review-policy";
 
+export function shouldRemindHomeworkUpload(snapshot: HomeworkSnapshot | null, noHomework: boolean, now = Date.now()) {
+  if (!snapshot || noHomework || snapshot.homeworkReward?.earned) return false;
+  const evening = Date.parse(`${snapshot.date}T20:00:00+08:00`);
+  const midnight = evening + 4 * 60 * 60 * 1000;
+  if (!(now >= evening && now < midnight)) return false;
+  if (snapshot.uploads.some(upload => upload.kind === "homework" && upload.files.some(file => file.stored))) return false;
+  const report = snapshot.report;
+  return !(report?.tasks.length && !report.unclassified.length && report.tasks.every(task => taskSubmission(task) === "self"));
+}
+
 export function homeworkHomeStatus(snapshot: HomeworkSnapshot | null): { text: string; help: boolean; busy: boolean } {
   if (!snapshot) return { text: "正在读取这一天的记录…", help: false, busy: true };
   if (!snapshot.uploads.length) return { text: "拍下照片，小步来整理。", help: false, busy: false };
