@@ -64,9 +64,9 @@
 }
 .journal-garden-copy { min-width: 0; flex: 1; padding: 12px 0; }
 .journal-tape-label { position: absolute; right: 7px; top: 1px; transform: rotate(9deg); font-size: 11px; padding: 5px 12px; background: var(--journal-yellow); color: var(--ink); border-radius: 4px; z-index: 1; pointer-events: none; }
-/* Both lines total 6.4em to keep their ends aligned. */
+/* Share a line width with room for rounded CJK glyph advances. */
 .study-shell .journal-garden h2 { display: grid; gap: 7px; font-size: 25px; line-height: 1.2; margin: 11px 0 0; letter-spacing: 0; font-weight: 600; }
-.journal-motto-line { display: flex; align-items: baseline; white-space: nowrap; }
+.journal-motto-line { display: flex; align-items: baseline; justify-content: space-between; width: 6.6em; max-width: 100%; white-space: nowrap; }
 .journal-motto-small { font-size: .8em; font-weight: 500; }
 .journal-motto-effort { font-size: 1.4em; }
 .journal-motto-open { font-size: 1.1em; color: var(--journal-green); }

@@ -9,7 +9,7 @@ const viewer = { id: '11111111-1111-4111-8111-111111111111', username: 'qa-child
 const browser = await chromium.launch({ headless: true, args: ['--no-sandbox', '--host-resolver-rules=MAP 14.103.24.55 127.0.0.1'] });
 let earned = false, writes = 0; const errors = [];
 try {
- const page = await browser.newPage({ viewport: { width: 390, height: 844 } }); page.on('pageerror', e => errors.push(e.message));
+ const page = await browser.newPage({ viewport: { width: 390, height: 844 }, ignoreHTTPSErrors: true }); page.on('pageerror', e => errors.push(e.message));
  await page.route('**/assistant-api/**', async route => {
   const req = route.request(), url = new URL(req.url()), path = url.pathname;
   const send = v => route.fulfill({ contentType: 'application/json', body: JSON.stringify(v) });
