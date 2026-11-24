@@ -30,10 +30,14 @@ try {
  const rewardsNav = page.getByRole('navigation', { name: '阅读与奖励导航' });
  await rewardsNav.getByRole('button', { name: '审批心愿' }).click();
  await page.getByRole('heading', { name: '孩子的心愿' }).waitFor();
- await page.getByRole('link', { name: '设置', exact: true }).click();
+ const toSettings = page.getByRole('link', { name: '切换至家长设置', exact: true });
+ assert.ok(await toSettings.getByText('切换至', { exact: true }).isVisible());
+ await toSettings.click();
  const settingsNav = page.getByRole('navigation', { name: '家长管理导航' });
  await settingsNav.getByRole('button', { name: '修改密码' }).click();
- await page.getByRole('link', { name: '阅读与奖励', exact: true }).click();
+ const toRewards = page.getByRole('link', { name: '切换至阅读与奖励', exact: true });
+ assert.ok(await toRewards.getByText('切换至', { exact: true }).isVisible());
+ await toRewards.click();
  await page.getByRole('heading', { name: '孩子的心愿' }).waitFor();
  await page.goBack();
  await page.getByRole('heading', { name: '修改我的密码' }).waitFor();

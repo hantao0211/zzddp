@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { BookOpen, RefreshCw, Settings, type LucideIcon } from "lucide-react";
+import { ArrowLeftRight, RefreshCw, type LucideIcon } from "lucide-react";
 
 export type AdminSection = { id: string; label: string; icon: LucideIcon };
 
@@ -29,10 +29,13 @@ export function AdminNavigation({rewards = false, sections, current, select, bus
   rewards?: boolean; sections: AdminSection[]; current: string; select: (id: string) => void; busy: boolean; refresh: () => void;
 }) {
   const title = rewards ? "阅读与奖励" : "家长管理";
-  const SwitchIcon = rewards ? Settings : BookOpen;
+  const destination = rewards ? "家长设置" : "阅读与奖励";
   return <>
     <div className="admin-heading"><h1>{title}</h1><div className="admin-heading-actions">
-      <a className="button primary plum-action admin-mode-switch" href={rewards ? "/admin/" : "/reading/?view=manage"}><SwitchIcon aria-hidden="true"/>{rewards ? "设置" : "阅读与奖励"}</a>
+      <a className="button primary plum-action admin-mode-switch" href={rewards ? "/admin/" : "/reading/?view=manage"} aria-label={`切换至${destination}`}>
+        <ArrowLeftRight aria-hidden="true"/>
+        <span className="admin-switch-label"><span>切换至</span><strong>{destination}</strong></span>
+      </a>
       <button className="button primary plum-action" disabled={busy} title="刷新" onClick={refresh}><RefreshCw aria-hidden="true"/><span className="visually-hidden">刷新</span></button>
     </div></div>
     <nav className="admin-sections" aria-label={title + "导航"}>

@@ -45,7 +45,9 @@
   .admin-app .admin-sections button { flex-direction: column; gap: 2px; padding: 5px 0; font-size: 13px; }
 }
 
-.admin-heading-actions .admin-mode-switch { min-width: 7.5em; }
+.admin-heading-actions .admin-mode-switch { min-width: 7.5em; padding: 4px 10px; }
+.admin-switch-label { display: grid; text-align: start; line-height: 1.2; }
+.admin-switch-label > span { font-size: 12px; font-weight: 400; }
 .admin-rewards-content > .card:last-child { margin-bottom: 0; }
 .admin-rewards-content h2 svg { vertical-align: middle; margin-inline-end: .3em; }
 .admin-rewards-content label:has(> input[type="checkbox"]) { flex-direction: row; align-items: center; }
