@@ -176,10 +176,12 @@ try{const page=await browser.newPage({colorScheme:process.env.SMOKE_COLOR_SCHEME
  const resting=await flower.evaluate(el=>{
   const svg=el.querySelector('.journal-flower-face'),disk=el.querySelector('.journal-flower-center').getBoundingClientRect();
   const [eyes,mouth]=[...svg.querySelectorAll('path')].map(path=>path.getBoundingClientRect());
-  return {lines:[...svg.querySelectorAll('path')].every(path=>getComputedStyle(path).fill==='none'),
+  const [eyeStyle,mouthStyle]=[...svg.querySelectorAll('path')].map(path=>getComputedStyle(path));
+  return {eyesAreArcs:eyeStyle.fill==='none'&&eyeStyle.strokeLinecap==='round'&&eyeStyle.stroke!=='none',
+   mouthIsSolid:mouthStyle.fill===eyeStyle.stroke&&mouthStyle.stroke==='none',
    eyesSpanPetals:eyes.width>disk.width*2,mouthSpansPetals:mouth.width>disk.width*1.5 && mouth.bottom>disk.bottom};
  });
- assert.deepEqual(resting,{lines:true,eyesSpanPetals:true,mouthSpansPetals:true});
+ assert.deepEqual(resting,{eyesAreArcs:true,mouthIsSolid:true,eyesSpanPetals:true,mouthSpansPetals:true});
  await flower.screenshot({path:output+'/flower-face.png'});
  const illustrations=[
   ['课外阅读','tab-book','tab-book-page','journal-turn-page',.35],

@@ -16,10 +16,22 @@ const expressions = ["wink", "laugh", "surprised"] as const;
 
 // Matching curve segments let the eyes and mouth move continuously between poses.
 const faces = {
-  smile: { eyes: "M18 37 Q24 34 28 26 Q31 29 35 36 M53 36 Q59 33 64 27 Q67 31 70 36", mouth: "M23 54 Q29 63 34 66 Q49 64 65 54 Q49 64 34 66 Q29 63 23 54 Z" },
-  wink: { eyes: "M17 31 Q24 33 29 35 Q24 36 18 39 M52 36 Q57 27 61 27 Q65 27 69 33", mouth: "M24 56 Q33 65 40 64 Q53 62 65 51 Q53 62 40 64 Q33 65 24 56 Z" },
-  laugh: { eyes: "M16 37 Q20 32 26 25 Q31 30 35 35 M52 35 Q57 29 62 24 Q67 29 72 34", mouth: "M23 52 Q32 56 43 55 Q55 55 66 50 Q53 74 40 68 Q29 65 23 52 Z" },
-  surprised: { eyes: "M18 32 Q22 24 27 25 Q31 25 34 30 M53 27 Q57 20 62 21 Q66 21 69 27", mouth: "M34 57 Q37 50 46 51 Q58 50 58 57 Q58 66 45 68 Q33 69 34 57 Z" },
+  smile: {
+    eyes: "M17 35 Q21 28 26 28 Q31 28 35 35 M53 35 Q57 28 62 28 Q67 28 71 35",
+    mouth: "M23 53 Q33 59 44 59 Q55 59 65 53 Q59 65 44 65 Q29 65 23 53 Z",
+  },
+  wink: {
+    eyes: "M17 34 Q21 36 26 36 Q31 36 35 34 M53 34 Q57 26 62 26 Q67 26 71 34",
+    mouth: "M23 54 Q33 59 44 59 Q55 59 65 50 Q59 65 44 65 Q29 65 23 54 Z",
+  },
+  laugh: {
+    eyes: "M16 34 Q20 24 26 24 Q32 24 36 34 M52 34 Q56 24 62 24 Q68 24 72 34",
+    mouth: "M23 51 Q34 53 44 53 Q54 53 65 51 Q61 69 44 69 Q27 69 23 51 Z",
+  },
+  surprised: {
+    eyes: "M18 29 Q21 22 26 22 Q31 22 34 29 M54 29 Q57 22 62 22 Q67 22 70 29",
+    mouth: "M34 57 Q34 48 44 48 Q54 48 54 57 Q54 66 44 66 Q34 66 34 57 Z",
+  },
 } as const;
 
 // Eye reaction first, then the mouth. Hold a surprised look longer than a wink.
@@ -32,7 +44,8 @@ const expressionTiming = {
 function FlowerFace() {
   return <svg className="journal-flower-face" viewBox="0 0 88 82" aria-hidden="true" focusable="false"
     fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-    {(["eyes", "mouth"] as const).map(part => <path key={part} d={faces.smile[part]}>
+    {(["eyes", "mouth"] as const).map(part => <path key={part} d={faces.smile[part]}
+      fill={part === "mouth" ? "currentColor" : "none"} stroke={part === "eyes" ? "currentColor" : "none"}>
       {expressions.map(pose => <animate key={pose} data-pose={pose} attributeName="d" begin="indefinite"
         dur={expressionTiming[pose][part][0] + "ms"} calcMode="spline" keyTimes={expressionTiming[pose][part][1]}
         keySplines="0 0 1 1;.2 0 .35 1;0 0 1 1;.35 0 .55 1"
