@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 
 /** Each visible illustration plays on arrival, then occasionally while the reader stays. */
-export function useIllustrationMotion(onPlay?: (art: HTMLSpanElement) => void) {
+export function useIllustrationMotion(onPlay?: (art: HTMLSpanElement) => () => void) {
   const ref = useRef<HTMLSpanElement>(null);
 
   useEffect(() => {
@@ -11,12 +11,14 @@ export function useIllustrationMotion(onPlay?: (art: HTMLSpanElement) => void) {
     if (!art) return;
     const preference = window.matchMedia("(prefers-reduced-motion: reduce)");
     let inView = false;
+    let stopPose: (() => void) | undefined;
     let firstPlay = true;
     let timer: number | undefined;
 
     function play() {
       if (!art || !inView || document.hidden || preference.matches) return;
-      onPlay?.(art);
+      stopPose?.();
+      stopPose = onPlay?.(art);
       if (art.hasAttribute("data-playing")) {
         for (const animation of art.getAnimations({ subtree: true })) {
           animation.currentTime = 0;
@@ -40,6 +42,8 @@ export function useIllustrationMotion(onPlay?: (art: HTMLSpanElement) => void) {
     function sync() {
       window.clearTimeout(timer);
       if (!inView || document.hidden || preference.matches) {
+        stopPose?.();
+        stopPose = undefined;
         art?.removeAttribute("data-playing");
         if (preference.matches) firstPlay = true;
         return;
@@ -57,6 +61,7 @@ export function useIllustrationMotion(onPlay?: (art: HTMLSpanElement) => void) {
     preference.addEventListener("change", sync);
     return () => {
       window.clearTimeout(timer);
+      stopPose?.();
       observer.disconnect();
       document.removeEventListener("visibilitychange", sync);
       preference.removeEventListener("change", sync);

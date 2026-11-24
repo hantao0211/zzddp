@@ -126,42 +126,60 @@ try{const page=await browser.newPage({colorScheme:process.env.SMOKE_COLOR_SCHEME
   wind.pause(); wind.currentTime=0;
   const angle=()=>{const matrix=new DOMMatrix(getComputedStyle(el).transform);return Math.atan2(matrix.b,matrix.a)*180/Math.PI;};
   const start=angle();
-  wind.currentTime=1150;
+  wind.currentTime=768;
   const left=angle();
-  wind.currentTime=3128;
+  wind.currentTime=1760;
   const right=angle();
+  wind.currentTime=2528;
+  const rebound=angle();
+  wind.currentTime=3200;
+  const settled=angle();
   const still=pot.getBoundingClientRect();
   wind.play();
-  return {start,left,right,potStill:original.x===still.x&&original.y===still.y,iterations:wind.effect.getTiming().iterations};
+  return {start,left,right,rebound,settled,potStill:original.x===still.x&&original.y===still.y,iterations:wind.effect.getTiming().iterations};
  });
  assert.ok(breeze&&breeze.potStill&&breeze.iterations===1);
- assert.ok(Math.abs(breeze.start)<.1&&Math.abs(breeze.left+4)<.1&&Math.abs(breeze.right-3.5)<.1);
+ assert.ok(Math.abs(breeze.start)<.1&&Math.abs(breeze.left+8)<.1&&Math.abs(breeze.right-6.5)<.1&&Math.abs(breeze.rebound+1.8)<.1&&Math.abs(breeze.settled)<.1);
  const flower=page.locator('.journal-flower');
  const firstFace=await flower.getAttribute('data-expression');
  const expressions=['wink','laugh','surprised'];
  assert.ok(expressions.includes(firstFace));
  await page.waitForFunction(previous=>document.querySelector('.journal-flower')?.dataset.expression!==previous,firstFace,{timeout:17500});
- for(const pose of expressions){
-  const visible=await flower.evaluate((el,name)=>{
-   el.dataset.expression=name;
-   const svg=el.querySelector('.journal-flower-face');
-   for(const animation of svg.getAnimations({subtree:true})){animation.pause();animation.currentTime=1000;}
-   return [...svg.children].filter(g=>Number(getComputedStyle(g).opacity)===1).map(g=>g.dataset.pose);
-  },pose);
-  assert.deepEqual(visible,[pose]);
-  await flower.screenshot({path:output+'/flower-'+pose+'.png'});
- }
+ const samples=await flower.locator('.journal-flower-face').evaluate(svg=>{
+  svg.pauseAnimations();
+  const [eyes,mouth]=svg.querySelectorAll('path');
+  const shape=path=>Array.from({length:7},(_,i)=>{
+   const p=path.getPointAtLength(path.getTotalLength()*i/6);
+   return [p.x.toFixed(2),p.y.toFixed(2)].join(',');
+  }).join(' ');
+  svg.setCurrentTime(svg.getCurrentTime()+2);
+  const rest=[shape(eyes),shape(mouth)];
+  const results=[];
+  for(const [pose,lead,peak] of [['wink',.035,.145],['laugh',.07,.70],['surprised',.08,.47]]){
+   const motions=[...svg.querySelectorAll('animate[data-pose="'+pose+'"]')];
+   const start=svg.getCurrentTime();
+   motions.forEach(a=>a.beginElement());
+   svg.setCurrentTime(start+lead);
+   const early=[shape(eyes),shape(mouth)];
+   svg.setCurrentTime(start+peak);
+   results.push({moves:early[0]!==rest[0]&&early[0]!==shape(eyes),mouthWaits:early[1]===rest[1],mouthMoves:shape(mouth)!==rest[1]});
+   svg.setCurrentTime(start+1.8);
+   if(shape(eyes)!==rest[0]||shape(mouth)!==rest[1])throw Error(pose+' failed to settle');
+  }
+  svg.unpauseAnimations();
+  return results;
+ });
+ for(const sample of samples)assert.deepEqual(sample,{moves:true,mouthWaits:true,mouthMoves:true});
  await page.emulateMedia({reducedMotion:'reduce'});
  assert.equal(await stalk.evaluate(el=>getComputedStyle(el).animationName),'none');
+ assert.equal(await flower.getAttribute('data-playing'),null);
  const resting=await flower.evaluate(el=>{
   const svg=el.querySelector('.journal-flower-face'),disk=el.querySelector('.journal-flower-center').getBoundingClientRect();
-  const smile=svg.querySelector('[data-pose="smile"]');
-  const [eyes,mouth]=[...smile.children].map(path=>path.getBoundingClientRect());
-  return {visible:[...svg.children].filter(g=>getComputedStyle(g).opacity==='1').map(g=>g.dataset.pose),
-   static:svg.getAnimations({subtree:true}).length===0,lines:[...svg.querySelectorAll('path')].every(path=>getComputedStyle(path).fill==='none'),
+  const [eyes,mouth]=[...svg.querySelectorAll('path')].map(path=>path.getBoundingClientRect());
+  return {lines:[...svg.querySelectorAll('path')].every(path=>getComputedStyle(path).fill==='none'),
    eyesSpanPetals:eyes.width>disk.width*2,mouthSpansPetals:mouth.width>disk.width*1.5 && mouth.bottom>disk.bottom};
  });
- assert.deepEqual(resting,{visible:['smile'],static:true,lines:true,eyesSpanPetals:true,mouthSpansPetals:true});
+ assert.deepEqual(resting,{lines:true,eyesSpanPetals:true,mouthSpansPetals:true});
  await flower.screenshot({path:output+'/flower-face.png'});
  const illustrations=[
   ['课外阅读','tab-book','tab-book-page','journal-turn-page',.35],

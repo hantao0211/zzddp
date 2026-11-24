@@ -14,26 +14,40 @@ export type JournalSticker = typeof stickers[number]["id"];
 
 const expressions = ["wink", "laugh", "surprised"] as const;
 
-// Coordinates span the blossom. The pollen disk sits at (44, 45).
+// Matching curve segments let the eyes and mouth move continuously between poses.
 const faces = {
-  smile: { eyes: "M18 37 Q24 34 28 26 Q31 29 35 36 M53 36 Q59 33 64 27 L70 36", mouth: "M23 54 Q29 63 34 66 Q49 64 65 54" },
-  wink: { eyes: "M17 31 L29 35 L18 39 M52 36 Q60 22 69 33", mouth: "M24 56 Q40 73 65 51" },
-  laugh: { eyes: "M16 37 L26 25 L35 35 M52 35 L62 24 L72 34", mouth: "M23 52 Q43 59 66 50 Q49 80 32 65 Q26 61 23 52 Z" },
-  surprised: { eyes: "M18 32 Q25 20 34 30 M53 27 Q61 15 69 27", mouth: "M34 57 C38 49 54 49 57 56 C60 64 44 72 37 66 Q31 63 34 57 Z" },
+  smile: { eyes: "M18 37 Q24 34 28 26 Q31 29 35 36 M53 36 Q59 33 64 27 Q67 31 70 36", mouth: "M23 54 Q29 63 34 66 Q49 64 65 54 Q49 64 34 66 Q29 63 23 54 Z" },
+  wink: { eyes: "M17 31 Q24 33 29 35 Q24 36 18 39 M52 36 Q57 27 61 27 Q65 27 69 33", mouth: "M24 56 Q33 65 40 64 Q53 62 65 51 Q53 62 40 64 Q33 65 24 56 Z" },
+  laugh: { eyes: "M16 37 Q20 32 26 25 Q31 30 35 35 M52 35 Q57 29 62 24 Q67 29 72 34", mouth: "M23 52 Q32 56 43 55 Q55 55 66 50 Q53 74 40 68 Q29 65 23 52 Z" },
+  surprised: { eyes: "M18 32 Q22 24 27 25 Q31 25 34 30 M53 27 Q57 20 62 21 Q66 21 69 27", mouth: "M34 57 Q37 50 46 51 Q58 50 58 57 Q58 66 45 68 Q33 69 34 57 Z" },
+} as const;
+
+// Eye reaction first, then the mouth. Hold a surprised look longer than a wink.
+const expressionTiming = {
+  wink: { eyes: [360, "0;.02;.25;.44;1"], mouth: [665, "0;.08;.31;.48;1"] },
+  laugh: { eyes: [1050, "0;.02;.34;.57;1"], mouth: [1505, "0;.06;.38;.60;1"] },
+  surprised: { eyes: [950, "0;.02;.16;.64;1"], mouth: [1160, "0;.095;.24;.67;1"] },
 } as const;
 
 function FlowerFace() {
   return <svg className="journal-flower-face" viewBox="0 0 88 82" aria-hidden="true" focusable="false"
     fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-    {Object.entries(faces).map(([name, face]) => <g key={name} data-pose={name}>
-      <path d={face.eyes} /><path d={face.mouth} />
-    </g>)}
+    {(["eyes", "mouth"] as const).map(part => <path key={part} d={faces.smile[part]}>
+      {expressions.map(pose => <animate key={pose} data-pose={pose} attributeName="d" begin="indefinite"
+        dur={expressionTiming[pose][part][0] + "ms"} calcMode="spline" keyTimes={expressionTiming[pose][part][1]}
+        keySplines="0 0 1 1;.2 0 .35 1;0 0 1 1;.35 0 .55 1"
+        values={[faces.smile[part], faces.smile[part], faces[pose][part], faces[pose][part], faces.smile[part]].join(";")} />)}
+    </path>)}
   </svg>;
 }
 
 function chooseFlowerExpression(flower: HTMLSpanElement) {
   const choices = expressions.filter(face => face !== flower.dataset.expression);
-  flower.dataset.expression = choices[Math.floor(Math.random() * choices.length)];
+  const pose = choices[Math.floor(Math.random() * choices.length)];
+  flower.dataset.expression = pose;
+  const motions = flower.querySelectorAll<SVGAnimateElement>(`animate[data-pose="${pose}"]`);
+  motions.forEach(motion => motion.beginElement());
+  return () => motions.forEach(motion => motion.endElement());
 }
 
 /** A small, optional decoration. It never represents a reward or task progress. */

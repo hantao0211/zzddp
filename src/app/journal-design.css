@@ -91,8 +91,6 @@
 .journal-petal.p5 { transform: rotate(288deg); }
 .journal-flower-center { width: 24px; height: 24px; border-radius: 50%; background: var(--journal-yellow); left: 103px; top: 40px; }
 .journal-flower-face { position: absolute; left: 71px; top: 7px; width: 88px; height: 82px; color: #624335; }
-.journal-flower-face [data-pose] { opacity: 0; }
-.journal-flower-face [data-pose="smile"] { opacity: 1; }
 .journal-leaf { width: 37px; height: 20px; background: var(--journal-green); border-radius: 90% 5% 90% 5%; left: 78px; top: 83px; transform: rotate(18deg); }
 .journal-leaf.l2 { left: 115px; top: 68px; transform: rotate(-28deg); }
 .journal-book-stack { height: 15px; border-radius: 4px; left: 32px; width: 165px; bottom: 30px; transform: rotate(-4deg); background: var(--journal-yellow); border-left: 8px solid var(--journal-pink); }
@@ -267,28 +265,17 @@
 }
 
 @media screen and (prefers-reduced-motion: no-preference) {
-  .journal-flower[data-playing] .journal-flower-stalk { animation: journal-flower-sway 4.6s ease-in-out both; }
-  .journal-flower[data-playing][data-expression] [data-pose="smile"] { animation: journal-rest-face 1.8s .3s step-end both; }
-  .journal-flower[data-playing][data-expression="wink"] [data-pose="wink"],
-  .journal-flower[data-playing][data-expression="laugh"] [data-pose="laugh"],
-  .journal-flower[data-playing][data-expression="surprised"] [data-pose="surprised"] { animation: journal-show-face 1.8s .3s step-end both; }
+  .journal-flower[data-playing] .journal-flower-stalk { animation: journal-flower-sway 3.2s cubic-bezier(.4, 0, .35, 1) both; }
   .tab-book[data-playing] .tab-book-page { animation: journal-turn-page 1.8s .18s ease-in-out both; }
   .tab-sprout[data-playing] .tab-sprout-shoot { animation: journal-sprout-grow 1.7s .18s ease-in-out both; }
   .tab-gift[data-playing] .tab-gift-lid { animation: journal-open-gift 1.8s .18s ease-in-out both; }
   .tab-gift[data-playing] .tab-gift-sparks { animation: journal-gift-sparks 1.8s .18s ease-out both; }
 }
-@keyframes journal-rest-face {
-  0%, 80%, 100% { opacity: 1; }
-  12% { opacity: 0; }
-}
-@keyframes journal-show-face {
-  0%, 80%, 100% { opacity: 0; }
-  12% { opacity: 1; }
-}
 @keyframes journal-flower-sway {
   0%, 100% { transform: rotate(0); }
-  25% { transform: rotate(-4deg); }
-  68% { transform: rotate(3.5deg); }
+  24% { transform: rotate(-8deg); }
+  55% { transform: rotate(6.5deg); }
+  79% { transform: rotate(-1.8deg); }
 }
 @keyframes journal-turn-page {
   0%, 12% { transform: rotateY(0); }
