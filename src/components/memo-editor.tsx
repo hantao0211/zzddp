@@ -5,8 +5,11 @@ import { ArrowLeft, Check, LoaderCircle, Pencil, X } from "lucide-react";
 import type { ClarificationReceipt, HomeworkChatContext, MemoEdit, MemoEntry } from "@/domain/clarifications";
 import { homeworkPost, homeworkRequest, HomeworkRequestError } from "@/services/homework-gateway";
 
-type Props = { date: string; title?: string; subject?: string; close: () => void; saved: (receipt: ClarificationReceipt) => void };
-export function MemoEditor({ date, title, subject, close, saved }: Props) {
+import { HomeworkScopeForm } from "./homework-scope-field";
+import { scopeLabels } from "@/domain/practice";
+
+type Props = { canManage?: boolean; scopeSaved?: () => void; date: string; title?: string; subject?: string; close: () => void; saved: (receipt: ClarificationReceipt) => void };
+export function MemoEditor({ date, title, subject, close, saved, canManage, scopeSaved }: Props) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [context, setContext] = useState<HomeworkChatContext | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
@@ -59,6 +62,14 @@ export function MemoEditor({ date, title, subject, close, saved }: Props) {
       <p className="memo-edit-intro">认错了可以直接改。保存后，小步会按新内容重新整理，原照片仍保留。</p>
       {!context && !error && <p role="status"><LoaderCircle className="spin" size={18} /> 正在读取清单…</p>}
       {context && !entry && <div className="memo-edit-list">{context.entries.map(item => <button key={item.entryId} onClick={() => choose(item.entryId)}><span>{item.subject || "科目待确认"}</span><strong>{item.title}</strong><Pencil size={17} /></button>)}{!context.entries.length && <p>备忘录还没识别出条目。请等识别完成，或补拍清晰备忘录。</p>}</div>}
+      {entry && original?.scopeSource && <details className="hw-date-edit" open={original.scopeSource.scope === "unknown" || undefined}>
+        <summary>作业归属 · {scopeLabels[original.scopeSource.scope]}</summary>
+        {canManage && <HomeworkScopeForm key={original.scopeSource.id} source={original.scopeSource} saved={scopeSource => {
+          setContext(current => current ? { ...current, entries: current.entries.map(item =>
+            item.entryId === selected ? { ...item, scopeSource } : item) } : current);
+          scopeSaved?.();
+        }} />}
+      </details>}
       {entry && <form onSubmit={save}>
         {context && context.entries.length > 1 && <button type="button" className="text-button memo-edit-back" disabled={busy} onClick={() => { setEntry(null); setSelected(null); }}><ArrowLeft size={16} />换一项</button>}
         <label>科目<select aria-label="作业科目" value={entry.subject || ""} disabled={busy} onChange={e => change({ subject: (e.target.value || null) as MemoEntry["subject"] })}><option value="" disabled={!!original?.subject}>待确认</option>{["语文", "数学", "英语"].map(s => <option key={s}>{s}</option>)}</select></label>

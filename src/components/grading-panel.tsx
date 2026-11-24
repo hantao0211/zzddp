@@ -122,7 +122,7 @@ function MistakeScopeEditor({ item, close, saved }: {
           {LearningScopeSchema.options.map(value => <option key={value} value={value}>{scopeLabels[value]}</option>)}
         </select>
       </label>
-      <p className="reading-muted">保存后会更新这道题的归属。小练习只从课内错题出题。</p>
+      <p className="reading-muted">这里只更改这一题，原作业和其他错题的归属保持原样。</p>
       {error && <p className="form-error" role="alert">{error}</p>}
       <div className="reading-record-actions">
         <button type="button" className="button secondary" disabled={busy} onClick={close}>取消</button>
@@ -198,7 +198,7 @@ export function MistakeBook({ canManage = false }: { canManage?: boolean }) {
 
   return <section className="card grade-panel mistake-book" aria-label="错题本">
     <h2>我的错题本{data ? ` · ${data.total}题` : ""}</h2>
-    <p className="grade-source">只收录已核验的错题。筛选只改变这里显示的题目。</p>
+    <p className="grade-source">已核验的错题会沿用原作业归属，可单独纠正个别题。</p>
     <div className="tabs grade-filters" role="group" aria-label="按科目筛选">
       {(["", ...PracticeSubjectSchema.options] as const).map(subject =>
         <button type="button" key={subject} aria-pressed={filters.subject === subject} className={filters.subject === subject ? "selected" : ""}

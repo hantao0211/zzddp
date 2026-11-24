@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { SubjectSchema } from "./contracts";
 import { DaySchema } from "./calendar";
+import type { HomeworkScopeSource } from "./homework-scope";
 
 export const ClarificationChangesSchema = z.object({
   subject: SubjectSchema.nullable(), title: z.string().trim().min(1).max(150).nullable(),
@@ -26,5 +27,5 @@ export const ClarificationReceiptSchema = z.object({
   entryId: z.string().optional(), requirement: z.string().optional(), current: z.boolean().optional(), canUndo: z.boolean().optional(),
 });
 export type ClarificationReceipt = z.infer<typeof ClarificationReceiptSchema>;
-export type HomeworkChatContext = { requirementOptions?: MemoEntry[]; date: string; revision: number; availableDates: string[]; hasMaterials: boolean; pending: boolean; status: string; note: string; taskCount: number; unclassifiedCount: number; entries: (MemoEntry & { entryId: string })[]; uncertainties: { index: number; text: string }[]; familyNotes: ClarificationReceipt[] };
+export type HomeworkChatContext = { requirementOptions?: MemoEntry[]; date: string; revision: number; availableDates: string[]; hasMaterials: boolean; pending: boolean; status: string; note: string; taskCount: number; unclassifiedCount: number; entries: (MemoEntry & { entryId: string; scopeSource?: HomeworkScopeSource })[]; uncertainties: { index: number; text: string }[]; familyNotes: ClarificationReceipt[] };
 export const ContextQuerySchema = z.object({ studyDate: DaySchema.optional() });

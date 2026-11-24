@@ -24,8 +24,9 @@ export class HomeworkConversation {
     const selected = date || availableDates[0] || shanghaiDay(this.store.now());
     const state = this.store.snapshot(selected), memo = this.memo(selected);
     const data = memo?.result ? effectiveMemo(this.store, memo) : undefined;
+    const sources = withRequirements && memo && data ? this.store.scopes.entries(memo) : [];
     return { ...(withRequirements ? {requirementOptions:this.store.completions.requirements()}:{}), date: selected, revision: this.store.revision(selected), availableDates, hasMaterials: state.uploads.some((u) => u.status !== "uploading"), pending: state.pending, status: state.status, note: state.note, taskCount: state.report?.tasks.length || 0, unclassifiedCount: data?.result.assignments.filter((a) => !a.subject).length || 0,
-      entries: data?.result.assignments.map((a, i) => ({ ...entryValue(a), entryId: `${memo!.id}:entry:${i}` })) || [], uncertainties: data?.unresolved || [], familyNotes: (data?.receipts || []).map((r) => {
+      entries: data?.result.assignments.map((a, i) => ({ ...entryValue(a), entryId: `${memo!.id}:entry:${i}`, ...(sources[i] ? { scopeSource: sources[i] } : {}) })) || [], uncertainties: data?.unresolved || [], familyNotes: (data?.receipts || []).map((r) => {
         const note = this.store.db.prepare("SELECT owner,entry_index FROM clarifications WHERE id=?").get(r.id) as { owner: string; entry_index: number };
         const latest = this.store.db.prepare("SELECT id FROM clarifications WHERE memo_id=? AND entry_index=? AND undone_at IS NULL ORDER BY rowid DESC LIMIT 1").get(memo!.id, note.entry_index) as { id: string };
         return { ...r, canUndo: note.owner === owner && latest.id === r.id };

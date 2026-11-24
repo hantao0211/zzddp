@@ -1,7 +1,8 @@
 import type {PracticeHTTP} from "../practice/http";
 import {LearningScopeSchema,type PracticeSubject} from "../../domain/practice";
 import { z } from "zod";
-import type { Viewer } from "../../domain/accounts";
+import { isParent, type Viewer } from "../../domain/accounts";
+import { HomeworkScopeRefSchema, HomeworkScopeSchema } from "../../domain/homework-scope";
 import { createHash, randomUUID } from "node:crypto";
 import { open, rename, rm, statfs } from "node:fs/promises";
 import { createReadStream, statSync } from "node:fs";
@@ -34,6 +35,13 @@ export class HomeworkHTTP {
       }
       if (path === "/day-plan" && req.method === "POST") {
         json(res, this.store.setDayPlan(await input(req), viewer?.id || "legacy")); return;
+      }
+      if (path === "/source-scope" && req.method === "PATCH") {
+        if (!isParent(viewer)) throw new HomeworkError(403, "请家长修改已录入作业的归属。");
+        const value = z.object({ source: HomeworkScopeRefSchema, scope: HomeworkScopeSchema }).strict().safeParse(await input(req));
+        if (!value.success) throw new HomeworkError(400, "请选择课内或课外。");
+        const { source, scope } = value.data;
+        json(res, this.store.transaction(() => this.store.scopes.set(source, scope))); return;
       }
       if (path === "/task-completion" && req.method === "POST") {
         const value=z.object({date:DaySchema,taskId:z.string().min(1).max(180),token:z.string().regex(/^[a-f0-9]{64}$/),completed:z.boolean()}).strict().safeParse(await input(req));

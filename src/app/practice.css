@@ -45,3 +45,12 @@
 .mistake-retest{font-size:13px;line-height:1.9;color:var(--muted);margin-top:12px}
 .grade-photo img{max-width:100%;height:auto;border-radius:12px}
 @media(max-width:700px){.practice-subjects{grid-template-columns:1fr}.practice-subjects article{padding:16px}.practice-subjects article h3{font-size:18px}.practice-heading h2{font-size:19px}.practice-photo-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.practice-heading .xiaobu-mascot{width:48px;height:48px}.practice-home-links{gap:18px}.curriculum-library .reading-fields{grid-template-columns:1fr}.practice-results article{padding:14px}}
+
+.practice-scope-sources{font-size:14px;margin-block-start:10px;overflow-wrap:anywhere}
+.practice-scope-sources summary{cursor:pointer;color:var(--accent)}
+.practice-scope-sources button{text-align:start;min-height:44px}
+.hw-scope-field{display:flex;flex-direction:column;gap:6px;max-width:20rem}
+.hw-scope-field select{min-height:44px;border:1px solid var(--field-border,var(--border));border-radius:10px;padding:8px 12px;font:inherit;color:var(--ink);background:var(--field-bg,var(--white))}
+.hw-scope-form .button{min-height:44px}
+.hw-task-scope{display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap}
+.hw-task-scope .text-button{min-height:44px}

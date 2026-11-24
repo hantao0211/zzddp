@@ -17,10 +17,24 @@ export class PracticeHTTP{
  mistakes(subject:PracticeSubject|undefined,scope:LearningScope|undefined,offset:number){const items=this.store.candidates(subject).filter(c=>!scope||c.scope===scope).sort((a,b)=>b.lastDate.localeCompare(a.lastDate));return{total:items.length,items:items.slice(offset,offset+30).map(c=>{let question:GradedQuestion,pageId="",date=c.lastDate,imageUrl:string|undefined;
  if(c.origin==="homework"){const r=this.store.db.prepare("SELECT payload,page_id,first_date FROM grading_mistakes WHERE id=?").get(c.id) as {payload:string;page_id:string;first_date:string};question=JSON.parse(r.payload);pageId=r.page_id;date=r.first_date;}
  else{const r=this.store.db.prepare("SELECT * FROM practice_mistakes WHERE id=?").get(c.id) as {practice_id:string;question_id:string};const result=this.store.db.prepare("SELECT result FROM practice_results WHERE practice_id=? AND question_id=?").get(r.practice_id,r.question_id) as {result:string};const answer=JSON.parse(result.result);pageId=answer.evidenceIds?.[0]||"";imageUrl=pageId?"/assistant-api/learning/practice/photos/"+pageId:undefined;question={id:c.id,kind:"objective",label:"小练习复测题",question:c.question,studentAnswer:answer.studentAnswer,expectedAnswer:c.answer,verdict:"wrong",confidence:"high",explanation:answer.explanation,knowledgePoints:c.knowledgePoints,cause:"原因待确认",causeExplanation:"",nextStep:"先订正这道题，之后用变式练习再核对。",evidence:pageId?[{fileId:pageId,page:null,excerpt:"小练习答卷"}]:[],sourcePartLabels:[],verification:"agreed"};}
- return{id:c.id,date,lastDate:c.lastDate,subject:c.subject,title:c.title,pageId,occurrences:c.occurrences,question,scope:c.scope,retest:c.stats,origin:c.origin,imageUrl} satisfies MistakeView;
+ return{id:c.id,date,lastDate:c.lastDate,subject:c.subject,title:c.title,pageId,occurrences:c.occurrences,question,scope:c.scope,scopeSource:c.scopeSource,retest:c.stats,origin:c.origin,imageUrl} satisfies MistakeView;
  })};}
  async handle(req:IncomingMessage,res:ServerResponse,viewer:Viewer){const url=new URL(req.url!,"http://internal"),path=url.pathname.replace("/assistant-api/learning/practice","");try{
- if(path==="/state"&&req.method==="GET"){const candidates=this.store.candidates();send(res,{today:this.store.today(),viewer:{id:viewer.id,role:viewer.role},profile:studentProfile(this.store.reading),subjects:(["语文","数学","英语"] as const).map(subject=>({subject,curricular:candidates.filter(c=>c.subject===subject&&c.scope==="curricular").length,extracurricular:candidates.filter(c=>c.subject===subject&&c.scope==="extracurricular").length,unknown:candidates.filter(c=>c.subject===subject&&c.scope==="unknown").length,rewardEligible:this.store.rewards.eligible(subject,this.store.today())})),items:this.store.list()});return;}
+ if (path === "/state" && req.method === "GET") {
+  const today = this.store.today();
+  const candidates = this.store.candidates();
+  const subjects = PracticeSubjectSchema.options.map(subject => {
+    const mistakes = candidates.filter(item => item.subject === subject);
+    const pending = mistakes.filter(item => item.scope === "unknown");
+    const sources = pending.flatMap(item => item.scopeSource ? [item.scopeSource] : []);
+    const pendingSources = [...new Map(sources.map(source => [source.id, source])).values()].slice(0, 10);
+    return { subject, curricular: mistakes.filter(item => item.scope === "curricular").length,
+      extracurricular: mistakes.filter(item => item.scope === "extracurricular").length, unknown: pending.length,
+      ...(pendingSources.length ? { pendingSources } : {}), rewardEligible: this.store.rewards.eligible(subject, today) };
+  });
+  send(res, { today, viewer: { id: viewer.id, role: viewer.role }, profile: studentProfile(this.store.reading), subjects, items: this.store.list() });
+  return;
+ }
  if(path==="/generate"&&req.method==="POST"){const v=z.object({subject:PracticeSubjectSchema}).strict().parse(await body(req));send(res,this.store.create(v.subject,viewer));return;}
  if(path==="/materials"&&req.method==="GET"){send(res,{items:this.materials.list()});return;}
  const indexed=path.match(/^\/materials\/([a-f0-9-]{36})\/pages$/);if(indexed&&req.method==="GET"){const offset=Number(url.searchParams.get("offset")||0);if(!Number.isSafeInteger(offset)||offset<0||offset>10000)throw new HomeworkError(400,"分页位置无效。");send(res,this.materials.pages(indexed[1],offset));return;}

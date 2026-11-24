@@ -1,4 +1,5 @@
 import type { HomeworkSnapshot, UploadView } from "@/domain/homework";
+import type { HomeworkScope } from "@/domain/homework-scope";
 import {operationLabels,withOperationFeedback} from "./operation-feedback";
 export class HomeworkRequestError extends Error { constructor(public status: number, message: string) { super(message); } }
 const base = "/assistant-api/learning";
@@ -14,7 +15,7 @@ export async function homeworkRequest<T>(path: string, init: RequestInit = {}): 
 }
 export const getHomework = (date: string, signal?: AbortSignal) => homeworkRequest<HomeworkSnapshot>(`/state?date=${date}`, { signal });
 export const homeworkPost = <T,>(path: string, value: unknown = {}) => homeworkRequest<T>(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(value) });
-export async function uploadHomework(date: string, kind: "memo" | "homework", files: File[], onProgress: (text: string) => void, targetTaskId?: string) {
+export async function uploadHomework(date: string, kind: "memo" | "homework", files: File[], onProgress: (text: string) => void, targetTaskId?: string, scope?: HomeworkScope) {
   return withOperationFeedback({pending: kind === "memo" ? "正在上传备忘录，请稍候…" : "正在上传作业，请稍候…", success: "资料已收到，识别和批改会在后台继续。无需重复上传。"}, async () => {
   onProgress("正在检查文件…");
   const metadata = [];
@@ -22,7 +23,7 @@ export async function uploadHomework(date: string, kind: "memo" | "homework", fi
     const hash = await crypto.subtle.digest("SHA-256", await file.arrayBuffer());
     metadata.push({ name: file.name, size: file.size, sha256: Array.from(new Uint8Array(hash), (b) => b.toString(16).padStart(2, "0")).join("") });
   }
-  const upload = await homeworkPost<UploadView>("/uploads", { date, kind, files: metadata, ...(targetTaskId ? { targetTaskId } : {}) });
+  const upload = await homeworkPost<UploadView>("/uploads", { date, kind, files: metadata, ...(targetTaskId ? { targetTaskId } : {}), ...(scope ? { scope } : {}) });
   if (upload.status !== "uploading") { onProgress("这批资料已保存，无需重复上传。"); return upload; }
   for (let i = 0; i < files.length; i++) {
     onProgress(`正在上传 ${i + 1}/${files.length}：${files[i].name}`);

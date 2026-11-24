@@ -9,6 +9,7 @@ import {mkdtempSync,rmSync,readFileSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {randomUUID} from "node:crypto";
+import {DailyReportSchema, UploadInputSchema} from "../src/domain/homework";
 import {HomeworkStore} from "../src/server/homework/store";
 import {ReadingStore} from "../src/server/reading/store";
 import {saveStudentProfile} from "../src/server/reading/student-profile";
@@ -21,6 +22,65 @@ import type {Viewer} from "../src/domain/accounts";
 const child:Viewer={id:randomUUID(),username:"child",name:"模拟孩子",role:"child"},parent:Viewer={id:randomUUID(),username:"parent",name:"模拟家长",role:"parent"};
 function setup(){const dir=mkdtempSync(join(tmpdir(),"practice-test-"));let now=Date.parse("2026-11-23T10:00:00+08:00");const homework=new HomeworkStore(join(dir,"learning"),()=>now),reading=new ReadingStore(join(dir,"reading"),()=>now);saveStudentProfile(reading,{grade:4,semester:2,region:"模拟地区",school:"模拟学校"},parent.id);const store=new PracticeStore(homework,reading);const seed=(subject="数学",title="课堂练习",id=randomUUID())=>{const q={id,kind:"objective",label:"第1题",question:"1+1等于几？",studentAnswer:"3",expectedAnswer:"2",verdict:"wrong",confidence:"high",explanation:"1加1等于2。",knowledgePoints:["整数加法"],cause:"计算错误",causeExplanation:"可能需要重新核对计算。",nextStep:"再算一次。",evidence:[{fileId:"synthetic-page",page:1,excerpt:"模拟"}],sourcePartLabels:[],verification:"agreed"};homework.db.prepare("INSERT INTO grading_mistakes(id,first_date,last_date,subject,title,page_id,payload) VALUES(?,?,?,?,?,?,?)").run(id,reading.today(),reading.today(),subject,title,"synthetic-page",JSON.stringify(q));return id;};return{dir,homework,reading,store,seed,time:(day:string)=>now=Date.parse(day+"T10:00:00+08:00"),close(){homework.close();reading.close();rmSync(dir,{recursive:true,force:true});}};}
 const jpeg=(n=1)=>Buffer.from([255,216,255,224,n,2,3,4]).toString("base64");
+
+test("homework uploads have a curricular default and an explicit extracurricular choice", () => {
+  const f = setup();
+  try {
+    const date = f.store.today();
+    const files = [{ name: "模拟照片.jpg", size: 12, sha256: "a".repeat(64) }];
+    const standard = f.homework.begin({ date, kind: "homework", files });
+    assert.equal(standard.scopeSource?.scope, "curricular");
+    assert.throws(() => f.homework.begin({ date, kind: "homework", files, scope: "extracurricular" }), /已有归属/);
+    const extra = f.homework.begin({
+      date, kind: "homework", scope: "extracurricular", files: [{ ...files[0], sha256: "b".repeat(64) }],
+    });
+    assert.equal(extra.scopeSource?.scope, "extracurricular");
+    assert.equal(UploadInputSchema.safeParse({ date, kind: "memo", files, scope: "curricular" }).success, false);
+    const memo = f.homework.begin({ date, kind: "memo", files });
+    const assignments = ["普通练习", "课外拓展", "课内外综合"].map(title => ({
+      subject: "数学", title, requirement: title, format: "written", evidence: [{ fileId: "memo", page: 1, excerpt: title }],
+    }));
+    f.homework.db.prepare("UPDATE uploads SET result=? WHERE id=?")
+      .run(JSON.stringify({ date, readable: true, assignments, uncertainties: [] }), memo.id);
+    assert.deepEqual(f.homework.scopes.entries(f.homework.upload(memo.id)!).map(source => source.scope), ["curricular", "extracurricular", "unknown"]);
+    f.homework.db.prepare("DELETE FROM homework_source_scopes WHERE source_kind='memo-default' AND source_id=?").run(memo.id);
+    assert.deepEqual(f.homework.scopes.entries(f.homework.upload(memo.id)!).map(source => source.scope), ["unknown", "extracurricular", "unknown"]);
+    assert.equal(f.homework.begin({ date, kind: "memo", files }).id, memo.id);
+    assert.equal(f.homework.scopes.entries(f.homework.upload(memo.id)!)[0].scope, "unknown");
+  } finally { f.close(); }
+});
+
+test("mistakes inherit their exact source, while question edits and other assignments stay independent", () => {
+  const f = setup();
+  try {
+    const date = f.store.today();
+    const ids = ["old1", "old2", "old3", "fresh", "neighbor"].map(() => f.seed("数学", "模拟旧标题"));
+    const upload = f.homework.begin({ date, kind: "homework", scope: "extracurricular",
+      files: [{ name: "模拟课外.jpg", size: 12, sha256: "b".repeat(64) }] });
+    f.homework.setPages(upload.files[0].id, [{ id: "fresh-page", file_id: upload.files[0].id, number: 1 }]);
+    const link = f.homework.db.prepare("UPDATE grading_mistakes SET page_id=? WHERE id=?");
+    ids.forEach((id, index) => link.run(["old-page", "old-page", "old-page2", "fresh-page", "neighbor-page"][index], id));
+    const task = (id: string, title: string, pages: string[]) => ({
+      id, title, subject: "数学", requirement: title, format: "written", memoEvidence: [], coverage: "complete",
+      evidence: pages.map(fileId => ({ fileId, page: 1, excerpt: "模拟" })), missing: [],
+    });
+    const report = DailyReportSchema.parse({ date, memoId: null, updatedAt: "", uncertainties: [], unassigned: [],
+      tasks: [task("old", "原作业", ["old-page", "old-page2"]), task("neighbor", "课外模拟作业", ["neighbor-page"])] });
+    f.homework.db.prepare("INSERT INTO days(date,report) VALUES(?,?)").run(date, JSON.stringify(report));
+    const getScopes = () => ids.map(id => f.store.candidates("数学").find(candidate => candidate.id === id)?.scope);
+    assert.deepEqual(getScopes(), ["unknown", "unknown", "unknown", "extracurricular", "extracurricular"]);
+    assert.deepEqual(f.store.selectSources("数学"), []);
+    const source = f.store.candidates().find(item => item.id === ids[0])!.scopeSource!;
+    assert.equal(source.title, "原作业");
+    const numberOfJobs = f.homework.db.prepare("SELECT count(*) AS n FROM jobs").get();
+    f.homework.scopes.set(source, "curricular");
+    assert.deepEqual(getScopes(), ["curricular", "curricular", "curricular", "extracurricular", "extracurricular"]);
+    f.store.classify(ids[0], "extracurricular", parent);
+    assert.deepEqual(getScopes(), ["extracurricular", "curricular", "curricular", "extracurricular", "extracurricular"]);
+    assert.deepEqual(new Set(f.store.selectSources("数学").map(item => item.id)), new Set(ids.slice(1, 3)));
+    assert.deepEqual(f.homework.db.prepare("SELECT count(*) AS n FROM jobs").get(), numberOfJobs);
+  } finally { f.close(); }
+});
 function fakeAI(mode:"correct"|"wrong"|"uncertain"|"blank"="correct"){const calls:string[]=[];let passes=0;const ai:StructuredAI={async run(task,schema,metadata:any){calls.push(task);if(task==="generate_practice")return schema.parse({title:"模拟15分钟练习",subject:metadata.subject,questions:[1,2,3].map(n=>({id:"q"+n,sourceMistakeIds:[metadata.mistakes[0].id],knowledgePoint:"整数加法",question:`${n}+0等于几？`,answer:String(n),explanation:"加0不变。",estimatedMinutes:5}))});if(task==="verify_practice")return schema.parse({approved:true,checks:metadata.candidate.questions.map((q:any)=>({questionId:q.id,correct:true,reason:"已独立计算。"}))});if(task==="grade_practice"){passes++;return schema.parse({scopeComplete:true,note:"",answers:metadata.questions.map((q:any,i:number)=>({questionId:q.id,studentAnswer:mode==="blank"?"":String(mode==="wrong"&&i===0?8:mode==="uncertain"&&passes%2===0&&i===0?9:i+1),expectedAnswer:String(i+1),verdict:mode==="blank"?"blank":mode==="wrong"&&i===0?"wrong":"correct",confidence:"high",explanation:"模拟解答依据。",evidenceIds:[metadata.pages[0]]}))});}throw Error("Unexpected AI task "+task);}};return{ai,calls};}
 
 test("only classified curricular mistakes can generate; a date and subject own one persistent paper",async()=>{const f=setup();try{const id=f.seed("数学","英语课外拓展"),unknown=f.seed("英语","U7练习");assert.throws(()=>f.store.create("数学",child),/课内错题/);assert.throws(()=>f.store.classify(unknown,"curricular",child),/家长/);f.store.classify(id,"curricular",parent);const paper=f.store.create("数学",child);assert.equal(f.store.create("数学",parent).id,paper.id);assert.equal(f.store.candidates("英语")[0].scope,"unknown");const provider=fakeAI(),worker=new PracticeWorker(f.store,()=>provider.ai);await worker.tick();assert.equal(f.store.view(paper.id).status,"ready");assert.deepEqual(provider.calls,["generate_practice","verify_practice"]);assert.ok(!("answer" in f.store.view(paper.id).paper!.questions[0]));assert.equal(await worker.tick(),false);}finally{f.close();}});

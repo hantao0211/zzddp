@@ -2,6 +2,7 @@ import { HomeworkDayPlanInputSchema, HomeworkWeekdaysSchema, resolveHomeworkDayP
 import { selectedSubmissionReport } from "./selected-submission";
 import { HomeworkUsageLog } from "./usage";
 import { TaskCompletions } from "./task-completions";
+import { HomeworkScopes } from "./scopes";
 import { PagePreviews } from "./page-previews";
 import { inferredReportScope } from "../../domain/inferred-scope";
 import { reviewReportConclusion } from "../../domain/review-conclusion";
@@ -27,6 +28,7 @@ export class HomeworkStore {
   readonly db: DatabaseSync;
   readonly grading: GradingStore;
   readonly completions: TaskCompletions;
+  readonly scopes: HomeworkScopes;
   readonly previews: PagePreviews;
   readonly usage: HomeworkUsageLog;
   constructor(readonly directory: string, readonly now = Date.now, readonly reviewPolicy: ReviewPolicy | null = null, readonly writtenCompletionEnabled = false, readonly autoGradingEnabled = false) {
@@ -59,6 +61,7 @@ export class HomeworkStore {
     this.usage = new HomeworkUsageLog(this);
     this.grading = new GradingStore(this);
     this.completions = new TaskCompletions(this);
+    this.scopes = new HomeworkScopes(this);
     this.previews = new PagePreviews(directory);
     // Restart recovers interrupted work, without erasing attempts, quotas or originals.
     this.db.exec("UPDATE jobs SET status='queued' WHERE status='running'; UPDATE uploads SET status='queued', note='后台已恢复，等待继续整理。' WHERE status IN ('converting','recognizing');");
@@ -73,9 +76,10 @@ export class HomeworkStore {
   page(id: string) { return this.db.prepare("SELECT * FROM pages WHERE id=?").get(id) as PageRow | undefined; }
   view(id: string): UploadView {
     const u = this.upload(id); if (!u) throw new HomeworkError(404, "没有找到这份资料。");
+    const scopeSource = u.kind === "homework" ? this.scopes.sourceForUpload(u) : undefined;
     const result = u.result ? u.kind === "memo" ? effectiveMemo(this, u).result : JSON.parse(u.result) : null;
     const issues: UploadView["issues"] = result ? u.kind === "memo" ? result.uncertainties.map((message: string) => ({ pageId: null, message })) : result.pages.flatMap((p: { fileId: string; readable: boolean; subject: string | null; uncertainties: string[] }) => [...(!p.readable ? ["这一页关键内容看不清，请对准整页补拍。"] : []), ...(!p.subject ? ["这一页暂不能确定科目。"] : []), ...p.uncertainties].map((message) => ({ pageId: p.fileId, message }))) : [];
-    return { ...(readUploadTarget(this, u.id) ? { target: readUploadTarget(this, u.id) } : {}), id: u.id, date: u.date, kind: u.kind, createdAt: u.created_at, status: u.status, note: u.status === "processed" ? u.note.replace("正在对照已上传作业", "可在当天作业查看查缺结果").replace("正在对照当天备忘录查缺", "可在当天作业查看查缺结果") : u.note, subjects: JSON.parse(u.subjects), aiMs: u.ai_ms, issues, files: this.files(id).map((f) => ({ id: f.id, name: f.name, size: f.size, stored: !!f.stored, pages: this.pages(f.id).map((p) => ({ id: p.id, number: p.number })) })) };
+    return { scopeSource, ...(readUploadTarget(this, u.id) ? { target: readUploadTarget(this, u.id) } : {}), id: u.id, date: u.date, kind: u.kind, createdAt: u.created_at, status: u.status, note: u.status === "processed" ? u.note.replace("正在对照已上传作业", "可在当天作业查看查缺结果").replace("正在对照当天备忘录查缺", "可在当天作业查看查缺结果") : u.note, subjects: JSON.parse(u.subjects), aiMs: u.ai_ms, issues, files: this.files(id).map((f) => ({ id: f.id, name: f.name, size: f.size, stored: !!f.stored, pages: this.pages(f.id).map((p) => ({ id: p.id, number: p.number })) })) };
   }
   begin(input: UploadInput) {
     if (input.targetTaskId && input.kind !== "homework") throw new HomeworkError(400, "备忘录不能指定作业。");
@@ -85,13 +89,17 @@ export class HomeworkStore {
     const fingerprint = hash({ date: input.date, kind: input.kind, files: input.files.map(({ size, sha256 }) => ({ size, sha256 })) });
     const old = this.db.prepare("SELECT id FROM uploads WHERE fingerprint=?").get(fingerprint) as { id: string } | undefined;
     if (old) {
-      if (target) this.transaction(() => {
-        const saved = readUploadTarget(this, old.id);
-        if (saved && (saved.memoId !== target.memoId || saved.entryIndex !== target.entryIndex || saved.sourceHash !== target.sourceHash)) throw new HomeworkError(409, "这批照片已交给另一项作业，不能重复归到本项。请检查所选照片。");
-        if (!saved) {
-          this.db.prepare("INSERT INTO upload_targets(upload_id,payload) VALUES(?,?)").run(old.id, JSON.stringify(target));
-          if (this.upload(old.id)!.status !== "uploading") this.bump(input.date);
+      if (target || input.scope) this.transaction(() => {
+        const upload = this.upload(old.id)!;
+        if (target) {
+          const saved = readUploadTarget(this, old.id);
+          if (saved && (saved.memoId !== target.memoId || saved.entryIndex !== target.entryIndex || saved.sourceHash !== target.sourceHash)) throw new HomeworkError(409, "这批照片已交给另一项作业，不能重复归到本项。请检查所选照片。");
+          if (!saved) {
+            this.db.prepare("INSERT INTO upload_targets(upload_id,payload) VALUES(?,?)").run(old.id, JSON.stringify(target));
+            if (upload.status !== "uploading") this.bump(input.date);
+          }
         }
+        if (input.scope) this.scopes.confirmNewUpload(upload, input.scope);
       });
       return this.view(old.id);
     }
@@ -106,6 +114,8 @@ export class HomeworkStore {
       const id = randomUUID();
       this.db.prepare("INSERT INTO uploads(id,fingerprint,date,kind,created_at,status) VALUES(?,?,?,?,?,'uploading')").run(id, fingerprint, input.date, input.kind, new Date(this.now()).toISOString());
       if (target) this.db.prepare("INSERT INTO upload_targets(upload_id,payload) VALUES(?,?)").run(id, JSON.stringify(target));
+      if (input.kind === "memo") this.scopes.markNewMemo(id);
+      else this.scopes.confirmNewUpload(this.upload(id)!, input.scope);
       for (const f of input.files) this.db.prepare("INSERT INTO files(id,upload_id,name,size,sha256) VALUES(?,?,?,?,?)").run(randomUUID(), id, f.name, f.size, f.sha256);
       return this.view(id);
     });
@@ -280,7 +290,8 @@ export class HomeworkStore {
     }):[];
     const scoped=pendingUploads.filter(u=>u.kind==="homework").map(u=>({upload:u,target:resolveUploadTarget(this,u.id)}));
     const processing=pending?{taskIds:[...new Set(scoped.flatMap(s=>s.target?[s.target.taskId]:[]))],memo:pendingUploads.some(u=>u.kind==="memo"),subjects:[...new Set(scoped.filter(s=>!s.target).flatMap(s=>JSON.parse(s.upload.subjects)))],unclassified:scoped.some(s=>!s.target&&(!s.upload.result||!JSON.parse(s.upload.subjects).length)),retrying:day?.status==="retrying"}:undefined;
-    return { date, dayPlan: this.dayPlan(date), processing, ...(memoEdits.length ? { memoEdits } : {}), grading: this.grading.summary(date), writtenCompletionEnabled: this.writtenCompletionEnabled, reviewPolicy: this.reviewPolicy, status: day?.status || "empty", note: day?.note || "先上传当天的作业备忘录，再把作业照片交给AI整理。", report, uploads: all.map((u) => this.view(u.id)), dates, quota: this.quota(), pending };
+    const taskScopeSources = report ? Object.fromEntries(this.scopes.tasks(date, report.tasks)) : undefined;
+    return { date, dayPlan: this.dayPlan(date), processing, taskScopeSources, ...(memoEdits.length ? { memoEdits } : {}), grading: this.grading.summary(date), writtenCompletionEnabled: this.writtenCompletionEnabled, reviewPolicy: this.reviewPolicy, status: day?.status || "empty", note: day?.note || "先上传当天的作业备忘录，再把作业照片交给AI整理。", report, uploads: all.map((u) => this.view(u.id)), dates, quota: this.quota(), pending };
   }
   close() { this.db.close(); }
 }
