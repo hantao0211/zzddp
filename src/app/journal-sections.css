@@ -133,10 +133,10 @@
     border-radius: 14px;
     padding: 18px;
     --activity-ink: var(--theme-success-text, #48634f);
-    --activity-button: #526c56;
+    --activity-button: var(--button-green-bg);
     background: var(--theme-green-soft, #e8efdf);
   }
-  .study-shell .growth-activities .economy-grid > article:nth-child(4n + 2) { --activity-ink: var(--theme-warm-text, #815c24); --activity-button: #80613b; background: var(--theme-warm-soft, #f5edda); }
+  .study-shell .growth-activities .economy-grid > article:nth-child(4n + 2) { --activity-ink: var(--theme-warm-text, #815c24); --activity-button: var(--button-brown-bg); background: var(--theme-warm-soft, #f5edda); }
   .study-shell .growth-activities .economy-grid > article:nth-child(4n + 3) { --activity-ink: var(--theme-rose-text, #9e3c59); --activity-button: #9b4e63; background: var(--theme-rose-soft, #f7e7e9); }
   .study-shell .growth-activities .economy-grid > article:nth-child(4n) { --activity-ink: var(--theme-purple-text, #6c527f); --activity-button: #6e5a80; background: var(--theme-purple-soft, #eee7f2); }
   .study-shell .growth-activities .economy-grid .activity-heading { display: flex; align-items: center; gap: 6px; width: 100%; min-width: 0; margin: 0; font-size: 16px; line-height: 1.5; }

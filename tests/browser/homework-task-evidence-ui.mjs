@@ -71,7 +71,10 @@ try {
  await status().getByRole('button',{name:'查看照片2大图',exact:true}).tap();
  await viewerDialog.getByRole('alert').waitFor();
  assert.ok(await closePhoto.isVisible());
- await viewerDialog.getByRole('button',{name:'重试',exact:true}).tap();
+ const retry = viewerDialog.getByRole('button',{name:'重试',exact:true});
+ assert.ok(await retry.evaluate(el=>el.matches('.button.primary:enabled')));
+ assert.ok((await retry.boundingBox()).height >= 44);
+ await retry.tap();
  await viewerDialog.getByRole('img').waitFor();
  await closePhoto.tap();
  assert.equal(page.url(),originalUrl);

@@ -116,7 +116,7 @@
 .study-shell .hw-primary-actions { gap: 13px; margin-bottom: 28px; }
 .study-shell .hw-primary-actions > button {
   min-height: 54px; padding: 11px 16px; border: 0; border-radius: 17px;
-  background: var(--journal-sage); color: var(--journal-green); align-items: center; justify-content: center; gap: 8px;
+  background: var(--button-green-bg); color: var(--button-on-solid); align-items: center; justify-content: center; gap: 8px;
 }
 .study-shell .hw-primary-actions > button.study-primary-upload { background: var(--action-bg); color: #fffdf7; }
 /* Reset legacy icon padding so the SVG and label share a vertical center. */

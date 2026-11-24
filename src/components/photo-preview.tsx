@@ -63,7 +63,7 @@ function PhotoPreview({ src, alt, close }: { src: string; alt: string; close: ()
       {status === "loading" && <p role="status">正在加载照片…</p>}
       {status === "error" && <div className="photo-viewer-error">
         <p role="alert">照片暂时无法打开。</p>
-        <button type="button" className="button secondary" onClick={() => {
+        <button type="button" className="button primary" onClick={() => {
           setStatus("loading");
           setAttempt(value => value + 1);
         }}>重试</button>
