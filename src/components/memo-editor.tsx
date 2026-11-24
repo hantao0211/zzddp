@@ -1,7 +1,7 @@
 "use client";
 import { REQUIREMENT_PRESETS, taskSubmission } from "@/domain/task-submission";
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, Check, ChevronDown, LoaderCircle, Pencil, RefreshCw, X } from "lucide-react";
+import { ArrowLeft, Check, ChevronDown, LoaderCircle, LockKeyhole, Pencil, RefreshCw, X } from "lucide-react";
 import type { ClarificationReceipt, HomeworkChatContext, MemoEdit, MemoEntry } from "@/domain/clarifications";
 import { homeworkPost, homeworkRequest, HomeworkRequestError } from "@/services/homework-gateway";
 
@@ -36,7 +36,7 @@ export function MemoEditor({ date, title, subject, close, saved, canManage, scop
   }
   function change(value: Partial<MemoEntry>) { setEntry(current => current ? { ...current, ...value } : null); request.current = null; }
   async function save(event: React.FormEvent) {
-    event.preventDefault(); if (busy || !context || !selected || !entry) return;
+    event.preventDefault(); if (!canSave || !context || !selected || !entry) return;
     setBusy(true); setError("");
     const value = request.current || { requestId: crypto.randomUUID(), date, revision: context.revision, entryId: selected, entry };
     request.current = value;
@@ -57,6 +57,8 @@ export function MemoEditor({ date, title, subject, close, saved, canManage, scop
   const original = context?.entries.find(e => e.entryId === selected);
   const changed = entry && original && ["subject", "title", "requirement", "format"].some(key => entry[key as keyof MemoEntry] !== original[key as keyof MemoEntry]);
   const fieldsFilled = !!(entry?.title.trim() && entry.requirement.trim());
+  const canSave = !busy && !!changed && fieldsFilled;
+  const SaveIcon = busy ? LoaderCircle : canSave ? Check : LockKeyhole;
   return <dialog ref={dialog} className="dialog hw-dialog memo-editor" aria-label="修改备忘录清单" onCancel={e => { e.preventDefault(); if (!busy) close(); }}>
     <div className="dialog-header">
       <h2><Pencil size={19} aria-hidden="true" />修改备忘录清单</h2>
@@ -106,8 +108,8 @@ export function MemoEditor({ date, title, subject, close, saved, canManage, scop
         </button>}
         <div className="dialog-footer">
           <button type="button" className="text-button memo-edit-cancel" disabled={busy} onClick={close}>取消</button>
-          <button type="submit" className="button primary" disabled={busy || !changed || !fieldsFilled}>
-            {busy ? <LoaderCircle className="spin" size={18} aria-hidden="true" /> : <Check size={18} aria-hidden="true" />}
+          <button type="submit" className="button primary" disabled={!canSave}>
+            <SaveIcon size={18} className={busy ? "spin" : undefined} aria-hidden="true" />
             {busy ? "保存中…" : "保存并重新整理"}
           </button>
         </div>

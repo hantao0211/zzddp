@@ -44,6 +44,7 @@ try {
  brokenRefresh=true;mode='normal';release();const receipt=page.locator('.reading-save-receipt');await receipt.getByText('阅读打卡成功，已保存',{exact:true}).waitFor();
  assert.match(await receipt.innerText(),/49—79页 · 20分钟/);assert.equal(await page.getByRole('button',{name:'已保存',exact:true}).isDisabled(),true);assert.equal(await summary.inputValue(),'这是一段模拟的阅读概括。');
  await page.waitForTimeout(700);assert.equal(await receipt.evaluate(el=>{const r=el.getBoundingClientRect();return r.top>=0&&r.bottom<innerHeight-70;}),true);
+ assert.equal(await page.getByRole('button',{name:'已保存',exact:true}).evaluate(el=>getComputedStyle(el).backgroundColor),'rgb(117, 101, 116)');
  await form.evaluate(el=>el.requestSubmit());assert.equal(posts.length,1);brokenRefresh=false;
  await page.getByRole('button',{name:'成长与奖励',exact:true}).tap();await page.getByRole('button',{name:'课外阅读',exact:true}).tap();await receipt.waitFor();assert.equal(posts.length,1);
  await receipt.getByRole('button',{name:'修改这次记录',exact:true}).tap();assert.equal(await start.inputValue(),'49');await minutes.fill('21');await page.getByRole('button',{name:'保存修改',exact:true}).tap();await receipt.getByText('阅读修改已保存',{exact:true}).waitFor();assert.equal(rows.size,1);assert.equal(posts[1].id,posts[0].id);assert.equal(posts[1].version,1);

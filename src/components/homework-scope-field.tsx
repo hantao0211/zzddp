@@ -1,6 +1,6 @@
 "use client";
 import { useRef, useState } from "react";
-import { Check, LoaderCircle } from "lucide-react";
+import { Check, LoaderCircle, LockKeyhole } from "lucide-react";
 import { HomeworkScopeSchema, type HomeworkScope, type HomeworkScopeSource } from "@/domain/homework-scope";
 import { scopeLabels } from "@/domain/practice";
 import { homeworkRequest } from "@/services/homework-gateway";
@@ -24,6 +24,8 @@ export function HomeworkScopeForm({ source, saved }: {
   const [error, setError] = useState("");
   const saving = useRef(false);
   const unchanged = source.confirmed && selection === source.scope;
+  const disabled = busy || !selection || unchanged;
+  const SaveIcon = busy ? LoaderCircle : disabled ? LockKeyhole : Check;
 
   async function save() {
     if (saving.current || !selection || unchanged) return;
@@ -51,8 +53,8 @@ export function HomeworkScopeForm({ source, saved }: {
     <p className="hw-secondary">这份作业收录的错题会沿用该归属。单独纠正过的题保留自己的归属。</p>
     {error && <p className="form-error" role="alert">{error}</p>}
     <div className="hw-scope-actions">
-      <button type="submit" className="button primary" disabled={busy || !selection || unchanged}>
-        {busy ? <LoaderCircle size={18} className="spin" aria-hidden="true" /> : <Check size={18} aria-hidden="true" />}
+      <button type="submit" className="button primary" disabled={disabled}>
+        <SaveIcon size={18} className={busy ? "spin" : undefined} aria-hidden="true" />
         {busy ? "正在保存…" : "保存作业归属"}
       </button>
       {!busy && (unchanged || !selection) && <span className="hw-secondary">{unchanged ? "归属未修改" : "选择归属后可保存"}</span>}
