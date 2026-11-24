@@ -73,6 +73,7 @@
     --button-primary-bg: var(--button-brown-bg);
     --button-primary-hover: var(--button-brown-hover);
   }
+  .button.plum-action,
   .memo-editor .hw-scope-form {
     --button-primary-bg: var(--button-plum-bg);
     --button-primary-hover: var(--button-plum-hover);
