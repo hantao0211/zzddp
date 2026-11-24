@@ -527,3 +527,11 @@
   .journal-flower-face[data-reminder] .journal-worried-face { display: inline; }
   .journal-flower-face[data-reminder] .journal-idle-face { display: none; }
 }
+
+.study-shell .hw-home-summary .study-optional-upload {
+  display: inline-flex; align-items: center; justify-content: center; gap: 3px;
+  min-height: 44px; padding: 4px 5px; max-width: 100%; white-space: nowrap; font-size: 12px;
+}
+@media (max-width: 389px) {
+  .study-optional-upload svg { display: none; }
+}
