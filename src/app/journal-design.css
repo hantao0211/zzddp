@@ -404,6 +404,8 @@
   .study-shell .journal-garden h2 { font-size: 19px; }
 }
 @media (max-width: 359px) {
+  .study-shell .hw-home-summary .journal-col-task { width: 42%; }
+  .study-shell .hw-home-summary .journal-col-photo { width: 26%; }
   .journal-garden { --garden-width: 112px; --garden-height: 168px; --garden-scale: .58; }
   .journal-flower { left: -4px; }
   .study-shell .journal-garden h2 { font-size: 18px; }
@@ -544,7 +546,8 @@
   white-space: nowrap;
   cursor: pointer;
 }
-.study-optional-upload > span:first-child {
+.study-optional-upload > svg { flex: none; }
+.study-optional-upload > span {
   text-decoration: underline;
   text-underline-offset: 3px;
   text-decoration-thickness: 1px;
