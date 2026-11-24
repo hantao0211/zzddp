@@ -37,6 +37,19 @@ try{
   for(const [index,label] of [[0,'开新一期'],[1,'更正价格或期限']]){
    assert.deepEqual(await colors(movieRows.nth(index).getByRole('button',{name:label})),['rgb(187, 83, 110)','rgb(255, 253, 247)']);
   }
+  for (const width of [320,390,1280]) {
+   await page.setViewportSize({width,height:844});
+   for (const row of await movieRows.all()) {
+    const bounds=await row.locator('.economy-actions button').evaluateAll(buttons=>buttons.map(b=>{
+     const {y,height,width,right}=b.getBoundingClientRect();
+     return {y,height,width,right};
+    }));
+    assert.equal(bounds.length,4);
+    assert.ok(bounds.every(b=>Math.abs(b.y-bounds[0].y)<1 && b.width>=44 && b.height>=44 && b.right<=width));
+    assert.ok((await row.boundingBox()).height < 140);
+   }
+  }
+  await page.setViewportSize({width:390,height:844});
   await movieRows.nth(1).screenshot({path:output+'/reward-actions-'+scheme+'.png'});
  }
  await movieRows.first().getByRole('button',{name:'删除模拟电影',exact:true}).tap();let dialog=page.getByRole('dialog',{name:'删除这个商品？',exact:true});await dialog.getByText('应删除的重复项',{exact:true}).waitFor();await dialog.getByRole('button',{name:'保留商品',exact:true}).tap();assert.equal(deletes.length,0);assert.equal(await movieRows.count(),2);

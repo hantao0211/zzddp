@@ -55,3 +55,17 @@
 .activity-rule-row .button,.activity-rule-row .text-button { min-height:44px; padding-inline:9px; }
 .activity-rule-row .reading-token { font-size:inherit; }
 @media(max-width:360px){ .activity-rule-row .economy-actions {gap:2px;} }
+
+.reading-main .shop-management-row { padding-block: 10px; gap: 5px 16px; }
+.shop-management-row > div:first-child { overflow-wrap: anywhere; }
+.shop-management-row p { margin: 1px 0 0; font-size: 13px; color: var(--muted); }
+.shop-management-row .economy-actions { gap: 4px; }
+.reading-main .shop-management-row .economy-actions button {
+  display: inline-flex; align-items: center; justify-content: center; gap: 4px;
+  min-width: 44px; min-height: 44px; padding: 4px 8px; margin: 0;
+  font-size: 13px; line-height: 1.25; white-space: nowrap;
+}
+@media (max-width: 600px) {
+  .reading-main .shop-management-row { flex-direction: column; align-items: stretch; }
+  .reading-main .shop-management-row .economy-actions button { padding-inline: 6px; }
+}
