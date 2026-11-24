@@ -148,19 +148,18 @@ function JournalStickerPicker({ sticker, onChoose }: { sticker: JournalSticker; 
   </div>;
 }
 
+// Fixed lettering: each glyph keeps its own angle across renders and visits.
+const mottoLines = [
+  [["让", -5, ""], ["小", 10, "small"], ["小", -12, "small"], ["的", 4, ""], ["努", -6, "effort"], ["力", 5, "effort"]],
+  [["开", 5, "open"], ["出", -4, "open"], ["自", -7, "own"], ["己", 8, "own"], ["的", -3, "own"], ["花", 13, "flower"]],
+] as const;
+
 export function JournalGarden({ hint, sticker, onChoose }: { hint: string; sticker: JournalSticker; onChoose: (next: JournalSticker) => void }) {
   const [open, setOpen] = useState(false);
   const tools = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const flower = useIllustrationMotion();
   const pickerId = useId();
-  useEffect(() => {
-    const style = document.documentElement.style;
-    if (!style.getPropertyValue("--journal-motto-tilt")) {
-      const tilt = (Math.random() < 0.5 ? -1 : 1) * (3.5 + Math.random() * 1.5);
-      style.setProperty("--journal-motto-tilt", tilt.toFixed(2) + "deg");
-    }
-  }, []);
   useEffect(() => {
     if (!open) return;
     const outside = (event: PointerEvent) => {
@@ -181,7 +180,13 @@ export function JournalGarden({ hint, sticker, onChoose }: { hint: string; stick
   return <section className="journal-garden" aria-label="手帐花园">
     <span className="journal-tape-label">今天也在长大</span>
     <div className="journal-garden-copy">
-      <h2 className="journal-motto"><span className="journal-motto-line">让<span className="journal-motto-small">小小</span>的<span className="journal-motto-effort">努力</span></span><span className="journal-motto-line"><span className="journal-motto-open">开出</span><span className="journal-motto-own">自己的</span><span className="journal-motto-flower">花</span></span></h2>
+      <h2 className="journal-motto" aria-label="让小小的努力，开出自己的花">
+        {mottoLines.map(line => <span key={line[0][0]} className="journal-motto-line" aria-hidden="true">
+          {line.map(([glyph, angle, style], index) => <span key={index}
+            className={style ? `journal-motto-glyph journal-motto-${style}` : "journal-motto-glyph"}
+            style={{ rotate: angle + "deg" }}>{glyph}</span>)}
+        </span>)}
+      </h2>
       <p className="study-next-step">{hint}</p>
     </div>
     <div className="journal-garden-tools" ref={tools} onBlur={event => {

@@ -101,8 +101,8 @@ try{const page=await browser.newPage({colorScheme:process.env.SMOKE_COLOR_SCHEME
   assert.deepEqual(tokens[0],tokens[1]);
   const quote=await garden.locator('h2').evaluate(el=>[...el.querySelectorAll('.journal-motto-line')].map(line=>Math.round(line.scrollWidth-line.clientWidth)));
   assert.ok(quote.every(overflow=>overflow<=1),'Motto lines fit the available width');
-  const tilts=await garden.locator('.journal-motto-line span').evaluateAll(parts=>parts.map(p=>parseFloat(getComputedStyle(p).rotate)||0));
-  assert.ok(tilts.some(a=>a<0)&&tilts.some(a=>a>0)&&tilts.some(a=>Math.abs(a)>=6.99)&&tilts.every(a=>Math.abs(a)<=10.01));
+  const tilts=await garden.locator('.journal-motto-glyph').evaluateAll(parts=>parts.map(p=>parseFloat(getComputedStyle(p).rotate)));
+  assert.deepEqual(tilts,[-5,10,-12,4,-6,5,5,-4,-7,8,-3,13]);
   const ends=await garden.locator('.journal-motto-line').evaluateAll(lines=>lines.map(line=>line.lastElementChild.getBoundingClientRect().right));
   assert.ok(Math.abs(ends[0]-ends[1])<3,'The two motto lines should end together');
   const quoteSizes=await garden.locator('.journal-motto-line').last().locator('span').evaluateAll(parts=>parts.map(part=>[getComputedStyle(part).fontSize,getComputedStyle(part).color]));
