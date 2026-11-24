@@ -498,7 +498,7 @@
   background: var(--speech-paper); color: var(--speech-ink);
   rotate: -7deg; transform-origin: 90% 85%;
   font-size: max(20px, calc(16px / var(--garden-scale)));
-  font-weight: 800; line-height: 1.12; white-space: nowrap;
+  font-weight: 400; line-height: 1.12; white-space: nowrap;
 }
 .journal-flower-speech::after {
   content: ""; position: absolute; right: -.30em; bottom: -.20em;
