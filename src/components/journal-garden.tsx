@@ -17,9 +17,9 @@ type Expression = typeof expressions[number];
 
 // Each beat starts and settles in the curved-eye smile. A blink closes in about 80 ms.
 const eyeBeats = {
-  blink: { times: "0;.11;.35;.39;.47;.78;1", open: [0, 1, 1, 0, 1, 1, 0] },
-  doubleBlink: { times: "0;.11;.31;.35;.42;.50;.54;.62;.80;1", open: [0, 1, 1, 0, 1, 1, 0, 1, 1, 0] },
-  wink: { times: "0;.11;.25;.32;.65;.72;.83;1", open: [0, 1, 1, 0, 0, 1, 1, 0] },
+  blink: { times: "0;.055;.35;.39;.44;.94;1", open: [0, 1, 1, 0, 1, 1, 0] },
+  doubleBlink: { times: "0;.055;.31;.35;.40;.50;.54;.59;.94;1", open: [0, 1, 1, 0, 1, 1, 0, 1, 1, 0] },
+  wink: { times: "0;.055;.27;.32;.65;.70;.94;1", open: [0, 1, 1, 0, 0, 1, 1, 0] },
 } as const;
 const faceDuration = "2s";
 const mouths = {
@@ -30,7 +30,7 @@ const mouths = {
 
 function FaceOpacity({ pose, from, to }: { pose: Expression; from: number; to: number }) {
   return <animate attributeName="opacity" data-pose={pose} begin="indefinite" dur={faceDuration}
-    keyTimes="0;.04;.19;.79;1" values={[from, from, to, to, from].join(";")} />;
+    keyTimes="0;.04;.11;.93;1" values={[from, from, to, to, from].join(";")} />;
 }
 
 function FlowerEye({ right = false }: { right?: boolean }) {
@@ -75,9 +75,9 @@ function FlowerFace() {
       <clipPath id={mouthClip}>
         <path data-feature="mouth" d={mouths.laugh}>
           {expressions.map(pose => <animate key={pose} data-pose={pose} attributeName="d" begin="indefinite"
-            dur={faceDuration} keyTimes="0;.04;.19;.42;.56;.79;1"
-            values={[mouths.laugh, mouths.laugh, mouths.smile, pose === "wink" ? mouths.wink : mouths.smile,
-              pose === "wink" ? mouths.wink : mouths.smile, mouths.smile, mouths.laugh].join(";")} />)}
+            dur={faceDuration} keyTimes="0;.04;.11;.27;.34;.65;.72;.93;1"
+            values={[mouths.laugh, mouths.laugh, mouths.smile, mouths.smile, pose === "wink" ? mouths.wink : mouths.smile,
+              pose === "wink" ? mouths.wink : mouths.smile, mouths.smile, mouths.smile, mouths.laugh].join(";")} />)}
         </path>
       </clipPath>
     </defs>
@@ -99,6 +99,18 @@ function FlowerFace() {
 }
 
 const flowerPhrases = ["哈哈！", "嘻嘻！", "加油！"] as const;
+function playFlowerSpeech(bubble: HTMLSpanElement) {
+  const index = (flowerPhrases.findIndex(phrase => phrase === bubble.textContent) + 1) % flowerPhrases.length;
+  bubble.textContent = flowerPhrases[index];
+  const speech = bubble.animate([
+    { opacity: 0, transform: "translateY(3px) scale(.94)" },
+    { opacity: 1, transform: "translateY(0) scale(1)", offset: .075 },
+    { opacity: 1, offset: .925 },
+    { opacity: 0, transform: "translateY(-2px)" },
+  ], { duration: 2000, easing: "linear" });
+  return () => speech.cancel();
+}
+
 const playedGestures = new WeakMap<SVGSVGElement, Set<Expression>>();
 function chooseFlowerExpression(flower: SVGSVGElement) {
   const played = playedGestures.get(flower) ?? new Set<Expression>();
@@ -121,22 +133,9 @@ function chooseFlowerExpression(flower: SVGSVGElement) {
       { transform: "rotate(0deg)", offset: 1 },
     ], { duration: 1550, delay: left ? 65 : 210, easing: "ease-in-out" });
   });
-  const bubble = flower.closest(".journal-flower")?.querySelector<HTMLElement>(".journal-flower-speech");
-  let speech: Animation | undefined;
-  if (bubble && pose === "doubleBlink") {
-    const index = (flowerPhrases.findIndex(phrase => phrase === bubble.textContent) + 1) % flowerPhrases.length;
-    bubble.textContent = flowerPhrases[index];
-    speech = bubble.animate([
-      { opacity: 0, transform: "translateY(3px) scale(.94)" },
-      { opacity: 1, transform: "translateY(0) scale(1)", offset: .075 },
-      { opacity: 1, offset: .925 },
-      { opacity: 0, transform: "translateY(-2px)" },
-    ], { duration: 2000, easing: "linear" });
-  }
   return () => {
     motions.forEach(motion => motion.endElement());
     leaves.forEach(animation => animation.cancel());
-    speech?.cancel();
   };
 }
 
@@ -164,7 +163,7 @@ function JournalStickerPicker({ sticker, onChoose }: { sticker: JournalSticker; 
 
 // Fixed lettering: each glyph keeps its own angle across renders and visits.
 const mottoLines = [
-  [["让", -5, ""], ["小", 10, "small"], ["小", -12, "small"], ["的", 4, ""], ["努", -6, "effort"], ["力", 5, "effort"]],
+  [["让", -5, ""], ["小", 0, "small"], ["小", 0, "small"], ["的", 4, ""], ["努", -6, "effort"], ["力", 5, "effort"]],
   [["开", 5, "open"], ["出", -4, "open"], ["自", -7, "own"], ["己", 8, "own"], ["的", -3, "own"], ["花", 13, "flower"]],
 ] as const;
 
@@ -172,7 +171,8 @@ export function JournalGarden({ hint, sticker, onChoose }: { hint: string; stick
   const [open, setOpen] = useState(false);
   const tools = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
-  const flower = useIllustrationMotion();
+  const flower = useIllustrationMotion(undefined, 7000, 15000);
+  const speech = useIllustrationMotion(playFlowerSpeech, 4000, 7000);
   const pickerId = useId();
   useEffect(() => {
     if (!open) return;
@@ -210,7 +210,7 @@ export function JournalGarden({ hint, sticker, onChoose }: { hint: string; stick
         <span className="journal-garden-decoration" role="img" aria-label={`花盆贴着${selected.label}贴纸`}>
           <span ref={flower} className="journal-flower" aria-hidden="true">
             <span className="journal-ground" />
-            <span className="journal-flower-speech" />
+            <span ref={speech} className="journal-flower-speech" />
             <span className="journal-flower-stalk">
               <span className="journal-stem" />
               {[1, 2, 3, 4, 5].map(n => <span className={`journal-petal p${n}`} key={n} />)}

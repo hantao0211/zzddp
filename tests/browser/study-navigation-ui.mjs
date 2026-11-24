@@ -102,7 +102,12 @@ try{const page=await browser.newPage({colorScheme:process.env.SMOKE_COLOR_SCHEME
   const quote=await garden.locator('h2').evaluate(el=>[...el.querySelectorAll('.journal-motto-line')].map(line=>Math.round(line.scrollWidth-line.clientWidth)));
   assert.ok(quote.every(overflow=>overflow<=1),'Motto lines fit the available width');
   const tilts=await garden.locator('.journal-motto-glyph').evaluateAll(parts=>parts.map(p=>parseFloat(getComputedStyle(p).rotate)));
-  assert.deepEqual(tilts,[-5,10,-12,4,-6,5,5,-4,-7,8,-3,13]);
+  assert.deepEqual(tilts,[-5,0,0,4,-6,5,5,-4,-7,8,-3,13]);
+  const relativeGap=await garden.locator('.journal-motto-line').first().evaluate(line=>{
+    const style=getComputedStyle(line);return parseFloat(style.columnGap)/parseFloat(style.fontSize);
+  });
+  const expectedGap = width >= 900 ? 0.07 : 0.03;
+  assert.ok(Math.abs(relativeGap - expectedGap) < 0.001, 'Desktop lettering has a little more room');
   const ends=await garden.locator('.journal-motto-line').evaluateAll(lines=>lines.map(line=>line.lastElementChild.getBoundingClientRect().right));
   assert.ok(Math.abs(ends[0]-ends[1])<3,'The two motto lines should end together');
   const quoteSizes=await garden.locator('.journal-motto-line').last().locator('span').evaluateAll(parts=>parts.map(part=>[getComputedStyle(part).fontSize,getComputedStyle(part).color]));
@@ -177,9 +182,9 @@ try{const page=await browser.newPage({colorScheme:process.env.SMOKE_COLOR_SCHEME
   check(resting,'Reduced motion idle');
   svg.pauseAnimations();
   for(const [pose,checkpoints] of [
-   ['blink',[[.4,open],[.78,resting],[1.1,open]]],
-   ['doubleBlink',[[.4,open],[.70,resting],[.90,open],[1.08,resting],[1.4,open]]],
-   ['wink',[[.4,open],[.96,[1,0,0,0,1]],[1.5,open]]],
+   ['blink',[[.12,open],[.4,open],[.78,resting],[1.1,open],[1.87,open]]],
+   ['doubleBlink',[[.12,open],[.4,open],[.70,resting],[.90,open],[1.08,resting],[1.4,open]]],
+   ['wink',[[.12,open],[.4,open],[.96,[1,0,0,0,1]],[1.5,open]]],
   ]){
    const t=svg.getCurrentTime()+3;
    svg.setCurrentTime(t);
@@ -213,10 +218,10 @@ try{const page=await browser.newPage({colorScheme:process.env.SMOKE_COLOR_SCHEME
    const next=await page.waitForFunction(({selector,previous})=>{
     const start=document.querySelector(selector)?.getAnimations()[0]?.startTime;
     return start!=null && start>previous+1000 ? start : false;
-   },{selector:'.'+moving,previous:previousStart},{timeout:18000});
+   },{selector:'.'+moving,previous:previousStart},{timeout:8500});
    const nextStart=await next.jsonValue();
    const elapsed=nextStart-previousStart;
-   assert.ok(elapsed>=6800&&elapsed<=15750,'Random replay interval (ms): '+elapsed);
+   assert.ok(elapsed>=2800&&elapsed<=6750,'Random replay interval (ms): '+elapsed);
    previousStart=nextStart;
   }
   await page.evaluate(()=>{
@@ -229,13 +234,13 @@ try{const page=await browser.newPage({colorScheme:process.env.SMOKE_COLOR_SCHEME
    document.dispatchEvent(new Event('visibilitychange'));
   });
   assert.equal(await part.evaluate(el=>el.getAnimations().length),0,'No immediate catch-up after returning');
-  await page.waitForFunction(sel=>document.querySelector(sel)?.getAnimations().length,'.'+moving,{timeout:17000});
+  await page.waitForFunction(sel=>document.querySelector(sel)?.getAnimations().length,'.'+moving,{timeout:8500});
   if(kind==='tab-book'){
    await page.evaluate(()=>window.scrollTo({top:document.documentElement.scrollHeight,behavior:'instant'}));
    await page.waitForFunction(()=>!document.querySelector('.tab-book').hasAttribute('data-playing'));
    await illustration.scrollIntoViewIfNeeded();
    assert.equal(await part.evaluate(el=>el.getAnimations().length),0);
-   await page.waitForFunction(sel=>document.querySelector(sel)?.getAnimations().length,'.'+moving,{timeout:17000});
+   await page.waitForFunction(sel=>document.querySelector(sel)?.getAnimations().length,'.'+moving,{timeout:8500});
   }
   const timing=await part.evaluate((el,frame)=>{
    const effect=el.getAnimations()[0];

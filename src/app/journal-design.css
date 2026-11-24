@@ -66,13 +66,16 @@
 .journal-tape-label { position: absolute; right: 7px; top: 1px; transform: rotate(9deg); font-size: 11px; padding: 5px 12px; background: var(--journal-yellow); color: var(--ink); border-radius: 4px; z-index: 1; pointer-events: none; }
 /* Both lines have the same total glyph width. Tighten only selected neighbours further. */
 .study-shell .journal-garden h2 { display: grid; gap: 2px; font-size: 25px; line-height: 1.16; margin: 11px 0 0; letter-spacing: 0; font-weight: 600; }
-.journal-motto-line { display: flex; align-items: baseline; padding-inline: .13em; width: 6.3em; max-width: 100%; white-space: nowrap; }
+.journal-motto-line { display: flex; align-items: baseline; column-gap: .03em; padding-inline: .13em; width: 6.55em; max-width: 100%; white-space: nowrap; }
+@media (min-width: 900px) {
+  .journal-motto-line { column-gap: .07em; width: 6.75em; }
+}
 .journal-motto-glyph { flex: 0 0 .92em; width: .92em; text-align: center; transform-origin: 50% 60%; }
 .journal-motto-small { font-size: .8em; font-weight: 500; }
-.journal-motto-small + .journal-motto-small { margin-inline-start: -.12em; }
+.journal-motto-small + .journal-motto-small { margin-inline-start: -.07em; }
 .journal-motto-effort { font-size: 1.4em; color: #36804f; }
 .journal-motto-open { font-size: 1.1em; color: var(--journal-green); }
-.journal-motto-open + .journal-motto-open { margin-inline-start: -.08em; }
+.journal-motto-open + .journal-motto-open { margin-inline-start: -.05em; }
 .journal-motto-own { font-size: .9em; font-weight: 500; }
 .journal-motto-flower { font-size: 1.5em; color: var(--accent); translate: -.05em; }
 @media screen and (prefers-color-scheme: dark) {
@@ -493,7 +496,7 @@
   --speech-paper: #f4ced9;
   --speech-ink: #73374c;
   right: 156px; top: 4px; opacity: 0;
-  padding: .22em .44em .20em .54em;
+  padding: .35em .66em .33em .76em;
   border-radius: 53% 48% 47% 44% / 60% 48% 52% 45%;
   background: var(--speech-paper); color: var(--speech-ink);
   rotate: -7deg; transform-origin: 90% 85%;
@@ -509,5 +512,5 @@
   .journal-flower-speech { --speech-paper: #78485b; --speech-ink: #fff1e7; }
 }
 @media (max-width: 359px) {
-  .journal-flower-speech { right: 184px; }
+  .journal-flower-speech { right: 166px; top: -2px; }
 }
