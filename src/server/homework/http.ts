@@ -31,7 +31,8 @@ export class HomeworkHTTP {
       if (path === "/state" && req.method === "GET") {
         const date = DaySchema.safeParse(url.searchParams.get("date"));
         if (!date.success) throw new HomeworkError(400, "请选择有效的作业日期。");
-        json(res, { ...this.store.snapshot(date.data), ...(this.rewards ? { homeworkReward: this.rewards.status(date.data) } : {}) }); return;
+        const snapshot = this.store.snapshot(date.data);
+        json(res, { ...snapshot, ...(this.rewards ? { homeworkReward: this.rewards.status(date.data), gardenProgress: this.rewards.gardenProgress(snapshot) } : {}) }); return;
       }
       if (path === "/day-plan" && req.method === "POST") {
         json(res, this.store.setDayPlan(await input(req), viewer?.id || "legacy")); return;

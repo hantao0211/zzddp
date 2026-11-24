@@ -1,4 +1,5 @@
 import { isHomeworkDayComplete } from "../../domain/homework-reward";
+import type { HomeworkSnapshot } from "../../domain/homework";
 import type { HomeworkStore } from "./store";
 import type { ReadingStore } from "../reading/store";
 
@@ -29,5 +30,13 @@ export class HomeworkRewards {
     run(); this.timer = setInterval(run, 5000); this.timer.unref();
   }
   stop() { if (this.timer) clearInterval(this.timer); }
+  gardenProgress(snapshot: HomeworkSnapshot) {
+    if (snapshot.date !== this.reading.today()) return undefined;
+    return {
+      homeworkComplete: !snapshot.dayPlan?.noHomework && isHomeworkDayComplete(snapshot),
+      readingLogged: this.reading.hasReadingLog(snapshot.date),
+      earnedSteps: this.reading.earnedSteps(snapshot.date),
+    };
+  }
   status(date: string) { return this.reading.homeworkRewardStatus(date); }
 }

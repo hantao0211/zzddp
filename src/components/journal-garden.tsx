@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { Flower2, Pencil, Star, Sun } from "lucide-react";
 
+import type { GardenProgress } from "@/domain/homework";
 import { useIllustrationMotion } from "./use-illustration-motion";
 
 const stickers = [
@@ -120,17 +121,31 @@ function FlowerFace({ reminder }: { reminder?: "waiting" | "speaking" }) {
   </svg>;
 }
 
-const flowerPhrases = ["哈哈！", "嘻嘻！", "加油！"] as const;
 const uploadReminder = "记得交作业哦";
-const eveningPhrases = [uploadReminder, ...flowerPhrases] as const;
-function FlowerSpeech({ remindUpload, onReminderSpeech }: { remindUpload: boolean; onReminderSpeech: (speaking: boolean) => void }) {
-  const phrases = remindUpload ? eveningPhrases : flowerPhrases;
+function FlowerSpeech({ progress, remindUpload, onReminderSpeech }: {
+  progress?: GardenProgress; remindUpload: boolean; onReminderSpeech: (speaking: boolean) => void;
+}) {
+  const completed = progress?.homeworkComplete;
+  const earned = progress?.earnedSteps;
+  const reading = progress?.readingLogged;
+  const phrases = useMemo(() => {
+    const lines = [];
+    if (completed) lines.push("今天作业完成了，\n真棒！");
+    if (earned && earned > 0) lines.push(`今日小脚步 +${earned}`);
+    if (reading !== undefined) lines.push(reading ? "今天读过书啦！" : "还没阅读打卡哟，\n一起读几页吧！");
+    return [...lines, "慢慢来，加油！", "试一试，你可以！", "嘻嘻！", "哈哈！"];
+  }, [completed, earned, reading]);
   const nextPhrase = useRef(0);
+  const reminderBeat = useRef(0);
   useEffect(() => { nextPhrase.current = 0; }, [phrases]);
+  useEffect(() => { reminderBeat.current = 0; }, [remindUpload]);
   const play = useCallback((bubble: HTMLSpanElement) => {
-    const phrase = phrases[nextPhrase.current];
-    nextPhrase.current = (nextPhrase.current + 1) % phrases.length;
+    const remind = remindUpload && reminderBeat.current === 0;
+    const phrase = remind ? uploadReminder : phrases[nextPhrase.current];
+    if (!remind) nextPhrase.current = (nextPhrase.current + 1) % phrases.length;
+    if (remindUpload) reminderBeat.current = (reminderBeat.current + 1) % 4;
     bubble.textContent = phrase;
+    bubble.toggleAttribute("data-multiline", phrase.includes("\n"));
     const animation = animateFlowerSpeech(bubble);
     if (phrase === uploadReminder) {
       onReminderSpeech(true);
@@ -140,7 +155,7 @@ function FlowerSpeech({ remindUpload, onReminderSpeech }: { remindUpload: boolea
       animation.cancel();
       if (phrase === uploadReminder) onReminderSpeech(false);
     };
-  }, [phrases, onReminderSpeech]);
+  }, [phrases, remindUpload, onReminderSpeech]);
   const speech = useIllustrationMotion(play, 4000, 7000);
   return <>
     <span ref={speech} className="journal-flower-speech"/>
@@ -214,7 +229,7 @@ const mottoLines = [
   [["开", 5, "open"], ["出", -4, "open"], ["自", -7, "own"], ["己", 8, "own"], ["的", -3, "own"], ["花", 13, "flower"]],
 ] as const;
 
-export function JournalGarden({ hint, sticker, onChoose, remindUpload }: { remindUpload: boolean; hint: string; sticker: JournalSticker; onChoose: (next: JournalSticker) => void }) {
+export function JournalGarden({ hint, sticker, onChoose, remindUpload, progress }: { progress?: GardenProgress; remindUpload: boolean; hint: string; sticker: JournalSticker; onChoose: (next: JournalSticker) => void }) {
   const [open, setOpen] = useState(false);
   const [speakingReminder, setSpeakingReminder] = useState(false);
   const tools = useRef<HTMLDivElement>(null);
@@ -258,7 +273,7 @@ export function JournalGarden({ hint, sticker, onChoose, remindUpload }: { remin
         <span className="journal-garden-decoration" role="img" aria-label={`花盆贴着${selected.label}贴纸`}>
           <span ref={flower} className="journal-flower" aria-hidden="true">
             <span className="journal-ground" />
-            <FlowerSpeech remindUpload={remindUpload} onReminderSpeech={setSpeakingReminder}/>
+            <FlowerSpeech progress={progress} remindUpload={remindUpload} onReminderSpeech={setSpeakingReminder}/>
             <span className="journal-flower-stalk">
               <span className="journal-stem" />
               {[1, 2, 3, 4, 5].map(n => <span className={`journal-petal p${n}`} key={n} />)}

@@ -53,7 +53,9 @@ export type UploadView = {
   subjects: z.infer<typeof SubjectSchema>[]; aiMs: number; issues: { pageId: string | null; message: string }[];
   files: { id: string; name: string; size: number; stored: boolean; pages: { id: string; number: number }[] }[];
 };
+export type GardenProgress = { homeworkComplete: boolean; readingLogged: boolean; earnedSteps: number };
 export type HomeworkSnapshot = {
+  gardenProgress?: GardenProgress;
   taskScopeSources?: Record<string, HomeworkScopeSource>;
   dayPlan?: import("./homework-calendar").HomeworkDayPlan;
   memoEdits?: string[];

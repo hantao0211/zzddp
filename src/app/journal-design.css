@@ -500,9 +500,10 @@
   border-radius: 53% 48% 47% 44% / 60% 48% 52% 45%;
   background: var(--speech-paper); color: var(--speech-ink);
   rotate: -7deg; transform-origin: 90% 85%;
-  font-size: max(19px, calc(15px / var(--garden-scale)));
-  font-weight: 400; line-height: 1.12; white-space: nowrap;
+  font-size: max(18px, calc(14px / var(--garden-scale)));
+  font-weight: 400; line-height: 1.18; white-space: pre; text-align: center;
 }
+.journal-flower-speech[data-multiline] { translate: 0 -1.75em; }
 .journal-flower-speech::after {
   content: ""; position: absolute; right: -.30em; bottom: -.20em;
   width: 1em; height: .8em; background: var(--speech-paper);

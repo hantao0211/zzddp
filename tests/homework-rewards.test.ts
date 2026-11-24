@@ -134,3 +134,26 @@ test("a rescan on other material does not block the daily reward for verified cu
   assert.equal(f.reading.balance(), 1);
  } finally { f.cleanup(); }
 });
+
+test("flower progress uses today's active reading log and earned points, independently of spending", () => {
+ const f = fixture();
+ try {
+  const snapshot = f.seed();
+  const rewards = new HomeworkRewards(f.homework, f.reading);
+  assert.deepEqual(rewards.gardenProgress(snapshot), { homeworkComplete:true, readingLogged:false, earnedSteps:0 });
+  f.reading.award("test-activity",day,4,"模拟活动","activity",child.id);
+  f.reading.award("test-refund",day,2,"模拟返还","refund",child.id);
+  f.reading.award("test-spending",day,-3,"模拟兑换","redeem",child.id);
+  f.reading.award("test-prior","2026-11-19",1,"模拟昨日","activity",child.id);
+  const book = f.reading.addBook({title:"模拟图书",totalPages:12},child.id);
+  const id = randomUUID();
+  f.reading.save({id,version:0,bookId:book.id,date:day,startPage:1,endPage:4,minutes:10,summary:"今天读到一个有意思的故事。"},child);
+  assert.deepEqual(rewards.gardenProgress(snapshot), { homeworkComplete:true, readingLogged:true, earnedSteps:4 + f.reading.rules().dailyPoints });
+  f.reading.removeLog(id,{version:1},child);
+  assert.equal(rewards.gardenProgress(snapshot)?.readingLogged,false);
+  snapshot.pending=true;
+  assert.equal(rewards.gardenProgress(snapshot)?.homeworkComplete,false);
+  f.advance("2026-11-21");
+  assert.equal(rewards.gardenProgress(snapshot),undefined);
+ } finally { f.cleanup(); }
+});
