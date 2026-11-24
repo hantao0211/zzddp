@@ -107,3 +107,30 @@ test("parents can change or disable homework rewards; earned amounts and reading
   assert.equal(f.reading.homeworkRewardStatus(day).points, 3);
  } finally { f.cleanup(); }
 });
+
+
+test("a rescan on other material does not block the daily reward for verified current tasks", () => {
+ const f = fixture();
+ try {
+  const snapshot = f.seed();
+  const report = snapshot.report!;
+  const upload = f.homework.begin({ date: day, kind: "homework", files: [{ name: "page.png", size: 1, sha256: "b".repeat(64) }] });
+  const file = upload.files[0];
+  f.homework.stored(file.id, "image/png");
+  f.homework.setPages(file.id, [{ id: report.tasks[0].evidence[0].fileId, file_id: file.id, number: 1 }]);
+  f.homework.setStatus(upload.id, "processed", "");
+  f.homework.publish({ id: -1, date: day, revision: f.homework.revision(day), kind: "organize", upload_id: null, attempts: 1 }, report, "needs_rescan", "Older material needs review");
+  const current = f.homework.snapshot(day);
+  assert.ok(isHomeworkDayComplete(current));
+  const oral = { ...report.tasks[0], id: "oral", title: "背诵课文", requirement: "背诵课文", format: "oral" as const, writtenCompletion: null, coverage: "none" as const, evidence: [] };
+  current.report!.tasks.push(oral);
+  assert.ok(!isHomeworkDayComplete(current));
+  current.report!.tasks[1].selfCompletion = { confirmedAt: "2026-11-20T12:00:00Z", confirmedBy: "模拟孩子", role: "child" };
+  assert.ok(isHomeworkDayComplete(current));
+  current.report!.tasks[0].coverage = "partial";
+  assert.ok(!isHomeworkDayComplete(current));
+  const rewards = new HomeworkRewards(f.homework, f.reading);
+  rewards.tick(); rewards.tick();
+  assert.equal(f.reading.balance(), 1);
+ } finally { f.cleanup(); }
+});

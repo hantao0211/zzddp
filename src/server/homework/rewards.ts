@@ -14,7 +14,7 @@ export class HomeworkRewards {
     if (points !== this.points) { this.checked.clear(); this.points = points; }
     if (!points) return;
     const earned = new Set(this.reading.homeworkRewardDates());
-    const days = this.homework.db.prepare("SELECT date,revision FROM days WHERE date>=? AND date<=? AND status='processed'").all(this.startDate, this.reading.today()) as { date: string; revision: number }[];
+    const days = this.homework.db.prepare("SELECT date,revision FROM days WHERE date>=? AND date<=? AND status IN ('processed','needs_rescan')").all(this.startDate, this.reading.today()) as { date: string; revision: number }[];
     for (const day of days) {
       const revision = `${day.revision}:${this.homework.completions.revision(day.date)}`;
       if (earned.has(day.date) || this.checked.get(day.date) === revision) continue;
