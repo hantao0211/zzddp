@@ -28,7 +28,8 @@ export function operationLabels(path: string, method: string): OperationLabels |
   if (/^learning\/(?:day-plan|day-plan-rules|task-completion|tasks\/[^/]+(?:\/[^/]+)?|reports\/[^/]+|grading\/[^/]+(?:\/[^/]+)?)$/.test(p)) return {pending: "正在处理作业操作…", success: "操作已保存，作业状态会自动更新。"};
   // Generation and grading acknowledge a queued job, not finished AI work.
   if (/^learning\/practice\/(?:materials|files|index-jobs)(?:\/[^/]+)*$/.test(p)) return {pending: "正在保存课程资料操作…", success: "课程资料操作已提交，可查看整理进度。"};
-  if (/^learning\/practice\/(?:generate|items|scopes)(?:\/[^/]+)*$/.test(p)) return {pending: "正在提交练习操作…", success: "练习操作已提交，可在练习中查看进度。"};
+  if (/^learning\/practice\/scopes\/[^/]+$/.test(p) && method.toUpperCase() === "PATCH") return {pending: "正在保存错题归属…", success: "这道题的归属已保存。"};
+  if (/^learning\/practice\/(?:generate|items)(?:\/[^/]+)*$/.test(p)) return {pending: "正在提交练习操作…", success: "练习操作已提交，可在练习中查看进度。"};
   if (/^learning\/(?:retry-day|uploads\/[^/]+\/(?:date|retry|retry-grading))$/.test(p)) return {pending: "正在提交资料更新…", success: "资料操作已提交，后台会继续处理。"};
   if (/^clarifications(?:\/[^/]+\/undo)?$/.test(p)) return {pending: "正在保存作业说明…", success: "作业说明已保存，小步会重新整理。"};
   if (p === "memo-entries/update") return {pending: "正在保存作业清单…", success: "作业清单已保存，小步会重新整理。"};

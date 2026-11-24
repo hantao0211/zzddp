@@ -1,5 +1,5 @@
 "use client";
-import { scopeLabels, type LearningScope } from "@/domain/practice";
+import { LearningScopeSchema, PracticeSubjectSchema, scopeLabels, type LearningScope, type PracticeSubject } from "@/domain/practice";
 import { HomeworkPhoto } from "./homework-photo";
 import { pagePhotoUrl } from "@/services/homework-photo";
 import { gradingDisplayQuestion } from "@/domain/grading-display";
@@ -8,7 +8,7 @@ import { gradingProgressText } from "@/domain/grading-progress";
 import { useEffect, useRef, useState } from "react";
 import { homeworkPost, homeworkRequest } from "@/services/homework-gateway";
 import type { GradedQuestion, GradingBatchView, GradingSummary, MistakeView } from "@/domain/grading";
-import { Image, ChevronUp, MessageCircle, PencilLine, Lightbulb, CircleCheck, Check, CircleAlert } from "lucide-react";
+import { Image, ChevronUp, MessageCircle, PencilLine, Lightbulb, CircleCheck, Check, CircleAlert, X } from "lucide-react";
 import { StatusIndicator } from "./status-indicator";
 const verdicts = { correct: "正确", wrong: "错误 · 已入错题本", blank: "未作答", uncertain: "AI尚未确认", feedback: "主观题点评" };
 const filterLabels = { correct: "正确", wrong: "错误", blank: "未作答", uncertain: "未确认", feedback: "点评" };
@@ -62,11 +62,176 @@ export function GradingPanel({ date, canManage = true, focusFailures = false }: 
     </>}
   </section>;
 }
-export function MistakeBook({canManage=false}:{canManage?:boolean}) {
- const [subject,setSubject]=useState(""),[scope,setScope]=useState<LearningScope|"">(""),[data,setData]=useState<{total:number;items:MistakeView[]}|null>(null),[error,setError]=useState(""),[busy,setBusy]=useState(false),[revision,setRevision]=useState(0);const expanded=useRef(false);
- const query=(offset=0)=>{const q=new URLSearchParams({offset:String(offset)});if(subject)q.set("subject",subject);if(scope)q.set("scope",scope);return `/mistakes?${q}`;};
- useEffect(()=>{let live=true;expanded.current=false;setData(null);const load=async()=>{try{const next=await homeworkRequest<{total:number;items:MistakeView[]}>(query());if(live){setData(next);setError("");}}catch(e){if(live)setError(e instanceof Error?e.message:"错题本暂未读取成功");}};void load();const timer=setInterval(()=>{if(!document.hidden&&!expanded.current)void load();},6000);return()=>{live=false;clearInterval(timer);};},[subject,scope,revision]);
- return <section className="card grade-panel mistake-book" aria-label="错题本"><h2>我的错题本{data?` · ${data.total}题`:""}</h2><p className="grade-source">只收录已核验的错题。课内和课外分别保留；未分类的题不用于课内小练习。</p><div className="tabs grade-filters" aria-label="按科目筛选">{["","语文","数学","英语"].map(s=><button key={s} className={subject===s?"selected":""} onClick={()=>setSubject(s)}>{s||"全部科目"}</button>)}</div><div className="tabs grade-filters" aria-label="按课内外筛选">{(["","curricular","extracurricular","unknown"] as const).map(s=><button key={s} className={scope===s?"selected":""} onClick={()=>setScope(s)}>{s?scopeLabels[s]:"全部归属"}</button>)}</div>
- {error&&<p className="form-error" role="alert">{error}</p>}{!data?<p>正在打开错题本…</p>:!data.total?<p>这个分类暂时没有已核验的错题。</p>:<>{data.items.map(item=><section className="mistake-entry" key={item.id}><div className="mistake-scope"><strong>{scopeLabels[item.scope||"unknown"]}</strong><span>{item.origin==="practice"?"来自小练习":"来自作业"}</span>{canManage&&<label>调整归属<select aria-label={`调整${item.question.label}的课内外归属`} value={item.scope||"unknown"} disabled={busy} onChange={async e=>{setBusy(true);try{await homeworkRequest(`/practice/scopes/${encodeURIComponent(item.id)}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({scope:e.target.value})});setRevision(n=>n+1);}catch(err){setError(err instanceof Error?err.message:"分类暂未保存");}finally{setBusy(false);}}}>{Object.entries(scopeLabels).map(([v,t])=><option key={v} value={v}>{t}</option>)}</select></label>}</div>{item.retest&&<p className="mistake-retest">复测{item.retest.rounds}轮 · 已判定{item.retest.attempts}题 · 通过率{item.retest.passRate===null?"暂无":`${item.retest.passRate}%`}{item.retest.uncertain?` · ${item.retest.uncertain}题待确认`:""}{item.retest.blank?` · ${item.retest.blank}题未作答`:""}{item.retest.lastDate?` · 最近${item.retest.lastDate}`:""}。通过率只统计已确认的对错。</p>}<QuestionCard question={item.question} date={item.date} subject={item.subject} title={item.title} pageId={item.pageId} imageUrl={item.imageUrl}/></section>)}{data.items.length<data.total&&<button className="button secondary" onClick={async()=>{expanded.current=true;try{const next=await homeworkRequest<{total:number;items:MistakeView[]}>(query(data.items.length));setData({total:next.total,items:[...data.items,...next.items]});}catch(e){setError(e instanceof Error?e.message:"暂未读取成功");}}}>查看更多错题</button>}</>}
- </section>;
+type MistakePage = { total: number; items: MistakeView[] };
+type MistakeFilters = { subject: PracticeSubject | ""; scope: LearningScope | "" };
+
+function readMistakes(filters: MistakeFilters, offset: number, signal: AbortSignal) {
+  const query = new URLSearchParams({ offset: String(offset) });
+  if (filters.subject) query.set("subject", filters.subject);
+  if (filters.scope) query.set("scope", filters.scope);
+  return homeworkRequest<MistakePage>(`/mistakes?${query}`, { signal });
+}
+
+function MistakeScopeEditor({ item, close, saved }: {
+  item: MistakeView; close: () => void; saved: () => void;
+}) {
+  const current = item.scope || "unknown";
+  const [scope, setScope] = useState<LearningScope>(current);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const dialog = useRef<HTMLDialogElement>(null);
+  const saving = useRef(false);
+
+  useEffect(() => {
+    const element = dialog.current;
+    element?.showModal();
+    return () => element?.close();
+  }, []);
+
+  async function save() {
+    if (saving.current || current === scope) return;
+    saving.current = true;
+    setBusy(true);
+    setError("");
+    try {
+      await homeworkRequest(`/practice/scopes/${encodeURIComponent(item.id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scope }),
+      });
+      saved();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "归属暂未保存，请重试。");
+    } finally {
+      saving.current = false;
+      setBusy(false);
+    }
+  }
+
+  return <dialog ref={dialog} className="reading-dialog mistake-scope-dialog" aria-labelledby="mistake-scope-title"
+    onCancel={event => { event.preventDefault(); if (!saving.current) close(); }}>
+    <header>
+      <h2 id="mistake-scope-title">更改本题归属</h2>
+      <button type="button" className="icon-button" aria-label="关闭归属编辑" disabled={busy} onClick={close}><X aria-hidden="true" /></button>
+    </header>
+    <form className="reading-dialog-body" onSubmit={event => { event.preventDefault(); void save(); }}>
+      <p><strong>{item.question.label}</strong></p>
+      <p className="reading-muted">{item.date} · {item.subject} · {item.title}</p>
+      <label>本题归属
+        <select value={scope} disabled={busy} onChange={event => setScope(LearningScopeSchema.parse(event.target.value))}>
+          {LearningScopeSchema.options.map(value => <option key={value} value={value}>{scopeLabels[value]}</option>)}
+        </select>
+      </label>
+      <p className="reading-muted">保存后会更新这道题的归属。小练习只从课内错题出题。</p>
+      {error && <p className="form-error" role="alert">{error}</p>}
+      <div className="reading-record-actions">
+        <button type="button" className="button secondary" disabled={busy} onClick={close}>取消</button>
+        <button type="submit" className="button primary" disabled={busy || scope === current}>{busy ? "正在保存…" : "保存归属"}</button>
+      </div>
+    </form>
+  </dialog>;
+}
+
+export function MistakeBook({ canManage = false }: { canManage?: boolean }) {
+  const [filters, setFilters] = useState<MistakeFilters>({ subject: "", scope: "" });
+  const [data, setData] = useState<MistakePage | null>(null);
+  const [error, setError] = useState("");
+  const [revision, setRevision] = useState(0);
+  const [editing, setEditing] = useState<MistakeView | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const requests = useRef<AbortController>(null);
+  const expanded = useRef(false);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const { signal } = controller;
+    requests.current = controller;
+    expanded.current = false;
+    setLoadingMore(false);
+    let loading = false;
+    async function load() {
+      if (loading) return;
+      loading = true;
+      try {
+        const next = await readMistakes(filters, 0, signal);
+        if (!signal.aborted && !expanded.current) {
+          setData(next);
+          setError("");
+        }
+      } catch (e) {
+        if (!signal.aborted && !expanded.current) setError(e instanceof Error ? e.message : "错题本暂未读取成功。");
+      } finally {
+        loading = false;
+      }
+    }
+    void load();
+    const timer = setInterval(() => { if (!document.hidden && !expanded.current) void load(); }, 6000);
+    return () => {
+      controller.abort();
+      clearInterval(timer);
+    };
+  }, [filters, revision]);
+
+  function changeFilters(next: MistakeFilters) {
+    if (next.subject === filters.subject && next.scope === filters.scope) return;
+    requests.current?.abort();
+    setData(null);
+    setError("");
+    setFilters(next);
+  }
+
+  async function loadMore() {
+    const signal = requests.current?.signal;
+    if (!data || !signal || signal.aborted || loadingMore) return;
+    expanded.current = true;
+    setLoadingMore(true);
+    setError("");
+    try {
+      const next = await readMistakes(filters, data.items.length, signal);
+      if (!signal.aborted) setData({ total: next.total, items: [...data.items, ...next.items] });
+    } catch (e) {
+      if (!signal.aborted) setError(e instanceof Error ? e.message : "暂未读取成功。");
+    } finally {
+      if (!signal.aborted) setLoadingMore(false);
+    }
+  }
+
+  return <section className="card grade-panel mistake-book" aria-label="错题本">
+    <h2>我的错题本{data ? ` · ${data.total}题` : ""}</h2>
+    <p className="grade-source">只收录已核验的错题。筛选只改变这里显示的题目。</p>
+    <div className="tabs grade-filters" role="group" aria-label="按科目筛选">
+      {(["", ...PracticeSubjectSchema.options] as const).map(subject =>
+        <button type="button" key={subject} aria-pressed={filters.subject === subject} className={filters.subject === subject ? "selected" : ""}
+          onClick={() => changeFilters({ ...filters, subject })}>{subject || "全部科目"}</button>)}
+    </div>
+    <div className="tabs grade-filters" role="group" aria-label="按课内外筛选">
+      {(["", ...LearningScopeSchema.options] as const).map(scope =>
+        <button type="button" key={scope} aria-pressed={filters.scope === scope} className={filters.scope === scope ? "selected" : ""}
+          onClick={() => changeFilters({ ...filters, scope })}>{scope ? scopeLabels[scope] : "全部归属"}</button>)}
+    </div>
+    {error && <p className="form-error" role="alert">{error}</p>}
+    {!data && !error && <p role="status">正在打开错题本…</p>}
+    {data?.total === 0 && <p>这个分类暂时没有已核验的错题。</p>}
+    {data?.items.map(item => <section className="mistake-entry" key={item.id}>
+      <div className="mistake-scope">
+        <strong>{scopeLabels[item.scope || "unknown"]}</strong>
+        <span>{item.origin === "practice" ? "来自小练习" : "来自作业"}</span>
+        {canManage && <button type="button" className="text-button" onClick={() => setEditing(item)}>
+          <PencilLine size={16} aria-hidden="true" />更改本题归属
+        </button>}
+      </div>
+      {item.retest && <p className="mistake-retest">复测{item.retest.rounds}轮 · 已判定{item.retest.attempts}题 · 通过率{item.retest.passRate === null ? "暂无" : `${item.retest.passRate}%`}{item.retest.uncertain ? ` · ${item.retest.uncertain}题待确认` : ""}{item.retest.blank ? ` · ${item.retest.blank}题未作答` : ""}{item.retest.lastDate ? ` · 最近${item.retest.lastDate}` : ""}。通过率只统计已确认的对错。</p>}
+      <QuestionCard question={item.question} date={item.date} subject={item.subject} title={item.title} pageId={item.pageId} imageUrl={item.imageUrl} />
+    </section>)}
+    {data && data.items.length < data.total && <button type="button" className="button secondary" disabled={loadingMore} onClick={() => void loadMore()}>
+      {loadingMore ? "正在读取…" : "查看更多错题"}
+    </button>}
+    {canManage && editing && <MistakeScopeEditor item={editing} close={() => setEditing(null)} saved={() => {
+      requests.current?.abort();
+      setEditing(null);
+      setData(null);
+      setError("");
+      setRevision(value => value + 1);
+    }} />}
+  </section>;
 }

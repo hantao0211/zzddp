@@ -40,8 +40,8 @@
 .curriculum-library select,.curriculum-card input{min-width:0;width:100%;max-width:100%}
 .mistake-scope{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-top:25px;font-size:14px}
 .mistake-scope strong{padding:3px 12px;border-radius:8px;background:var(--journal-sage)}
-.mistake-scope label{margin-left:auto;display:flex;align-items:center;gap:8px;min-width:0}
-.mistake-scope select{border:1px solid var(--field-border);border-radius:8px;padding:8px;color:var(--ink);max-width:100%}
+.mistake-scope > button{margin-inline-start:auto;min-height:44px}
+.mistake-scope-dialog p{overflow-wrap:anywhere}
 .mistake-retest{font-size:13px;line-height:1.9;color:var(--muted);margin-top:12px}
 .grade-photo img{max-width:100%;height:auto;border-radius:12px}
-@media(max-width:700px){.practice-subjects{grid-template-columns:1fr}.practice-subjects article{padding:16px}.practice-subjects article h3{font-size:18px}.practice-heading h2{font-size:19px}.practice-photo-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.practice-heading .xiaobu-mascot{width:48px;height:48px}.practice-home-links{gap:18px}.mistake-scope label{margin-left:0}.curriculum-library .reading-fields{grid-template-columns:1fr}.practice-results article{padding:14px}}
+@media(max-width:700px){.practice-subjects{grid-template-columns:1fr}.practice-subjects article{padding:16px}.practice-subjects article h3{font-size:18px}.practice-heading h2{font-size:19px}.practice-photo-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.practice-heading .xiaobu-mascot{width:48px;height:48px}.practice-home-links{gap:18px}.curriculum-library .reading-fields{grid-template-columns:1fr}.practice-results article{padding:14px}}
