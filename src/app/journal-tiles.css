@@ -40,9 +40,21 @@
     display: block; margin: 0; min-height: 18px; font-size: var(--tile-note-size);
     font-weight: 400; line-height: 1.5; color: var(--muted);
   }
-  .study-shell .journal-tile .mall-item-footer { min-height: 44px; margin-top: auto; }
-  .study-shell .journal-tile .mall-item-footer small,
-  .study-shell .journal-tile .mall-item-more { font-size: 11px; line-height: 1.5; }
+  .mall-terms { display: grid; gap: 2px; }
+  .mall-frequency { display: flex; flex-wrap: wrap; column-gap: .65em; font-size: 13px; line-height: 1.45; color: var(--ink); }
+  .mall-frequency > span, .mall-item-footer time { white-space: nowrap; }
+  .mall-terms .mall-availability { color: var(--accent-dark); }
+  .study-shell .journal-tile .mall-item-footer {
+    margin-top: auto; padding-top: 3px; color: var(--ink); font-size: 12px; line-height: 1.5;
+    font-variant-numeric: tabular-nums;
+  }
+  .mall-item-footer svg { flex: none; color: var(--accent); }
+  .study-shell .reading-main .reading-rewards.mall-grid > article {
+    display: grid; grid-template-columns: minmax(0, 1fr);
+  }
+  /* A square guide shares the tile's grid cell. Extra terms can grow the row. */
+  .mall-grid > article::before { content: ""; grid-area: 1 / 1; align-self: start; aspect-ratio: 1; width: 100%; pointer-events: none; }
+  .study-shell .reading-main .mall-grid .journal-tile { grid-area: 1 / 1; height: auto; aspect-ratio: auto; }
   .study-shell .growth-activities .economy-grid .activity-record-action { margin-top: auto; }
 }
 @media screen and (max-width: 700px) {
