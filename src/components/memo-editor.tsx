@@ -56,6 +56,7 @@ export function MemoEditor({ date, title, subject, close, saved, canManage, scop
   }
   const original = context?.entries.find(e => e.entryId === selected);
   const changed = entry && original && ["subject", "title", "requirement", "format"].some(key => entry[key as keyof MemoEntry] !== original[key as keyof MemoEntry]);
+  const fieldsFilled = !!(entry?.title.trim() && entry.requirement.trim());
   return <dialog ref={dialog} className="dialog hw-dialog memo-editor" aria-label="修改备忘录清单" onCancel={e => { e.preventDefault(); if (!busy) close(); }}>
     <div className="dialog-header">
       <h2><Pencil size={19} aria-hidden="true" />修改备忘录清单</h2>
@@ -105,12 +106,16 @@ export function MemoEditor({ date, title, subject, close, saved, canManage, scop
         </button>}
         <div className="dialog-footer">
           <button type="button" className="text-button memo-edit-cancel" disabled={busy} onClick={close}>取消</button>
-          <button type="submit" className="button primary" disabled={busy || !changed || !entry.title.trim() || !entry.requirement.trim()}>
+          <button type="submit" className="button primary" disabled={busy || !changed || !fieldsFilled}>
             {busy ? <LoaderCircle className="spin" size={18} aria-hidden="true" /> : <Check size={18} aria-hidden="true" />}
             {busy ? "保存中…" : "保存并重新整理"}
           </button>
         </div>
-        <p className="hw-secondary memo-edit-save-note">保存后会按新内容重新整理，原照片保留。</p>
+        <p className="hw-secondary memo-edit-save-note">
+          {!changed ? "修改内容后即可保存。"
+            : !fieldsFilled ? "填写作业名称和具体要求后即可保存。"
+            : "保存后会按新内容重新整理，原照片保留。"}
+        </p>
       </form>}
       {!entry && error && <p className="form-error" role="alert">{error}</p>}
     </div>

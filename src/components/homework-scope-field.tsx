@@ -23,9 +23,10 @@ export function HomeworkScopeForm({ source, saved }: {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const saving = useRef(false);
+  const unchanged = source.confirmed && selection === source.scope;
 
   async function save() {
-    if (saving.current || !selection) return;
+    if (saving.current || !selection || unchanged) return;
     const { kind, id, date } = source;
     saving.current = true;
     setBusy(true);
@@ -49,9 +50,12 @@ export function HomeworkScopeForm({ source, saved }: {
     <HomeworkScopeSelect value={selection} change={setSelection} disabled={busy} />
     <p className="hw-secondary">这份作业收录的错题会沿用该归属。单独纠正过的题保留自己的归属。</p>
     {error && <p className="form-error" role="alert">{error}</p>}
-    <button type="submit" className="button primary" disabled={busy || !selection || source.confirmed && selection === source.scope}>
-      {busy ? <LoaderCircle size={18} className="spin" aria-hidden="true" /> : <Check size={18} aria-hidden="true" />}
-      {busy ? "正在保存…" : "保存作业归属"}
-    </button>
+    <div className="hw-scope-actions">
+      <button type="submit" className="button primary" disabled={busy || !selection || unchanged}>
+        {busy ? <LoaderCircle size={18} className="spin" aria-hidden="true" /> : <Check size={18} aria-hidden="true" />}
+        {busy ? "正在保存…" : "保存作业归属"}
+      </button>
+      {!busy && (unchanged || !selection) && <span className="hw-secondary">{unchanged ? "归属未修改" : "选择归属后可保存"}</span>}
+    </div>
   </form>;
 }

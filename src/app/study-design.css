@@ -185,7 +185,7 @@
 }
 .memo-editor .hw-scope-form .button.primary:enabled:hover { background:var(--accent-soft) }
 .memo-editor :is(.memo-edit-form,.hw-scope-form) .button.primary:disabled {
-  background:transparent;border:1px dashed var(--field-border);color:var(--muted);
+  background:var(--button-tool-bg);border-color:transparent;color:var(--button-tool-ink);
 }
 
 .memo-edit-section-heading { display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:44px }

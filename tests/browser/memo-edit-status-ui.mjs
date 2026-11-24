@@ -44,6 +44,17 @@ try {
  await page.getByRole('button', { name: `修改${entry.title}`, exact: true }).click();
  const editor = () => page.getByRole('dialog', { name: '修改备忘录清单', exact: true }); await editor().waitFor();
  assert.equal(await editor().getByLabel('作业名称', { exact: true }).inputValue(), initial.title);
+ const saveEdit = editor().getByRole('button', { name: '保存并重新整理', exact: true });
+ assert.ok(await saveEdit.isDisabled());
+ assert.ok(await editor().getByText('修改内容后即可保存。', { exact: true }).isVisible());
+ assert.ok(await saveEdit.evaluate(button => {
+  const compare = document.createElement('span');
+  compare.style.backgroundColor = 'var(--button-tool-bg)';
+  button.append(compare);
+  const matches = getComputedStyle(button).backgroundColor === getComputedStyle(compare).backgroundColor;
+  compare.remove();
+  return matches;
+ }), 'The default disabled save uses the rose background');
  await editor().getByLabel('作业名称', { exact: true }).fill('数学练习册P74');
  await editor().getByLabel('作业具体要求', { exact: true }).fill('完成数学练习册第74页，不是“练居”。');
  fail = true; await editor().getByRole('button', { name: '保存并重新整理', exact: true }).click();
