@@ -77,12 +77,13 @@ export function GradingPanel({ date, canManage = true, focusFailures = false }: 
   </section>;
 }
 type MistakePage = { total: number; items: MistakeView[] };
-function mistakeSourceLabel(item: MistakeView) {
+function mistakeSourceLabel(item: MistakeView, compact = false) {
   const source = item.provenance;
-  if (source?.kind === "assignment") return `来自作业 · ${source.title}`;
-  if (source?.kind === "practice") return `来自小练习 · ${source.title}`;
-  if (item.origin === "practice") return `来自小练习 · ${item.title}`;
-  return source?.title ? `未匹配作业 · ${source.title}` : "未匹配具体作业";
+  if (source?.kind === "assignment") return `${compact ? "作业" : "来自作业"} · ${source.title}`;
+  if (source?.kind === "practice" || item.origin === "practice") {
+    return `${compact ? "小练习" : "来自小练习"} · ${source?.title || item.title}`;
+  }
+  return source?.title ? `未匹配作业 · ${source.title}` : compact ? "作业待匹配" : "未匹配具体作业";
 }
 type MistakeFilters = { subject: PracticeSubject | ""; scope: LearningScope | "" };
 
@@ -234,17 +235,21 @@ export function MistakeBook({ canManage = false }: { canManage?: boolean }) {
     {error && <p className="form-error" role="alert">{error}</p>}
     {!data && !error && <p role="status">正在打开错题本…</p>}
     {data?.total === 0 && <p>这个分类暂时没有已核验的错题。</p>}
-    {data?.items.map(item => <section className="mistake-entry" key={item.id}>
-      <div className="mistake-scope">
-        <strong>{scopeLabels[item.scope || "unknown"]}</strong>
-        <span className="mistake-origin">{mistakeSourceLabel(item)}</span>
-        {canManage && <button type="button" className="text-button" onClick={() => setEditing(item)}>
-          <PencilLine size={16} aria-hidden="true" />更改本题归属
-        </button>}
-      </div>
-      {item.retest && <p className="mistake-retest">复测{item.retest.rounds}轮 · 已判定{item.retest.attempts}题 · 通过率{item.retest.passRate === null ? "暂无" : `${item.retest.passRate}%`}{item.retest.uncertain ? ` · ${item.retest.uncertain}题待确认` : ""}{item.retest.blank ? ` · ${item.retest.blank}题未作答` : ""}{item.retest.lastDate ? ` · 最近${item.retest.lastDate}` : ""}。通过率只统计已确认的对错。</p>}
-      <QuestionCard question={item.question} date={item.date} subject={item.subject} pageId={item.pageId} imageUrl={item.imageUrl} />
-    </section>)}
+    {data?.items.map(item => {
+      const scope = scopeLabels[item.scope || "unknown"];
+      const source = mistakeSourceLabel(item, true);
+      return <section className="mistake-entry" key={item.id}>
+        <div className="mistake-scope">
+          {canManage ? <button type="button" className="mistake-scope-edit" aria-label={`${scope}，更改本题归属`}
+            title="更改本题归属" aria-haspopup="dialog" onClick={() => setEditing(item)}>
+            <span className="mistake-scope-chip">{scope}<PencilLine size={14} aria-hidden="true" /></span>
+          </button> : <strong className="mistake-scope-chip">{scope}</strong>}
+          <span className="mistake-origin" title={source}>{source}</span>
+        </div>
+        {item.retest && <p className="mistake-retest">复测{item.retest.rounds}轮 · 已判定{item.retest.attempts}题 · 通过率{item.retest.passRate === null ? "暂无" : `${item.retest.passRate}%`}{item.retest.uncertain ? ` · ${item.retest.uncertain}题待确认` : ""}{item.retest.blank ? ` · ${item.retest.blank}题未作答` : ""}{item.retest.lastDate ? ` · 最近${item.retest.lastDate}` : ""}。通过率只统计已确认的对错。</p>}
+        <QuestionCard question={item.question} date={item.date} subject={item.subject} pageId={item.pageId} imageUrl={item.imageUrl} />
+      </section>;
+    })}
     {data && data.items.length < data.total && <button type="button" className="button secondary" disabled={loadingMore} onClick={() => void loadMore()}>
       {loadingMore ? "正在读取…" : "查看更多错题"}
     </button>}

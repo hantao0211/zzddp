@@ -55,7 +55,7 @@ try{
  await changeFilter(subjects.getByRole('button',{name:'英语',exact:true}),['subject','英语']);
  await changeFilter(scopeFilters.getByRole('button',{name:'课外',exact:true}),['scope','extracurricular']);
  await list.getByRole('heading',{name:'我的错题本 · 1题',exact:true}).waitFor();
- assert.equal(await list.locator('.mistake-scope strong').textContent(),'课外');
+ assert.equal(await list.locator('.mistake-scope .mistake-scope-chip').textContent(),'课外');
  assert.equal(await list.getByRole('combobox').count(),0);
  assert.equal(await scopeFilters.getByRole('button',{name:'课外',exact:true}).getAttribute('aria-pressed'),'true');
  await navigation.getByRole('button',{name:'小练习',exact:true}).tap();
@@ -66,8 +66,8 @@ try{
  await navigation.getByRole('button',{name:'错题本',exact:true}).tap();
  await changeFilter(subjects.getByRole('button',{name:'英语',exact:true}),['subject','英语']);
  await changeFilter(scopeFilters.getByRole('button',{name:'待分类',exact:true}),['scope','unknown']);
- await list.locator('.mistake-scope strong').filter({hasText:/^待分类$/}).waitFor();
- const edit=list.getByRole('button',{name:'更改本题归属',exact:true});
+ await list.locator('.mistake-scope .mistake-scope-chip').filter({hasText:/^待分类$/}).waitFor();
+ const edit=list.getByRole('button',{name:/更改本题归属/});
  await edit.tap();
  const scopeDialog=parent.getByRole('dialog',{name:'更改本题归属',exact:true});
  const select=scopeDialog.getByLabel('本题归属');
@@ -92,7 +92,7 @@ try{
  const childNavigation=page.getByRole('navigation',{name:'学习资料导航'});
  await childNavigation.getByRole('button',{name:'错题本',exact:true}).tap();
  await page.locator('.mistake-entry').first().waitFor();
- assert.equal(await page.getByRole('button',{name:'更改本题归属',exact:true}).count(),0);
+ assert.equal(await page.getByRole('button',{name:/更改本题归属/}).count(),0);
  const fromLegacy=await getPracticeSubjects();
  const chinese=values=>values.find(item=>item.subject==='语文');
  const legacySource=chinese(fromLegacy).pendingSources[0];

@@ -92,11 +92,24 @@ try {
   await book.getByText("可能的错因 · 计算错误", { exact: true }).waitFor();
   assert.equal(await book.locator(".grade-question").count(), 1);
   const sourceText = `来自作业 · ${fullAssignment}`;
-  await book.getByText(sourceText, { exact: true }).waitFor();
+  const row = book.locator(".mistake-scope");
+  const editScope = row.getByRole("button", { name: /更改本题归属/ });
+  await row.getByText(`作业 · ${fullAssignment}`, { exact: true }).waitFor();
   assert.ok(!(await book.innerText()).includes("已上传作业"));
-  await page.setViewportSize({ width: 320, height: 640 });
-  assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
-  await book.getByRole("button", { name: "更改本题归属", exact: true }).tap();
+  for (const width of [320, 390, 428]) {
+    await page.setViewportSize({ width, height: 640 });
+    const layout = await row.evaluate(el => {
+      const badge = el.querySelector("button");
+      const title = el.querySelector(".mistake-origin");
+      const r = el.getBoundingClientRect(), b = badge.getBoundingClientRect(), t = title.getBoundingClientRect();
+      return { rowHeight:r.height, hitHeight:b.height, centered:Math.abs((b.top+b.bottom)-(t.top+t.bottom))<1,
+        singleLine:getComputedStyle(title).whiteSpace==="nowrap", ellipsis:getComputedStyle(title).textOverflow==="ellipsis",
+        clipped:title.scrollWidth>title.clientWidth, pencil:!!badge.querySelector("svg"), overflow:document.documentElement.scrollWidth>innerWidth };
+    });
+    assert.ok(layout.rowHeight <= 45 && layout.hitHeight >= 44 && layout.centered && layout.singleLine && layout.ellipsis && layout.pencil && !layout.overflow, JSON.stringify(layout));
+    if (width === 320) assert.ok(layout.clipped, "Long assignment names fit by truncating at narrow width");
+  }
+  await editScope.tap();
   const scopeDialog = page.getByRole("dialog", { name: "更改本题归属", exact: true });
   await scopeDialog.getByText(sourceText, { exact: true }).waitFor();
   await scopeDialog.getByRole("button", { name: "取消", exact: true }).tap();
@@ -152,5 +165,5 @@ try {
   assert.equal(await failures.getByRole("button", { name: "重试批改", exact: true }).count(), 0);
   await failures.getByText("请家长处理重试，已有结果仍可查看。", { exact: true }).waitFor();
   assert.deepEqual(errors, []);
-  console.log("GRADING_UI_OK=true daily-progress,category-buttons,zero-category,poll-preserves-filter,keyboard,date-reset,failed-reason-home-entry,per-page-cause-attempt-stage,failures-visible-under-category-filter,child-no-retry,all-verdicts,wrong-book,exact-assignment-in-card-and-editor,wrapped-long-title,cause,next-step,subject-filter,lazy-private-photo,assistant-prefill,retry,mobile-and-desktop");
+  console.log("GRADING_UI_OK=true daily-progress,category-buttons,zero-category,poll-preserves-filter,keyboard,date-reset,failed-reason-home-entry,per-page-cause-attempt-stage,failures-visible-under-category-filter,child-no-retry,all-verdicts,wrong-book,compact-one-line-source,scope-badge-edit,full-title-in-editor,cause,next-step,subject-filter,lazy-private-photo,assistant-prefill,retry,mobile-and-desktop");
 } finally { await browser.close(); }
