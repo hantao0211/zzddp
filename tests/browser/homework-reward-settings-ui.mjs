@@ -14,6 +14,7 @@ try {
   const path = new URL(route.request().url()).pathname;
   const send = (body, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
   if (path.endsWith('/status')) return send({ authenticated: true, available: true, accounts: true, viewer: state().viewer, speech: true });
+  if (path.endsWith('/admin/overview')) return send({ viewer: state().viewer, days: [], memories: [], limits: {}, usage: {}, features: {} });
   if (path.endsWith('/reading/state')) { stateReads++; return send(state()); }
   if (path.endsWith('/homework-rules')) {
    assert.equal(route.request().method(), 'PATCH'); assert.equal(role, 'parent'); const data = route.request().postDataJSON(); changes.push(data);
@@ -26,10 +27,22 @@ try {
   throw Error('Unexpected mock API: ' + path);
  });
  await page.goto(base + '/reading/?view=manage', { waitUntil: 'networkidle' });
+ const rewardsNav = page.getByRole('navigation', { name: '阅读与奖励导航' });
+ await rewardsNav.getByRole('button', { name: '审批心愿' }).click();
+ await page.getByRole('heading', { name: '孩子的心愿' }).waitFor();
+ await page.getByRole('link', { name: '设置', exact: true }).click();
+ const settingsNav = page.getByRole('navigation', { name: '家长管理导航' });
+ await settingsNav.getByRole('button', { name: '修改密码' }).click();
+ await page.getByRole('link', { name: '阅读与奖励', exact: true }).click();
+ await page.getByRole('heading', { name: '孩子的心愿' }).waitFor();
+ await page.goBack();
+ await page.getByRole('heading', { name: '修改我的密码' }).waitFor();
+ await page.goForward();
+ await rewardsNav.getByRole('button', { name: '奖励规则' }).click();
  const section = page.locator('.homework-reward-settings'), input = section.getByLabel('每日作业奖励（个小脚步）', { exact: true }), save = section.getByRole('button', { name: '保存作业奖励', exact: true });
  await input.waitFor(); assert.equal(await input.inputValue(), '1'); assert.ok(await save.isDisabled());
  for (const invalid of ['', '-1', '1.5', '101']) { await input.fill(invalid); assert.ok(await save.isDisabled()); }
- await input.fill('3'); fail = true; await save.click(); await page.getByRole('alert').filter({ hasText: '保存失败' }).waitFor(); assert.equal(await input.inputValue(), '3');
+ await input.fill('3'); fail = true; await save.click(); await page.locator('.admin-app').getByRole('alert').filter({ hasText: '保存失败' }).waitFor(); assert.equal(await input.inputValue(), '3');
  fail = false; await save.click(); await section.getByText('当前：每天作业全部做完，攒', { exact: false }).waitFor();
  assert.equal(amount, 3); await page.reload(); await input.waitFor(); assert.equal(await input.inputValue(), '3');
  // Background polling must not overwrite a parent's unsaved amount.

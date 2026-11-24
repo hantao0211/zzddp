@@ -2,7 +2,8 @@
 import { useEffect, useState } from "react";
 import { AccountLogin, accountRequest, sessionChanged } from "./account-login";
 import { ROLE_LABELS, type Role, type Viewer } from "@/domain/accounts";
-import { CalendarDays, Brain, Users, Settings, KeyRound, RefreshCw, ArrowRight, BookOpen, Gauge } from "lucide-react";
+import { CalendarDays, Brain, Users, Settings, KeyRound, ArrowRight, Gauge } from "lucide-react";
+import { AdminIdentity, AdminNavigation, useAdminSection } from "./admin-navigation";
 import { KnowledgePanel } from "./knowledge-panel";
 import { HomeworkUsageDetails } from "./homework-usage";
 import type { HomeworkUsage } from "@/domain/homework-usage";
@@ -10,7 +11,11 @@ import type { HomeworkQuota } from "@/domain/homework-quota";
 import type { KnowledgeCatalog, LearnedMemory } from "@/domain/memory";
 type Member = Viewer & { active: boolean };
 type Overview = { homeworkUsage?: HomeworkUsage | null; homeworkQuota?: HomeworkQuota | null; viewer: Viewer; days: { date: string; status: string; note: string; tasks: number; originals: number; uploads: number; grading: { correct: number; wrong: number; blank: number; uncertain: number; pending: number; failed: number } }[]; memories: LearnedMemory[]; knowledge?: KnowledgeCatalog; legacyAccess: boolean; limits: { chat: number; asr: number; tts: number }; usage: { chat: number; asr: number; tts: number }; day: string; service: { provider: string; model: string } | null; features: { autoGrading: boolean; writtenCompletion: boolean } };
-const tabIcons = { records: CalendarDays, memories: Brain, accounts: Users, settings: Settings, password: KeyRound };
+const settingsSections = [
+  { id: "records", label: "学习记录", icon: CalendarDays }, { id: "memories", label: "知识记忆", icon: Brain },
+  { id: "accounts", label: "家庭账号", icon: Users }, { id: "settings", label: "家庭设置", icon: Settings },
+  { id: "password", label: "修改密码", icon: KeyRound },
+];
 const label: Record<string, string> = { processed: "已整理", queued: "整理中", failed: "整理失败", waiting_memo: "等待备忘录", needs_rescan: "部分内容需补拍" };
 function MemberEditor({ member, saved }: { member: Member; saved: () => Promise<void> }) {
   const [name, setName] = useState(member.name), [role, setRole] = useState<Role>(member.role), [active, setActive] = useState(member.active), [password, setPassword] = useState(""), [busy, setBusy] = useState(false), [message, setMessage] = useState("");
@@ -21,7 +26,9 @@ function OwnPassword({ changed }: { changed: () => Promise<void> }) {
   return <section className="card admin-auth"><h2>修改我的密码</h2><p>修改后，此账号在所有设备上都会退出，请用新密码重新登录。</p><form onSubmit={async e => { e.preventDefault(); setError(""); if (password !== confirmation) { setError("两次新密码不一致，请检查。"); return; } setBusy(true); try { await accountRequest("admin/password", { currentPassword, password }, "PATCH"); setCurrentPassword(""); setPassword(""); setConfirmation(""); await changed(); } catch (e) { setError((e as Error).message); } finally { setBusy(false); } }}><label>当前密码<input type="password" autoComplete="current-password" minLength={8} maxLength={128} value={currentPassword} onChange={e => setCurrentPassword(e.target.value)} required /></label><label>新密码<input type="password" autoComplete="new-password" minLength={8} maxLength={128} value={password} onChange={e => setPassword(e.target.value)} required /></label><label>再次输入新密码<input type="password" autoComplete="new-password" minLength={8} maxLength={128} value={confirmation} onChange={e => setConfirmation(e.target.value)} required /></label><button className="button primary" disabled={busy}>{busy ? "正在修改…" : "保存新密码"}</button>{error && <p role="alert" className="form-error">{error}</p>}</form></section>;
 }
 export function ParentAdmin() {
-  const [status, setStatus] = useState<"loading" | "setup" | "login" | "child" | "ready" | "error">("loading"), [overview, setOverview] = useState<Overview | null>(null), [members, setMembers] = useState<Member[]>([]), [tab, setTab] = useState("records"), [message, setMessage] = useState(""), [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState<"loading" | "setup" | "login" | "child" | "ready" | "error">("loading"), [overview, setOverview] = useState<Overview | null>(null), [members, setMembers] = useState<Member[]>([]), [message, setMessage] = useState(""), [busy, setBusy] = useState(false);
+  const sections = settingsSections.filter(item => item.id !== "accounts" || overview?.viewer.role === "admin");
+  const [tab, setTab] = useAdminSection(overview?.viewer.id, "settings", sections);
   const [setupCode, setSetupCode] = useState(""), [username, setUsername] = useState(""), [name, setName] = useState(""), [password, setPassword] = useState(""), [role, setRole] = useState<Role>("child"), [limits, setLimits] = useState({ chat: 100, asr: 30, tts: 40 });
   const [homeworkLimit, setHomeworkLimit] = useState("100");
   async function refresh() { const data = await accountRequest("admin/overview", undefined, "GET") as Overview; setOverview(data); setLimits(data.limits); setHomeworkLimit(String(data.homeworkQuota?.limit ?? 100)); if (data.viewer.role === "admin") { const result = await accountRequest("admin/accounts", undefined, "GET"); setMembers(result.items); } }
@@ -29,25 +36,9 @@ export function ParentAdmin() {
   useEffect(() => { void load(); }, []);
   async function action(work: () => Promise<void>, success = "已保存") { setBusy(true); setMessage(""); try { await work(); setMessage(success); } catch (e) { setMessage((e as Error).message); } finally { setBusy(false); } }
   async function logout() { await accountRequest("session", undefined, "DELETE"); sessionChanged(); setOverview(null); await load(); }
-  return <div className="admin-app"><header>
-    <div className="admin-identity"><a href="/" className="admin-brand">小步学习</a>{overview && <small>{overview.viewer.name} · {ROLE_LABELS[overview.viewer.role]}</small>}</div>
-    <div className="admin-session"><a href="/" aria-label="打开学习空间">学习空间</a>{overview && <button onClick={() => void logout()} aria-label="退出账号">退出</button>}</div>
-  </header><main>
+  return <div className="admin-app"><AdminIdentity name={overview?.viewer.name} role={overview ? ROLE_LABELS[overview.viewer.role] : undefined} logout={logout}/><main>
     {status === "loading" ? <p role="status">正在验证家长身份…</p> : status === "setup" ? <section className="card admin-auth"><h1>开通家长管理</h1><p>首次开通需要服务器上的一次性开通码。请由家长在14.103.24.55服务器终端执行：</p><pre>sudo cat /var/lib/xiaobu-assistant/parent-setup-code</pre><p>此码只用于建立第一个管理员，开通后失效。旧家庭访问码不能开通管理员。</p><form onSubmit={e => { e.preventDefault(); void action(async () => { await accountRequest("parent-setup", { setupCode, username, name, password }); setSetupCode(""); setPassword(""); setUsername(""); setName(""); sessionChanged(); await load(); }); }}><label>一次性开通码<input type="password" autoComplete="off" value={setupCode} onChange={e => setSetupCode(e.target.value)} required /></label><label>家长登录名<input autoComplete="username" placeholder="例如 parent" pattern="[A-Za-z0-9_.-]{2,32}" value={username} onChange={e => setUsername(e.target.value)} required /></label><label>称呼<input value={name} onChange={e => setName(e.target.value)} maxLength={30} required /></label><label>设置密码（至少8位）<input type="password" autoComplete="new-password" minLength={8} maxLength={128} value={password} onChange={e => setPassword(e.target.value)} required /></label><button className="button primary" disabled={busy}>建立家长管理员账号</button></form></section> : status === "login" ? <section className="card admin-auth"><h1>家长登录</h1><p>使用家长或管理员的独立账号，孩子账号不能进入管理页。</p><AccountLogin onSignedIn={() => void load()} /></section> : status === "child" ? <section className="card admin-auth"><h1>这里需要家长账号</h1><p>当前是孩子学习身份。管理家庭账号、知识记忆和设置，需要家长登录。</p><button className="button primary" onClick={() => void logout()}>切换到家长账号</button><a href="/">返回学习空间</a></section> : status === "error" ? <section className="card"><h1>暂时未能打开管理页</h1><button className="button primary compact" onClick={() => void load()}>重新连接</button></section> : overview && <>
-      <div className="admin-heading">
-        <h1>家长管理</h1>
-        <div className="admin-heading-actions">
-          <a className="button primary plum-action" href="/reading/?view=manage"><BookOpen aria-hidden="true" />阅读与奖励</a>
-          <button className="button primary plum-action" disabled={busy} title="刷新" onClick={() => void action(refresh, "已刷新学习资料")}><RefreshCw aria-hidden="true" /><span className="visually-hidden">刷新</span></button>
-        </div>
-      </div>
-      <nav className="admin-sections" aria-label="家长管理导航">
-        {[["records", "学习记录"], ["memories", "知识记忆"], ...(overview.viewer.role === "admin" ? [["accounts", "家庭账号"]] : []), ["settings", "家庭设置"], ["password", "修改密码"]].map(([value, text]) => {
-          const Icon = tabIcons[value as keyof typeof tabIcons];
-          return <button key={value} aria-current={tab === value ? "page" : undefined}
-            onClick={() => { setTab(value); setMessage(""); }}><Icon aria-hidden="true" />{text}</button>;
-        })}
-      </nav>
+      <AdminNavigation sections={sections} current={tab} select={id => { setTab(id); setMessage(""); }} busy={busy} refresh={() => void action(refresh, "已刷新学习资料")}/>
       {tab === "password" && <OwnPassword changed={async () => { sessionChanged(); setOverview(null); setTab("records"); await load(); setMessage("密码已修改，请重新登录。"); }} />}
       {tab === "records" && <section className="admin-records">
         <header><h2>学习记录</h2><small>最近 {overview.days.length} 个记录日</small></header>
