@@ -26,7 +26,7 @@ export function shoppingCost(amount:number,previous:number,rate:number){return M
 export const ACTIVITY_KEYS = ["english-reading","housework","badminton","english-class"] as const;
 const ActivityKeySchema = z.union([z.enum(ACTIVITY_KEYS), z.string().uuid()]);
 export type ActivityKey = z.infer<typeof ActivityKeySchema>;
-export const ActivityRuleSchema=z.object({key:ActivityKeySchema,title:z.string().trim().min(1).max(60),points:z.number().int().min(0).max(100),enabled:z.boolean(),frequency:z.enum(["daily","weekly"]).optional()}).strict().refine(r=>r.key!=="housework"||r.frequency!=="weekly","家务每天合计一次");
+export const ActivityRuleSchema=z.object({key:ActivityKeySchema,title:z.string().trim().min(1).max(60),points:z.number().int().min(0).max(100),enabled:z.boolean(),frequency:z.enum(["daily","weekly"]).optional(),description:z.string().trim().max(100).optional()}).strict().refine(r=>r.key!=="housework"||r.frequency!=="weekly","家务每天合计一次");
 export type ActivityRule=z.infer<typeof ActivityRuleSchema>;
 export const DEFAULT_ACTIVITY_RULES:ActivityRule[]=[
  {key:"english-reading",title:"英语课外阅读",points:1,enabled:true},

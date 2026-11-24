@@ -488,3 +488,15 @@
 .tag-options { display: flex; flex-wrap: wrap; gap: 5px; }
 .tag-options button { background: transparent; color: inherit; border: 1px solid var(--theme-border); border-radius: 8px; padding: 6px 10px; }
 .tag-options button[aria-pressed=true] { background: var(--journal-pink); color: var(--accent-dark); }
+
+.journal-flower-speech {
+  left: 16px; top: 43px; opacity: 0; padding: 3px 7px;
+  border-radius: 12px 12px 3px 12px;
+  background: var(--accent-soft); color: var(--accent-dark);
+  font-size: 15px; font-weight: 700; line-height: 1.25; white-space: nowrap;
+}
+.journal-flower-speech::after {
+  content: ""; position: absolute; right: -5px; bottom: 3px;
+  width: 7px; height: 8px; background: inherit;
+  clip-path: polygon(0 0, 100% 100%, 0 80%);
+}

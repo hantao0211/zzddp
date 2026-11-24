@@ -140,9 +140,10 @@ test("parent activity CRUD keeps pending promises, survives reload and uses the 
   a.changeRule(create,parent);a.changeRule(create,parent);
   assert.equal(a.state().rules.filter(r=>r.key===rule.key).length,1);
   const original=a.submit({id:randomUUID(),key:rule.key,date:f.store.today()},child);
-  const next={...rule,title:"练习跳绳",frequency:"weekly",points:5};
+  const next={...rule,title:"练习跳绳",frequency:"weekly",points:5,description:"每次15分钟"};
   a.changeRule({before:rule,after:next},parent);
   assert.throws(()=>a.changeRule({before:rule,after:null},parent),/已更新/);
+  assert.equal(a.state().rules.find(r=>r.key===rule.key)?.description,"每次15分钟");
   f.time("2026-11-24");
   assert.throws(()=>a.submit({id:randomUUID(),key:rule.key,date:f.store.today()},child),/已经记录/);
   a.changeRule({before:next,after:null},parent);
@@ -170,7 +171,7 @@ test("activity rule endpoint restricts changes to parents and exposes new rules 
  await new Promise<void>(resolve=>server.listen(0,"127.0.0.1",resolve));
  try{
   const base=`http://127.0.0.1:${(server.address() as {port:number}).port}/assistant-api/reading`;
-  const rule={key:randomUUID(),title:"朗读",points:2,enabled:true,frequency:"weekly"};
+  const rule={key:randomUUID(),title:"朗读",points:2,enabled:true,frequency:"weekly",description:"每次15分钟"};
   const change=()=>fetch(base+"/activity-rule",{method:"PATCH",body:JSON.stringify({before:null,after:rule})});
   assert.equal((await change()).status,403);
   viewer=parent;assert.equal((await change()).status,200);

@@ -98,6 +98,7 @@ function FlowerFace() {
   </svg>;
 }
 
+const flowerPhrases = ["哈哈！", "嘻嘻！", "加油！"] as const;
 const playedGestures = new WeakMap<SVGSVGElement, Set<Expression>>();
 function chooseFlowerExpression(flower: SVGSVGElement) {
   const played = playedGestures.get(flower) ?? new Set<Expression>();
@@ -120,9 +121,22 @@ function chooseFlowerExpression(flower: SVGSVGElement) {
       { transform: "rotate(0deg)", offset: 1 },
     ], { duration: 1550, delay: left ? 65 : 210, easing: "ease-in-out" });
   });
+  const bubble = flower.closest(".journal-flower")?.querySelector<HTMLElement>(".journal-flower-speech");
+  let speech: Animation | undefined;
+  if (bubble && pose === "doubleBlink") {
+    const index = (flowerPhrases.findIndex(phrase => phrase === bubble.textContent) + 1) % flowerPhrases.length;
+    bubble.textContent = flowerPhrases[index];
+    speech = bubble.animate([
+      { opacity: 0, transform: "translateY(3px) scale(.94)" },
+      { opacity: 1, transform: "translateY(0) scale(1)", offset: .075 },
+      { opacity: 1, offset: .925 },
+      { opacity: 0, transform: "translateY(-2px)" },
+    ], { duration: 2000, easing: "linear" });
+  }
   return () => {
     motions.forEach(motion => motion.endElement());
     leaves.forEach(animation => animation.cancel());
+    speech?.cancel();
   };
 }
 
@@ -196,6 +210,7 @@ export function JournalGarden({ hint, sticker, onChoose }: { hint: string; stick
         <span className="journal-garden-decoration" role="img" aria-label={`花盆贴着${selected.label}贴纸`}>
           <span ref={flower} className="journal-flower" aria-hidden="true">
             <span className="journal-ground" />
+            <span className="journal-flower-speech" />
             <span className="journal-flower-stalk">
               <span className="journal-stem" />
               {[1, 2, 3, 4, 5].map(n => <span className={`journal-petal p${n}`} key={n} />)}

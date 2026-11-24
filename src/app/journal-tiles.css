@@ -62,3 +62,5 @@
   .study-shell .growth-activities .economy-grid .journal-tile-heading,
   .study-shell .reading-main .mall-grid .journal-tile-heading { gap: 5px; }
 }
+.study-shell .growth-activities .economy-grid > .journal-tile[data-described] { aspect-ratio: auto; }
+.activity-management .activity-rule-row > div:first-child { min-width: 0; overflow-wrap: anywhere; }
