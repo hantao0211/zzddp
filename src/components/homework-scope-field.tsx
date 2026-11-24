@@ -1,5 +1,6 @@
 "use client";
 import { useRef, useState } from "react";
+import { Check, LoaderCircle } from "lucide-react";
 import { HomeworkScopeSchema, type HomeworkScope, type HomeworkScopeSource } from "@/domain/homework-scope";
 import { scopeLabels } from "@/domain/practice";
 import { homeworkRequest } from "@/services/homework-gateway";
@@ -48,7 +49,8 @@ export function HomeworkScopeForm({ source, saved }: {
     <HomeworkScopeSelect value={selection} change={setSelection} disabled={busy} />
     <p className="hw-secondary">这份作业收录的错题会沿用该归属。单独纠正过的题保留自己的归属。</p>
     {error && <p className="form-error" role="alert">{error}</p>}
-    <button type="submit" className="button secondary" disabled={busy || !selection || source.confirmed && selection === source.scope}>
+    <button type="submit" className="button primary" disabled={busy || !selection || source.confirmed && selection === source.scope}>
+      {busy ? <LoaderCircle size={18} className="spin" aria-hidden="true" /> : <Check size={18} aria-hidden="true" />}
       {busy ? "正在保存…" : "保存作业归属"}
     </button>
   </form>;
