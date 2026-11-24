@@ -490,13 +490,24 @@
 .tag-options button[aria-pressed=true] { background: var(--journal-pink); color: var(--accent-dark); }
 
 .journal-flower-speech {
-  left: 16px; top: 43px; opacity: 0; padding: 3px 7px;
-  border-radius: 12px 12px 3px 12px;
-  background: var(--accent-soft); color: var(--accent-dark);
-  font-size: 15px; font-weight: 700; line-height: 1.25; white-space: nowrap;
+  --speech-paper: #f4ced9;
+  --speech-ink: #73374c;
+  right: 156px; top: 4px; opacity: 0;
+  padding: .22em .44em .20em .54em;
+  border-radius: 53% 48% 47% 44% / 60% 48% 52% 45%;
+  background: var(--speech-paper); color: var(--speech-ink);
+  rotate: -7deg; transform-origin: 90% 85%;
+  font-size: max(20px, calc(16px / var(--garden-scale)));
+  font-weight: 800; line-height: 1.12; white-space: nowrap;
 }
 .journal-flower-speech::after {
-  content: ""; position: absolute; right: -5px; bottom: 3px;
-  width: 7px; height: 8px; background: inherit;
-  clip-path: polygon(0 0, 100% 100%, 0 80%);
+  content: ""; position: absolute; right: -.30em; bottom: -.20em;
+  width: 1em; height: .8em; background: var(--speech-paper);
+  clip-path: polygon(0 35%, 42% 0, 100% 100%);
+}
+@media (prefers-color-scheme: dark) {
+  .journal-flower-speech { --speech-paper: #78485b; --speech-ink: #fff1e7; }
+}
+@media (max-width: 359px) {
+  .journal-flower-speech { right: 184px; }
 }
