@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { GradingQuestionSchema, type GradedQuestion } from "../src/domain/grading";
 import { blindGradingQuestions, reconcileFocusedQuestion } from "../src/domain/grading-verification";
-import { gradingDisplayQuestion } from "../src/domain/grading-display";
+import { gradingDisplayQuestion, mistakeQuestionSummary } from "../src/domain/grading-display";
 const first = { ...GradingQuestionSchema.parse({ kind: "objective", studentAnswer: "挡地", expectedAnswer: "当地", label: "第9题：当地", question: "第9题词语默写，曾识别挡地", evidence: [{ fileId: "synthetic-page", page: 1, excerpt: "被误识为挡地" }], verdict: "wrong", confidence: "medium", explanation: "字形看不清", knowledgePoints: ["词语默写"], cause: "书写或单位", causeExplanation: "误判偏旁", nextStep: "订正" }), id: "synthetic-question" };
 const check = { ...first, confidence: "high" as const, questionId: first.id };
 test("blind verification receives only location hints, not the original OCR, expected word, explanation or answer-bearing labels", () => {
@@ -27,4 +27,28 @@ test("readable explanations hide only internal reference IDs and retain question
  const q = { ...first, verification: "agreed" as const, explanation: "据本页图片（synthetic-page）第9题，答案19/20；synthetic-question。" } as GradedQuestion;
  const display = gradingDisplayQuestion(q);
  assert.equal(display.explanation,"据本页图片第9题，答案19/20；。"); assert.ok(q.explanation.includes("synthetic-page"), "display formatting never rewrites the original audit/evidence");
+});
+
+test("mistake summaries normalize legacy question labels and keep excerpts separate", () => {
+ const examples = [
+  ["四、8", "第4大题 · 第8小题"],
+  ["七、３", "第7大题 · 第3小题"],
+  ["五、 3", "第5大题 · 第3小题"],
+  ["第6题", "第6题"],
+  ["三、 单项选择 第8题", "第3大题 · 第8小题 · 单项选择"],
+  ["三、选择题第6题", "第3大题 · 第6小题 · 选择题"],
+  ["句型第2句 Write the complete answer.", "第2句 · 句型"],
+  ["一、 看音标写单词 第2题（/test/）", "第1大题 · 第2小题 · 看音标写单词"],
+  ["四、 短语翻译 第4题 Translate this very long sentence", "第4大题 · 第4小题 · 短语翻译"],
+  ["订正第十行", "第10行 · 订正"],
+  ["第十二大题 · 第03小题", "第12大题 · 第3小题"],
+  ["小练习复测题", "小练习复测题"],
+  ["无法辨认题号的内容", "题号未识别"],
+ ];
+ for (const [label, title] of examples) {
+  const q: GradedQuestion = { ...first, verification: "agreed", label, question: "Read the sentence.\nChoose an answer.（synthetic-page）" };
+  assert.deepEqual(mistakeQuestionSummary(q), { title, preview: "Read the sentence. Choose an answer." });
+ }
+ const long: GradedQuestion = { ...first, verification: "agreed", question: "Test example. ".repeat(35) };
+ assert.ok(mistakeQuestionSummary(long).preview.endsWith("…"));
 });

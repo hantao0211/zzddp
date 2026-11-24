@@ -15,6 +15,15 @@ try {
   const q = (verdict, i) => ({ id: "synthetic-question-" + i, label: `第${i}题`, sourcePartLabels: [], kind: verdict === "feedback" ? "subjective" : "objective", question: i === 2 ? "2+3等于多少？" : "一道人造的模拟练习题", studentAnswer: i === 2 ? "6" : "模拟作答", expectedAnswer: i === 2 ? "5" : "模拟参考答案", verdict, confidence: verdict === "uncertain" ? "low" : "high", explanation: verdict === "uncertain" ? "两次解答没有取得一致，未直接判错。" : "先算2加2等于4，再加1得到5。", knowledgePoints: ["整数加法"], cause: "计算错误", causeExplanation: "从这次作答看，可能在相加时多算了1，不能据此断定是粗心。", nextStep: "用小棒分两步相加，再检查总数。", evidence: [{ fileId: "synthetic-page", page: 1, excerpt: "模拟作答" }], verification: verdict === "uncertain" ? "uncertain" : verdict === "feedback" ? "subjective" : "agreed" });
   const questions = ["correct", "wrong", "blank", "uncertain", "feedback"].map((s, i) => q(s, i + 1));
   questions[1].explanation += " 图片编号（synthetic-page），第2题。";
+  const legacyLabels = [
+    ["四、8", "第4大题 · 第8小题"],
+    ["七、3", "第7大题 · 第3小题"],
+    ["三、选择题第6题", "第3大题 · 第6小题 · 选择题"],
+    ["四、 短语翻译 第4题 Translate the following paragraph", "第4大题 · 第4小题 · 短语翻译"],
+    ["句型第2句 An example question", "第2句 · 句型"],
+    ["没有题号的旧题", "题号未识别"],
+  ];
+  const longStem = "Translate the following practice question into your own words. Then check the example and write down your answer.";
   const fullAssignment = "模拟课外拓展习题（单词和课文默写之外的部分）";
   let selectedDate = "", blankVisible = true, extraWrong = false;
   const currentQuestions = () => [...questions.filter(q => blankVisible || q.verdict !== "blank"), ...(extraWrong ? [q("wrong", 6)] : [])];
@@ -38,9 +47,12 @@ try {
       const total = subject === "英语" ? 0 : subject === "数学" ? 1 : 301;
       const items = Array.from({ length: Math.min(limit, total - offset) }, (_, index) => {
         const number = offset + index + 2;
+        const sample = legacyLabels[number - 4];
+        const question = number === 2 ? questions[1] : q("wrong", number);
+        if (sample) Object.assign(question, { label: sample[0], question: longStem });
         return { id: "synthetic-mistake-" + number, date: selectedDate, lastDate: selectedDate, subject: "数学",
           title: "已上传作业", provenance: { kind: "assignment", title: fullAssignment }, pageId: "synthetic-page",
-          occurrences: 1, question: number === 2 ? questions[1] : q("wrong", number) };
+          occurrences: 1, question };
       });
       return json({ total, items });
     }
@@ -107,6 +119,25 @@ try {
   assert.equal(await book.locator(".mistake-entry").count(), 10);
   assert.equal(await book.locator(".grade-question").count(), 0);
   assert.equal(await book.getByText("第1／31页", { exact: true }).count(), 1);
+  const titles = book.locator(".mistake-summary strong");
+  assert.deepEqual((await titles.allTextContents()).slice(2, 8), legacyLabels.map(([, title]) => title));
+  const stem = book.locator(".mistake-stem-preview").nth(5);
+  assert.equal(await stem.textContent(), longStem);
+  for (const width of [320, 390, 1280]) {
+    await page.setViewportSize({width, height: 670});
+    const layout = await stem.evaluate(element => ({
+      overflow: document.documentElement.scrollWidth > innerWidth,
+      fits: element.getBoundingClientRect().right < innerWidth,
+      ellipsis: getComputedStyle(element).textOverflow === "ellipsis",
+      clipped: element.scrollWidth > element.clientWidth,
+    }));
+    assert.ok(!layout.overflow && layout.fits && layout.ellipsis && (width > 390 || layout.clipped), JSON.stringify(layout));
+  }
+  await page.setViewportSize({width: 390, height: 670});
+  await page.screenshot({path: output + "/mistake-title-summary-mobile.png", fullPage: true});
+  await book.getByRole("button", { name: /^第4大题 · 第8小题/ }).click();
+  await book.getByRole("heading", { name: "第4大题 · 第8小题", exact: true }).waitFor();
+  assert.equal(await book.locator(".grade-stem").textContent(), longStem);
   await toggle(2).click();
   await toggle(3).click();
   assert.equal(await toggle(2).getAttribute("aria-expanded"), "false");

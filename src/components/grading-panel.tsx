@@ -3,7 +3,7 @@ import { LearningScopeSchema, PracticeSubjectSchema, scopeLabels, type LearningS
 import { HomeworkPhoto } from "./homework-photo";
 import { PhotoPreviewButton } from "./photo-preview";
 import { pagePhotoUrl } from "@/services/homework-photo";
-import { gradingDisplayQuestion } from "@/domain/grading-display";
+import { gradingDisplayQuestion, mistakeQuestionSummary } from "@/domain/grading-display";
 import { GRADING_STAGE_LABELS } from "@/domain/grading-failure";
 import { gradingProgressText } from "@/domain/grading-progress";
 import { useEffect, useRef, useState } from "react";
@@ -31,16 +31,16 @@ function Photo({ id, url }: { id: string; url?: string }) {
     </>}
   </div>;
 }
-function QuestionCard({ question, date, subject, title, pageId, imageUrl }: { question: GradedQuestion; date: string; subject: string; title?: string; pageId: string; imageUrl?: string }) {
+function QuestionCard({ question, date, subject, title, pageId, imageUrl, displayLabel }: { question: GradedQuestion; date: string; subject: string; title?: string; pageId: string; imageUrl?: string; displayLabel?: string }) {
   const q = gradingDisplayQuestion(question);
   return <article className={`grade-question grade-verdict-${q.verdict}`}>
-    <div className="grade-question-heading"><h3>{q.label}</h3><StatusIndicator kind={q.verdict} className="grade-verdict-badge">{verdicts[q.verdict]}</StatusIndicator></div>
+    <div className="grade-question-heading"><h3>{displayLabel || q.label}</h3><StatusIndicator kind={q.verdict} className="grade-verdict-badge">{verdicts[q.verdict]}</StatusIndicator></div>
     <p className="grade-source">{date} · {subject}{title && ` · ${title}`}</p><p className="grade-stem">{q.question}</p>
     <dl className="grade-answers"><div><dt><PencilLine aria-hidden="true" />{q.verdict === "uncertain" ? "作答待辨清" : "识别到的作答"}</dt><dd>{q.studentAnswer || "未填写或未识别清楚"}</dd></div>{q.expectedAnswer && q.verdict !== "uncertain" && <div><dt><Lightbulb aria-hidden="true" />{q.verdict === "feedback" ? "参考思路" : "参考答案"}</dt><dd>{q.expectedAnswer}</dd></div>}</dl>
     {q.verdict === "correct" ? <details className="grade-explanation"><summary><Lightbulb size={17} aria-hidden="true" />查看解题思路</summary><p>{q.explanation}</p>{!!q.knowledgePoints.length && <p className="grade-source">知识点：{q.knowledgePoints.join("、")}</p>}</details> : <p>{q.explanation}</p>}
     {q.verdict === "wrong" && <div className="grade-cause"><strong>可能的错因 · {q.cause}</strong><p>{q.causeExplanation || "仅凭这一次作答还不能确定原因。"}</p>{q.nextStep && <><strong>下一步怎么做</strong><p>{q.nextStep}</p></>}</div>}
     {q.verdict !== "correct" && !!q.knowledgePoints.length && <p className="grade-source">知识点：{q.knowledgePoints.join("、")}</p>}
-    <div className="grade-question-actions"><Photo id={pageId} url={imageUrl} /><button className="text-button" onClick={() => window.dispatchEvent(new CustomEvent("xiaobu:ask-homework", { detail: { date, question: `我想讨论${subject}的${q.label}：${q.question.slice(0, 550)}。${q.verdict === "uncertain" ? "系统尚未辨清我的作答，不要把识读当成我实际写下的字。" : `系统识读到的作答是${q.studentAnswer.slice(0, 250)}。`}请结合批改记录，引导我弄懂这道题。` } }))}><MessageCircle size={17} aria-hidden="true" />让小步帮我弄懂</button></div>
+    <div className="grade-question-actions"><Photo id={pageId} url={imageUrl} /><button className="text-button" onClick={() => window.dispatchEvent(new CustomEvent("xiaobu:ask-homework", { detail: { date, question: `我想讨论${subject}的${displayLabel || q.label}：${q.question.slice(0, 550)}。${q.verdict === "uncertain" ? "系统尚未辨清我的作答，不要把识读当成我实际写下的字。" : `系统识读到的作答是${q.studentAnswer.slice(0, 250)}。`}请结合批改记录，引导我弄懂这道题。` } }))}><MessageCircle size={17} aria-hidden="true" />让小步帮我弄懂</button></div>
   </article>;
 }
 export function GradingPanel({ date, canManage = true, focusFailures = false }: { date: string; canManage?: boolean; focusFailures?: boolean }) {
@@ -98,6 +98,7 @@ function readMistakes(filters: MistakeFilters, offset: number, signal: AbortSign
 function MistakeScopeEditor({ item, close, saved }: {
   item: MistakeView; close: () => void; saved: () => void;
 }) {
+  const summary = mistakeQuestionSummary(item.question);
   const current = item.scope || "unknown";
   const [scope, setScope] = useState<LearningScope>(current);
   const [busy, setBusy] = useState(false);
@@ -138,7 +139,8 @@ function MistakeScopeEditor({ item, close, saved }: {
       <button type="button" className="icon-button" aria-label="关闭归属编辑" disabled={busy} onClick={close}><X aria-hidden="true" /></button>
     </header>
     <form className="reading-dialog-body" onSubmit={event => { event.preventDefault(); void save(); }}>
-      <p><strong>{item.question.label}</strong></p>
+      <p><strong>{summary.title}</strong></p>
+      {summary.preview && <p className="reading-muted">{summary.preview}</p>}
       <p className="mistake-origin">{mistakeSourceLabel(item)}</p>
       <p className="reading-muted">{item.date} · {item.subject}</p>
       <label>本题归属
@@ -250,12 +252,17 @@ export function MistakeBook({ canManage = false }: { canManage?: boolean }) {
     {data?.items.map(item => {
       const scope = scopeLabels[item.scope || "unknown"];
       const source = mistakeSourceLabel(item, true);
+      const summary = mistakeQuestionSummary(item.question);
       const open = openId === item.id;
       const detailsId = `mistake-details-${item.id}`;
       return <section className="mistake-entry" key={item.id}>
         <button type="button" className="mistake-toggle" aria-expanded={open} aria-controls={detailsId}
           onClick={() => setOpenId(open ? null : item.id)}>
-          <span><strong>{item.question.label}</strong><small>{item.date} · {item.subject}</small></span>
+          <span className="mistake-summary">
+            <strong>{summary.title}</strong>
+            {summary.preview && <span className="mistake-stem-preview">{summary.preview}</span>}
+            <small>{item.date} · {item.subject}</small>
+          </span>
           {open ? <ChevronUp size={18} aria-hidden="true" /> : <ChevronDown size={18} aria-hidden="true" />}
         </button>
         <div className="mistake-scope">
@@ -268,7 +275,7 @@ export function MistakeBook({ canManage = false }: { canManage?: boolean }) {
         <div id={detailsId} hidden={!open}>
         {open && <>
         {item.retest && <p className="mistake-retest">复测{item.retest.rounds}轮 · 已判定{item.retest.attempts}题 · 通过率{item.retest.passRate === null ? "暂无" : `${item.retest.passRate}%`}{item.retest.uncertain ? ` · ${item.retest.uncertain}题待确认` : ""}{item.retest.blank ? ` · ${item.retest.blank}题未作答` : ""}{item.retest.lastDate ? ` · 最近${item.retest.lastDate}` : ""}。通过率只统计已确认的对错。</p>}
-        <QuestionCard question={item.question} date={item.date} subject={item.subject} pageId={item.pageId} imageUrl={item.imageUrl} />
+        <QuestionCard question={item.question} date={item.date} subject={item.subject} pageId={item.pageId} imageUrl={item.imageUrl} displayLabel={summary.title} />
         </>}
         </div>
       </section>;
