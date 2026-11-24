@@ -28,7 +28,7 @@ try {
  });
  await page.goto(base+'/',{waitUntil:'networkidle'});await page.locator('.journal-garden h2').waitFor();
  const navigate=async(index,width)=>{const target=page.locator(width<900?'.study-bottom-nav:visible .study-nav-item':'.study-sidebar:visible nav .study-nav-item').nth(index);if(width<900)await target.tap();else await target.click();try{await page.waitForFunction(title=>[...document.querySelectorAll('.hw-simple-heading h1,.reading-heading h1')].some(el=>el.getBoundingClientRect().width>0&&el.textContent===title),titles[index],{timeout:10000});}catch(e){await page.screenshot({path:output+'/navigation-failure.png'});console.log('NAVIGATION_FAILURE',width,index,await page.evaluate(()=>({url:location.href,titles:[...document.querySelectorAll('h1')].map(el=>({text:el.textContent,visible:el.getBoundingClientRect().width>0})),navigation:[...document.querySelectorAll('.study-nav-item[aria-current]')].map(el=>el.textContent)})));throw e;}};
- const titles=['我的小步手帐','我的阅读手帐','我的小脚步','我的心愿商城'];
+ const titles=['我的课业手账','我的阅读手帐','我的小脚步','我的心愿商城'];
  for(const scheme of schemes){await page.emulateMedia({colorScheme:scheme});for(const width of [320,359,360,374,390,428,600,768,899,900,1280]){
   await page.setViewportSize({width,height:900});const headingStyles=[];
   for(let index=0;index<4;index++){

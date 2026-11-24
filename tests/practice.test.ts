@@ -13,7 +13,7 @@ import {DailyReportSchema, UploadInputSchema} from "../src/domain/homework";
 import {HomeworkStore} from "../src/server/homework/store";
 import { HomeworkHTTP } from "../src/server/homework/http";
 import {ReadingStore} from "../src/server/reading/store";
-import {saveStudentProfile} from "../src/server/reading/student-profile";
+import {studentProfile,saveStudentProfile} from "../src/server/reading/student-profile";
 import {PracticeStore} from "../src/server/practice/store";
 import {PracticeWorker,reconcilePractice} from "../src/server/practice/worker";
 import { formatPracticeQuestionText } from "../src/domain/practice-question-text";
@@ -176,3 +176,65 @@ test("system help retains structured existing workflows and accurately describes
 test("parent downgrading a wrong result to uncertain removes it from the verified practice mistake pool",async()=>{const f=setup();try{f.seed();const ai=fakeAI("wrong"),worker=new PracticeWorker(f.store,()=>ai.ai),p=f.store.create("数学",child);await worker.tick();f.store.submit(p.id,{photos:[{name:"答卷",image:jpeg()}]},child);await worker.tick();assert.equal(f.store.candidates().filter(c=>c.origin==="practice").length,1);f.store.reviewAnswer(p.id,"q1",{verdict:"uncertain",studentAnswer:"",expectedAnswer:"1",reason:"原字迹不足以判错"},parent);assert.equal(f.store.candidates().filter(c=>c.origin==="practice").length,0);assert.equal(f.store.view(p.id).result!.answers[0].verdict,"uncertain");assert.equal(f.reading.balance(),2);}finally{f.close();}});
 test("source reclassification during AI generation prevents publishing an extracurricular question set",async()=>{const f=setup();try{const id=f.seed(),provider=fakeAI(),p=f.store.create("数学",child);const ai:StructuredAI={async run(task,schema,metadata,images){const result=await provider.ai.run(task,schema,metadata,images);if(task==="verify_practice")f.store.classify(id,"extracurricular",parent);return result;}};await new PracticeWorker(f.store,()=>ai).tick();assert.equal(f.store.view(p.id).status,"failed");assert.equal(f.store.view(p.id).paper,null);assert.match(f.store.view(p.id).note,/归属/);assert.throws(()=>f.store.retry(p.id,parent),/课内错题/);}finally{f.close();}});
 test("parent confirmation requires actual answers and removes stale AI pending notes",async()=>{const f=setup();try{f.seed();const ai=fakeAI("uncertain"),worker=new PracticeWorker(f.store,()=>ai.ai),p=f.store.create("数学",child);await worker.tick();f.store.submit(p.id,{photos:[{name:"答卷",image:jpeg()}]},child);await worker.tick();assert.throws(()=>f.store.reviewAnswer(p.id,"q1",{verdict:"correct",studentAnswer:"",expectedAnswer:"1",reason:"核对"},parent),/实际作答/);f.store.reviewAnswer(p.id,"q1",{verdict:"correct",studentAnswer:"1",expectedAnswer:"1",reason:"核对完成"},parent);assert.equal(f.store.view(p.id).note,"家长已核对更正本次结果。");assert.equal(f.reading.balance(),2);}finally{f.close();}});
+
+test("marked exams retain independent pages, scoped mistakes, teacher evidence and dated statistics",()=>{
+  const f=setup();
+  try {
+    const {store}=f, exams=store.exams, http=new PracticeHTTP(store);
+    const meta={title:"模拟测验",grade:4,semester:1,subject:"英语",kind:"单元测验",scope:"curricular",date:f.store.today(),score:9,maximum:10,unit:"U2"} as const;
+    const manifest={meta,pages:[{sha:"a".repeat(64),bytes:100},{sha:"b".repeat(64),bytes:100}]};
+    const exam=exams.reserve(manifest);
+    assert.equal(exams.reserve(manifest).exam.id,exam.exam.id);
+    const template={label:"单选题 第1题",question:"阅读理解，选择正确答案。",studentAnswer:"A",teacherMark:"老师画叉",expectedAnswer:"B",correction:"订正为B",verdict:"wrong",confident:true,knowledgePoints:["近义词辨析"],cause:"原因待确认",causeExplanation:""} as const;
+    const result={coverage:"complete",note:"",questions:[template,{...template,label:"第2题",verdict:"correct",teacherMark:"老师画勾"},{...template,label:"第3题",teacherMark:""}]};
+    const page=exam.pages[0].id;
+    exams.savePage(page,result);exams.savePage(page,result);
+    assert.equal(exams.detail(exam.exam.id).questions.length,3);
+    assert.equal(http.mistakes(undefined,undefined,0).analysis.wrongRate,null,"missing second page excludes whole paper rate");
+    exams.savePage(exam.pages[1].id,{coverage:"complete",note:"",questions:[{...template,label:"第4题",verdict:"correct",teacherMark:"老师画勾"}]});
+    const filter=new URLSearchParams("form=单选题&form=填空题&scene=阅读理解&source=单元测验");
+    const first=http.mistakes("英语","curricular",0,10,filter);
+    assert.equal(first.total,1);assert.equal(first.items[0].provenance?.title,meta.title);
+    const analysis=http.mistakes("英语","curricular",0).analysis;
+    assert.equal(analysis.known,3);assert.equal(analysis.wrongRate,33);assert.equal(analysis.unknown,1);assert.equal(analysis.sources,1);
+    const id=first.items[0].id;
+    assert.equal(store.selectSources("英语")[0].id,id);
+    assert.ok(first.items[0].imageUrl?.includes(page));
+    store.analysis.saveEdit(id,{revision:0,tags:{knowledge:["主谓一致"]}},parent.id);
+    assert.equal(http.mistakes("英语",undefined,0,10,new URLSearchParams("knowledge=主谓一致")).total,1);
+    assert.deepEqual(store.selectSources("英语")[0].knowledgePoints,["主谓一致"]);
+    assert.throws(()=>store.analysis.saveEdit(id,{revision:0,tags:{}},parent.id));
+    exams.editMeta(exam.exam.id,{previous:meta,meta:{...meta,scope:"extracurricular"}},parent.id);
+    assert.equal(store.selectSources("英语").length,0);
+    exams.review(page,{id,revision:1,value:{...template,verdict:"correct",teacherMark:"家长核对老师画勾"}},parent.id);
+    assert.equal(http.mistakes("英语",undefined,0).total,0);
+    assert.equal(exams.detail(exam.exam.id).questions.find(q=>q.id===id)?.correction,"订正为B");
+    assert.equal(store.db.prepare("SELECT count(*) n FROM exam_reviews").get()?.n,2);
+    assert.equal(store.db.prepare("SELECT count(*) n FROM uploads").get()?.n,0);
+  } finally {f.close();}
+});
+
+test("homework classification preserves the original stage, skips duplicate attempts and keeps old wrong-only evidence out of rates",()=>{
+  const f=setup();
+  try{
+    const {store}=f;
+    const profile=studentProfile(f.reading)!;
+    saveStudentProfile(f.reading,{...profile,semester:1},parent.id);
+    const id=f.seed("英语","课内 U1"),db=store.db;
+    const q=JSON.parse(String(db.prepare("SELECT payload FROM grading_mistakes WHERE id=?").get(id)!.payload));
+    const day=store.today(),source={title:"课内 U1",subject:"英语",primaryPageId:"synthetic-page",date:day,taskIds:["task"]};
+    const result={version:"grading-v2",scopeComplete:true,note:"",questions:[{...q,label:"单项选择 第1题"},{...q,id:"q2",label:"判断题 第2题",verdict:"correct"}]};
+    for(const run of ["one","two"]){
+      db.prepare("INSERT INTO grading_runs(id,date,primary_page_id,source,status,result,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)").run(run,day,"synthetic-page",JSON.stringify(source),"done",JSON.stringify(result),day,day);
+      db.prepare("INSERT INTO grading_occurrences VALUES(?,?,?)").run(id,run,q.id);
+    }
+    const http=new PracticeHTTP(store),slice=()=>http.mistakes("英语",undefined,0);
+    assert.equal(slice().analysis.known,2);assert.equal(slice().analysis.wrongRate,50);
+    assert.deepEqual(slice().items[0].tags?.stage,["4年级上学期"]);
+    saveStudentProfile(f.reading,{...studentProfile(f.reading)!,grade:5},parent.id);
+    db.prepare("UPDATE grading_runs SET result=? WHERE id='two'").run(JSON.stringify({...result,note:"仅更正说明"}));
+    assert.deepEqual(slice().items[0].tags?.stage,["4年级上学期"]);
+    assert.equal(db.prepare("SELECT count(*) n FROM analysis_grade_history").get()?.n,1);
+    f.seed("英语","课外历史");assert.equal(slice().analysis.wrongRate,null);
+  }finally{f.close();}
+});

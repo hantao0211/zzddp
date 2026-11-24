@@ -1,5 +1,7 @@
 "use client";
 import { LearningScopeSchema, PracticeSubjectSchema, scopeLabels, type LearningScope, type PracticeSubject } from "@/domain/practice";
+import {MistakeInsights,QuestionTags,type Selections} from "./mistake-insights";
+import {dimensions,type Dimension,type Analysis} from "@/domain/assessment";
 import { HomeworkPhoto } from "./homework-photo";
 import { PhotoPreviewButton } from "./photo-preview";
 import { pagePhotoUrl } from "@/services/homework-photo";
@@ -16,7 +18,7 @@ const filterLabels = { correct: "正确", wrong: "错误", blank: "未作答", u
 type GradingFilter = "attention" | "all" | GradedQuestion["verdict"];
 function Photo({ id, url }: { id: string; url?: string }) {
   const [open, setOpen] = useState(false);
-  const alt = url ? "这道题所在的小练习答卷" : "这道题所在的作业原图";
+  const alt = url ? "这道题所在的原卷" : "这道题所在的作业原图";
   return <div className="grade-photo">
     <button type="button" className="text-button" onClick={() => setOpen(!open)}>
       {open ? <ChevronUp size={17} aria-hidden="true" /> : <Image size={17} aria-hidden="true" />}
@@ -77,21 +79,26 @@ export function GradingPanel({ date, canManage = true, focusFailures = false }: 
   </section>;
 }
 const MISTAKE_PAGE_SIZE = 10;
-type MistakePage = { total: number; items: MistakeView[] };
+type MistakePage = { total: number; items: MistakeView[];analysis?:Analysis;options?:Record<Dimension,string[]>;indexing?:boolean };
 function mistakeSourceLabel(item: MistakeView, compact = false) {
   const source = item.provenance;
+  if (source?.kind === "exam") return `试卷 · ${source.title}`;
   if (source?.kind === "assignment") return `${compact ? "作业" : "来自作业"} · ${source.title}`;
   if (source?.kind === "practice" || item.origin === "practice") {
     return `${compact ? "小练习" : "来自小练习"} · ${source?.title || item.title}`;
   }
   return source?.title ? `未匹配作业 · ${source.title}` : compact ? "作业待匹配" : "未匹配具体作业";
 }
-type MistakeFilters = { subject: PracticeSubject | ""; scope: LearningScope | "" };
+type MistakeFilters = { subject: PracticeSubject | ""; scope: LearningScope | "";more?:Selections };
 
 function readMistakes(filters: MistakeFilters, offset: number, signal: AbortSignal) {
   const query = new URLSearchParams({ offset: String(offset), limit: String(MISTAKE_PAGE_SIZE) });
   if (filters.subject) query.set("subject", filters.subject);
   if (filters.scope) query.set("scope", filters.scope);
+  if(filters.more){
+    for(const d of dimensions)for(const value of filters.more[d]??[])query.append(d,value);
+    for(const k of ["from","to","grain"] as const)if(filters.more[k])query.set(k,filters.more[k]);
+  }
   return homeworkRequest<MistakePage>(`/mistakes?${query}`, { signal });
 }
 
@@ -217,8 +224,9 @@ export function MistakeBook({ canManage = false }: { canManage?: boolean }) {
   }
 
   function changeFilters(next: MistakeFilters) {
-    if (next.subject === filters.subject && next.scope === filters.scope) return;
-    resetResults();
+    if (next.subject === filters.subject && next.scope === filters.scope && next.more===filters.more) return;
+    requests.current?.abort();
+    setOpenId(null);
     setPage(0);
     setFilters(next);
   }
@@ -243,6 +251,7 @@ export function MistakeBook({ canManage = false }: { canManage?: boolean }) {
         <button type="button" key={scope} aria-pressed={filters.scope === scope} className={filters.scope === scope ? "selected" : ""}
           onClick={() => changeFilters({ ...filters, scope })}>{scope ? scopeLabels[scope] : "全部归属"}</button>)}
     </div>
+    {data?.options&&data.analysis&&<MistakeInsights options={data.options} analysis={data.analysis} filters={filters.more??{}} change={more=>changeFilters({...filters,more})} indexing={data.indexing}/>}
     {error && <div className="form-error" role="alert">{error} <button type="button" className="text-button" onClick={() => {
       resetResults();
       setRevision(value => value + 1);
@@ -261,7 +270,7 @@ export function MistakeBook({ canManage = false }: { canManage?: boolean }) {
           <span className="mistake-summary">
             <strong>{summary.title}</strong>
             {summary.preview && <span className="mistake-stem-preview">{summary.preview}</span>}
-            <small>{item.date} · {item.subject}</small>
+            <small>{item.date} · {item.subject}{item.tags?.form[0]&&item.tags.form[0]!=="待分类"?" · "+item.tags.form[0]:""}</small>
           </span>
           {open ? <ChevronUp size={18} aria-hidden="true" /> : <ChevronDown size={18} aria-hidden="true" />}
         </button>
@@ -274,6 +283,7 @@ export function MistakeBook({ canManage = false }: { canManage?: boolean }) {
         </div>
         <div id={detailsId} hidden={!open}>
         {open && <>
+        <QuestionTags item={item} canManage={canManage} saved={()=>setRevision(n=>n+1)}/>
         {item.retest && <p className="mistake-retest">复测{item.retest.rounds}轮 · 已判定{item.retest.attempts}题 · 通过率{item.retest.passRate === null ? "暂无" : `${item.retest.passRate}%`}{item.retest.uncertain ? ` · ${item.retest.uncertain}题待确认` : ""}{item.retest.blank ? ` · ${item.retest.blank}题未作答` : ""}{item.retest.lastDate ? ` · 最近${item.retest.lastDate}` : ""}。通过率只统计已确认的对错。</p>}
         <QuestionCard question={item.question} date={item.date} subject={item.subject} pageId={item.pageId} imageUrl={item.imageUrl} displayLabel={summary.title} />
         </>}

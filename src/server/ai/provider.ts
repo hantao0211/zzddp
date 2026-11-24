@@ -29,7 +29,7 @@ export class VisionAI implements StructuredAI {
     validateAIImages(images);
     const userText = `${AI_INSTRUCTIONS[task]}\nJSON Schema：${JSON.stringify(z.toJSONSchema(schema))}\n任务数据：${JSON.stringify(metadata)}\n图片顺序：${JSON.stringify(images.map((image) => image.fileId))}`;
     const isDeepSeek = this.config.provider === "deepseek";
-    const detailed = ["generate_practice", "verify_practice", "index_curriculum", "grade_practice", "grade_homework", "verify_homework_grading", "assess_written_completion", "recheck_written_parts"].includes(task);
+    const detailed = ["read_marked_exam", "generate_practice", "verify_practice", "index_curriculum", "grade_practice", "grade_homework", "verify_homework_grading", "assess_written_completion", "recheck_written_parts"].includes(task);
     const body = isDeepSeek ? {
       model: this.config.model,
       messages: [{ role: "system", content: AI_SYSTEM_INSTRUCTIONS }, { role: "user", content: [{ type: "text", text: userText }, ...images.map((image) => ({ type: "image_url", image_url: { url: `data:${image.mimeType};base64,${image.base64}` } }))] }],

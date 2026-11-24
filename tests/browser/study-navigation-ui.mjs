@@ -17,6 +17,7 @@ const browser=await engine.launch({headless:true,args:engine===chromium?['--no-s
 try{const page=await browser.newPage({colorScheme:process.env.SMOKE_COLOR_SCHEME||'light',viewport:{width:390,height:844},...(touch?{isMobile:true,hasTouch:true}:{}),ignoreHTTPSErrors:true}),errors=[],dialogs=[];page.on('request',r=>{if(r.isNavigationRequest()&&r.frame()===page.mainFrame())documentRequests++;});page.on('pageerror',e=>errors.push(e.message));page.on('dialog',d=>{dialogs.push(d.type());void d.accept();});
  await page.route('**/assistant-api/**',async route=>{const req=route.request(),url=new URL(req.url()),path=url.pathname;const json=v=>route.fulfill({contentType:'application/json',body:JSON.stringify(v)});
   if(path.endsWith('/status'))return json({authenticated:true,accounts:true,viewer,available:true,speech:true});
+  if(path.endsWith('/practice/exams'))return json({items:[],total:0,stage:{grade:4,semester:1}});
   if(path.endsWith('/reading/state')){if(holdReads)await new Promise(resolve=>pendingReads.push(resolve));return json(reading);}
   if(path.endsWith('/homework-context'))return json({date:'2026-11-19',revision:1,hasMaterials:false,availableDates:[],pending:false,entries:[],uncertainties:[],familyNotes:[]});
   if(path.endsWith('/memories'))return json({items:[]});
@@ -33,7 +34,7 @@ try{const page=await browser.newPage({colorScheme:process.env.SMOKE_COLOR_SCHEME
  // A narrow viewport alone still sends mouse clicks and misses this regression.
  if(touch){
   const nav=page.getByRole('navigation',{name:'底部学习导航',exact:true});
-  const select=label=>label==='作业'?nav.getByRole('link',{name:label,exact:true}):nav.getByLabel(label,{exact:true});
+  const select=label=>label==='课业'?nav.getByRole('link',{name:label,exact:true}):nav.getByLabel(label,{exact:true});
   for(const scheme of ['light','dark']){
    await page.emulateMedia({colorScheme:scheme});
    assert.equal(await page.evaluate(()=>matchMedia('(hover:hover) and (pointer:fine)').matches),false);
@@ -42,7 +43,7 @@ try{const page=await browser.newPage({colorScheme:process.env.SMOKE_COLOR_SCHEME
    await inactive.hover();
    assert.equal(await inactive.evaluate(el=>getComputedStyle(el).backgroundColor),before,'Touch devices must not leave a second tab highlighted by hover');
    const rounds=[];
-   for(let i=0;i<4;i++)for(const [label,heading] of [['课外阅读','我的阅读手帐'],['成长与奖励','我的小脚步'],['心愿商城','我的心愿商城'],['作业','我的小步手帐']]){
+   for(let i=0;i<4;i++)for(const [label,heading] of [['课外阅读','我的阅读手帐'],['成长与奖励','我的小脚步'],['心愿商城','我的心愿商城'],['课业','我的课业手账']]){
     const started=Date.now();await select(label).tap();
     await page.getByRole('heading',{name:heading,exact:true}).waitFor({timeout:1500});
     assert.equal(await nav.locator('[aria-current="page"]').count(),1,'Only the displayed page may be selected');
@@ -78,7 +79,7 @@ try{const page=await browser.newPage({colorScheme:process.env.SMOKE_COLOR_SCHEME
  assert.equal(await decorate.getAttribute('aria-expanded'),'false');await decorate.click();
  assert.equal(await stickers.getByRole('button',{name:'选择星星贴纸',exact:true}).getAttribute('aria-pressed'),'true');
  await page.keyboard.press('Escape');assert.equal(await decorate.getAttribute('aria-expanded'),'false');assert.equal(await decorate.evaluate(el=>el===document.activeElement),true);
- await decorate.click();await page.getByRole('heading',{name:'我的小步手帐',exact:true}).click();assert.equal(await decorate.getAttribute('aria-expanded'),'false');
+ await decorate.click();await page.getByRole('heading',{name:'我的课业手账',exact:true}).click();assert.equal(await decorate.getAttribute('aria-expanded'),'false');
  await decorate.click();await stickers.getByRole('button',{name:'选择花朵贴纸',exact:true}).click();
  await page.evaluate(()=>window.scrollTo({top:0,behavior:'instant'}));
  console.log('JOURNAL_OVERVIEW_UI_OK=true real-total-and-completed-counts,three-row-overview,expand-all-nine,status-dialog-for-extra-row,collapse,sticker-persistence');
@@ -210,7 +211,7 @@ try{const page=await browser.newPage({colorScheme:process.env.SMOKE_COLOR_SCHEME
   await page.waitForFunction(sel=>!document.querySelector(sel).hasAttribute('data-playing'),'.'+kind);
   assert.ok(await illustration.evaluate(el=>el.getAnimations({subtree:true}).length===0));
  }
- await activate(nav.getByRole('link',{name:'作业',exact:true}));
+ await activate(nav.getByRole('link',{name:'课业',exact:true}));
  await page.emulateMedia({reducedMotion:'no-preference'});
  console.log('HOME_STUDY_TOOLS_OK=true one-entry-per-feature,route-testing,two-mobile-columns,matching-rewards,aligned-three-size-motto,pot-still,book-page-sprout-gift,two-real-replays,background-and-scroll-pause,four-tabs-reduced-motion');
  await page.setViewportSize({width:390,height:844});await page.evaluate(()=>window.__studyDocument='same-document');await activate(page.getByRole('link',{name:'课外阅读',exact:true}));assert.equal(await page.evaluate(()=>window.__studyDocument),'same-document');await page.getByLabel('正在读的书',{exact:true}).waitFor();assert.ok(page.url().includes('studyDate=2026-11-19'));await page.goto(base+'/reading/?view=manage&studyDate=2026-11-19',{waitUntil:'networkidle'});await page.getByLabel('正在读的书',{exact:true}).waitFor();assert.ok(!page.url().includes('view=manage'),'A child must return to reading from a stale parent settings URL');
@@ -227,7 +228,7 @@ try{const page=await browser.newPage({colorScheme:process.env.SMOKE_COLOR_SCHEME
  await page.evaluate(()=>window.__studyDocument='retained');
  holdReads=true;
  await page.waitForRequest(r=>new URL(r.url()).pathname.endsWith('/reading/state'));
- await activate(page.getByRole('link',{name:'作业',exact:true}));
+ await activate(page.getByRole('link',{name:'课业',exact:true}));
  await page.getByRole('heading',{name:'作业进展',exact:true}).waitFor();
  await activate(page.getByRole('link',{name:'课外阅读',exact:true}));
  assert.equal(await page.locator('#reading-summary').inputValue(),'我读到一个有趣的故事，还想再说说人物为什么这样做。');
@@ -237,7 +238,7 @@ try{const page=await browser.newPage({colorScheme:process.env.SMOKE_COLOR_SCHEME
   const started=Date.now();
   await activate(page.getByRole('button',{name:'成长与奖励',exact:true}));
   await page.getByRole('heading',{name:'我的小脚步',exact:true}).waitFor();
-  await activate(page.getByRole('link',{name:'作业',exact:true}));
+  await activate(page.getByRole('link',{name:'课业',exact:true}));
   await page.getByRole('heading',{name:'作业进展',exact:true}).waitFor();
   await activate(page.getByRole('link',{name:'课外阅读',exact:true}));
   await page.locator('#reading-summary').waitFor();
@@ -254,7 +255,7 @@ try{const page=await browser.newPage({colorScheme:process.env.SMOKE_COLOR_SCHEME
  await page.getByRole('button',{name:'问问小步',exact:true}).click();
  assert.equal(await page.locator('#assistant-question').inputValue(),'我想聊聊这本书。');
  await page.getByRole('button',{name:'关闭小助手',exact:true}).click();
- await activate(page.getByRole('link',{name:'作业',exact:true}));
+ await activate(page.getByRole('link',{name:'课业',exact:true}));
  await page.getByRole('button',{name:'问问小步',exact:true}).click();
  assert.equal(await page.locator('#assistant-question').inputValue(),'我想聊聊这本书。','Assistant draft survives a switch to homework');
  await page.getByRole('button',{name:'关闭小助手',exact:true}).click();

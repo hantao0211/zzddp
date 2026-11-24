@@ -1,0 +1,56 @@
+import { z } from "zod";
+import { DaySchema } from "./calendar";
+import { CauseSchema } from "./grading";
+import { PracticeSubjectSchema } from "./practice";
+
+export const examKinds = ["随堂小测", "单元测验", "考试"] as const;
+export const examMeta = z.object({
+  title: z.string().trim().min(1).max(120), kind: z.enum(examKinds), date: DaySchema,
+  subject: PracticeSubjectSchema, scope: z.enum(["curricular", "extracurricular"]),
+  grade: z.number().int().min(1).max(6), semester: z.union([z.literal(1), z.literal(2)]),
+  score: z.number().min(0).max(1000).nullable(), maximum: z.number().positive().max(1000).nullable(),
+  unit: z.string().trim().max(100).default(""),
+}).strict().refine(v => v.score === null || v.maximum === null || v.score <= v.maximum);
+export type ExamMeta = z.infer<typeof examMeta>;
+export const examManifest = z.object({
+  meta: examMeta, pages: z.array(z.object({sha: z.string().regex(/^[0-9a-f]{64}$/), bytes: z.number().int().min(4).max(20*1024*1024)})).min(1).max(12),
+}).refine(v => new Set(v.pages.map(p => p.sha)).size === v.pages.length, "同一页照片重复");
+export const observation = z.object({
+  label: z.string().trim().min(1).max(180), question: z.string().trim().min(1).max(3500),
+  studentAnswer: z.string().max(1200), teacherMark: z.string().max(500), correction: z.string().max(1200),
+  expectedAnswer: z.string().max(1200), verdict: z.enum(["correct","wrong","uncertain","blank"]),
+  confident: z.boolean(), knowledgePoints: z.array(z.string().min(1).max(100)).max(8),
+  cause: CauseSchema, causeExplanation: z.string().max(600),
+});
+export const markedPage = z.object({ coverage: z.enum(["complete","partial"]), note: z.string().max(500), questions: z.array(observation).max(80) });
+export type Observation = z.infer<typeof observation>;
+export type ExamRecord = ExamMeta & {id:string; pages:number; done:number; status:string};
+export type ExamPage = {id:string; number:number; status:string; note:string; coverage:string};
+export type ExamQuestion = Observation & {id:string; pageId:string; revision:number};
+export type ExamDetail = {exam:ExamRecord; pages:ExamPage[]; questions:ExamQuestion[]};
+export const dimensionNames = {stage:"年级学期",source:"来源",form:"作答形式",scene:"任务场景",knowledge:"知识点",skill:"能力",cause:"可能错因",unit:"单元",state:"复测状态",difficulty:"难度"} as const;
+export type Dimension = keyof typeof dimensionNames;
+export type Tags = Record<Dimension,string[]>;
+export const dimensions = Object.keys(dimensionNames) as Dimension[];
+export type Analysis = {
+  wrong:number; sources:number; known:number; partial:number; unknown:number; wrongRate:number|null;
+  retestCorrect:number; retestKnown:number;
+  trends:{period:string;wrong:number;known:number;partial:number;passes:number;retests:number}[];
+  focus:{name:string;wrong:number;sources:number;latest:string;retests:number;passed:number}[];
+};
+export type TagRevision = {revision:number; tags:Partial<Tags>};
+export const formNames = ["单选题","多选题","选择题","判断题","填空题","计算题","连线题","改错题","简答题","写作题","待分类"] as const;
+export function classifyQuestion(label:string, question:string, points:string[], cause:string, stage:string, source:string, unit:string):Tags {
+  const text=(label+" "+question).normalize("NFKC");
+  const first=(rules:[RegExp,string][],fallback="待分类")=>rules.find(([pattern])=>pattern.test(text))?.[1]??fallback;
+  const form=first([[/多选|多项选择/,"多选题"],[/单选|单项选择|只有一个.*正确/,"单选题"],[/选择题|选出|\bA[.、].*\bB[.、]/s,"选择题"],[/判断|对错|正误/,"判断题"],[/填空|填入|填上|写单词|_{2,}/,"填空题"],[/列式计算|竖式|计算题|脱式计算/,"计算题"],[/连线|配对/,"连线题"],[/改错|改病句/,"改错题"],[/简答|回答问题/,"简答题"],[/写作|作文|习作/,"写作题"]]);
+  const scene=first([[/阅读理解|阅读短文|阅读下文/,"阅读理解"],[/完形填空/,"完形填空"],[/音标/,"看音标写词"],[/听写|默写|家默/,"听写默写"],[/应用题|解决问题/,"应用题"],[/实验探究/,"实验探究"]]);
+  const skill=first([[/推理|推断|说明理由/,"推理"],[/写作|作文|表达|造句/,"表达"],[/运用|应用题|解决问题/,"运用"],[/理解|概括|解释/,"理解"],[/识别|辨认|音标/,"识别"]]);
+  const aliases:Record<string,string>={"主谓一致性":"主谓一致","主语谓语一致":"主谓一致","拼读音标":"音标拼读","一般现在时态":"一般现在时","小数的加减法":"小数加减法","分数的加减法":"分数加减法","辨析近义词":"近义词辨析"};
+  const knowledge=[...new Set(points.map(v=>v.normalize("NFKC").trim()).filter(Boolean).map(v=>aliases[v]??v))];
+  if(!knowledge.length){
+    const explicit=first([[/一般现在时/,"一般现在时"],[/音标/,"音标拼读"],[/主谓一致/,"主谓一致"],[/小数加减/,"小数加减法"],[/分数加减/,"分数加减法"],[/周长/,"周长"],[/近义词/,"近义词辨析"],[/修辞手法/,"修辞手法"],[/概括.*大意/,"概括大意"]],"");
+    if(explicit)knowledge.push(explicit);
+  }
+  return {form:[form],scene:[scene],skill:[skill],knowledge:knowledge.length?knowledge:["待分类"],cause:[cause||"原因待确认"],stage:[stage||"待确认"],source:[source],unit:[unit||"待确认"],state:["暂无复测"],difficulty:["待确认"]};
+}

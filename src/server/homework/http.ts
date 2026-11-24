@@ -80,7 +80,7 @@ export class HomeworkHTTP {
         const parsedScope = LearningScopeSchema.safeParse(scope);
         if (scope && !parsedScope.success) throw new HomeworkError(400, "请选择课内、课外或待分类。");
         json(res, this.practice
-          ? this.practice.mistakes(subject as PracticeSubject || undefined, parsedScope.data, offset, limit)
+          ? this.practice.mistakes(subject as PracticeSubject || undefined, parsedScope.data, offset, limit,url.searchParams)
           : this.store.grading.mistakes(subject, offset, limit));
         return;
       }

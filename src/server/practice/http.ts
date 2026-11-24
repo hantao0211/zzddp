@@ -18,6 +18,9 @@ function namedSource(title?: string): title is string {
 
 export class PracticeHTTP{
  readonly materials:CurriculumStore;
+ private cachedMistakes=new Map<string,{stamp:string;page:ReturnType<PracticeHTTP["mistakePage"]>}>();
+ private stamp(){const db=this.store.db;return String(db.prepare("SELECT total_changes() n").get()!.n)+":"+String(db.prepare("PRAGMA data_version").get()!.data_version);}
+
  constructor(readonly store:PracticeStore){this.materials=new CurriculumStore(store);}
  private homeworkProvenance(item: PracticeCandidate, pageId: string, date: string): MistakeProvenance {
   if (namedSource(item.assignmentTitle)) return { kind: "assignment", title: item.assignmentTitle.trim() };
@@ -37,11 +40,19 @@ export class PracticeHTTP{
   return { kind: "unmatched", title: namedSource(item.title) ? item.title.trim() : undefined };
  }
 
- mistakes(subject: PracticeSubject | undefined, scope: LearningScope | undefined, offset: number, limit = 30) {
-  const items = this.store.candidates(subject)
-    .filter(item => !scope || item.scope === scope)
-    .sort((a, b) => b.lastDate.localeCompare(a.lastDate) || a.id.localeCompare(b.id));
-  return { total: items.length, items: items.slice(offset, offset + limit).map(item => this.mistakeView(item)) };
+ mistakes(subject: PracticeSubject | undefined, scope: LearningScope | undefined, offset: number, limit = 30, params=new URLSearchParams()) {
+  const key=JSON.stringify([subject,scope,offset,limit,params.toString()]),stamp=this.stamp();
+  const cached=this.cachedMistakes.get(key);if(cached?.stamp===stamp)return cached.page;
+  const page=this.mistakePage(subject,scope,offset,limit,params);
+  if(!page.indexing){if(this.cachedMistakes.size>=8)this.cachedMistakes.clear();this.cachedMistakes.set(key,{stamp:this.stamp(),page});}
+  return page;
+ }
+ private mistakePage(subject: PracticeSubject | undefined,scope:LearningScope|undefined,offset:number,limit:number,params:URLSearchParams){
+  const result=this.store.analysis.query(this.store.candidates(subject),params,subject,scope);
+  const items=result.list.sort((a,b)=>b.lastDate.localeCompare(a.lastDate)||a.id.localeCompare(b.id));
+  return {total:items.length,options:result.options,analysis:result.analysis,indexing:result.indexing,items:items.slice(offset,offset+limit).map(item=>{
+    const edits=result.edits.get(item.id);return {...this.mistakeView(item),tags:result.byId.get(item.id)?.tags,tagRevision:edits?.revision??0,manualTags:edits?.tags??{}};
+  })};
  }
 
  private mistakeView(item: PracticeCandidate): MistakeView {
@@ -49,6 +60,13 @@ export class PracticeHTTP{
     id: item.id, subject: item.subject, title: item.title, lastDate: item.lastDate, occurrences: item.occurrences,
     scope: item.scope, scopeSource: item.scopeSource, retest: item.stats, origin: item.origin,
   };
+  if(item.origin==="exam"){
+    const row=this.store.db.prepare("SELECT q.payload,p.number FROM exam_questions q JOIN exam_pages p ON p.id=q.page_id WHERE q.id=?").get(item.id)!;
+    const q=JSON.parse(String(row.payload)) as import("../../domain/assessment").Observation;
+    const pageId=item.pageId!;
+    return {...base,date:item.lastDate,pageId,imageUrl:"/assistant-api/learning/practice/exam-pages/"+pageId+"/photo",provenance:{kind:"exam",title:item.title},
+      question:{...q,id:item.id,verdict:"wrong",kind:"objective",verification:"agreed",confidence:"high",explanation:q.teacherMark,nextStep:q.correction?"卷面订正："+q.correction:"请对照原卷核对。",sourcePartLabels:[],evidence:[{fileId:pageId,page:Number(row.number),excerpt:q.teacherMark||"家长核对原卷"}]}};
+  }
   if (item.origin === "homework") {
     const row = this.store.db.prepare("SELECT payload,page_id,first_date FROM grading_mistakes WHERE id=?")
       .get(item.id) as { payload: string; page_id: string; first_date: string };
@@ -73,6 +91,23 @@ export class PracticeHTTP{
  }
 
  async handle(req:IncomingMessage,res:ServerResponse,viewer:Viewer){const url=new URL(req.url!,"http://internal"),path=url.pathname.replace("/assistant-api/learning/practice","");try{
+ if(path==="/exams" && req.method==="GET"){
+   const offset=Number(url.searchParams.get("offset")??0);
+   if(!Number.isSafeInteger(offset)||offset<0)throw new HomeworkError(400,"分页无效。");
+   const profile=studentProfile(this.store.reading);
+   send(res,{...this.store.exams.list(offset,url.searchParams.get("latest")==="1"?1:10),stage:profile?{grade:profile.grade,semester:profile.semester}:null});return;
+ }
+ const exam=path.match(/^\/exams\/([a-f0-9]{64})$/);
+ if(exam&&req.method==="GET"){send(res,this.store.exams.detail(exam[1]));return;}
+ const examPage=path.match(/^\/exam-pages\/([a-f0-9-]{36})\/(photo|retry|review)$/);
+ if(examPage&&examPage[2]==="photo"&&req.method==="GET"){
+   const photo=this.store.exams.photo(examPage[1]);res.writeHead(200,{"Content-Type":photo.mime,"Cache-Control":"private, no-store","X-Content-Type-Options":"nosniff"});res.end(photo.bytes);return;
+ }
+ if(path==="/exams"&&req.method==="POST"){send(res,this.store.exams.reserve(await body(req)));return;}
+ if(examPage&&examPage[2]==="photo"&&req.method==="PUT"){send(res,await this.store.exams.receive(examPage[1],req));return;}
+ if(examPage&&req.method==="POST"&&isParent(viewer)){
+   send(res,examPage[2]==="review"?this.store.exams.review(examPage[1],await body(req),viewer.id):examPage[2]==="retry"?this.store.exams.retry(examPage[1]):(()=>{throw new HomeworkError(404,"未知操作");})());return;
+ }
  if (path === "/state" && req.method === "GET") {
   const today = this.store.today();
   const candidates = this.store.candidates();
@@ -101,6 +136,8 @@ export class PracticeHTTP{
  if(action==="complete"&&req.method==="POST"){const v=z.object({reason:z.string().trim().min(1).max(500)}).strict().parse(await body(req));send(res,this.store.manualComplete(id,v.reason,viewer));return;}
  if(action==="answers"&&item[3]&&req.method==="PATCH"){send(res,this.store.reviewAnswer(id,decodeURIComponent(item[3]),await body(req),viewer));return;}}
  if(!isParent(viewer))throw new HomeworkError(403,"资料整理和课内外分类需要家长确认。");
+ if(exam&&req.method==="PATCH"){send(res,this.store.exams.editMeta(exam[1],await body(req),viewer.id));return;}
+ const tag=path.match(/^\/tags\/([^/]+)$/);if(tag&&req.method==="PATCH"){send(res,this.store.analysis.saveEdit(decodeURIComponent(tag[1]),await body(req),viewer.id));return;}
  const scope=path.match(/^\/scopes\/(.+)$/);if(scope&&req.method==="PATCH"){const id=decodeURIComponent(scope[1]);if(id.length>150)throw new HomeworkError(400,"错题标识无效。");const v=z.object({scope:LearningScopeSchema}).strict().parse(await body(req));send(res,this.store.classify(id,v.scope,viewer));return;}
  if(path==="/materials"&&req.method==="POST"){send(res,this.materials.save(await body(req),viewer.id));return;}
  const editPage=path.match(/^\/materials\/([a-f0-9-]{36})\/pages\/([a-f0-9-]{36})\/(\d{1,4})$/);if(editPage&&req.method==="PATCH"){send(res,this.materials.editPage(editPage[1],editPage[2],Number(editPage[3]),await body(req),viewer.id));return;}

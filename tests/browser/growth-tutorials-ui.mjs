@@ -25,7 +25,7 @@ try{
  await page.getByLabel('开始页',{exact:true}).waitFor();assert.equal(await page.getByLabel('开始页',{exact:true}).inputValue(),'23');
  for(const topic of ['阅读','成长','作业']){
   if(topic==='成长')await page.locator('.study-bottom-nav:visible .study-nav-item').filter({hasText:'成长'}).tap();
-  if(topic==='作业')await page.getByRole('link',{name:'作业',exact:true}).last().tap();
+  if(topic==='作业')await page.getByRole('link',{name:'课业',exact:true}).last().tap();
   await page.getByRole('button',{name:topic+'使用教程',exact:true}).tap();const d=page.locator('.study-tutorial');await d.waitFor();
   await d.locator('img').evaluate(img=>img.decode());assert.equal(await d.getByRole('button',{name:'上一页',exact:true}).isDisabled(),true);
   assert.equal(await page.evaluate(()=>document.body.style.position),'fixed');

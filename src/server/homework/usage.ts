@@ -9,7 +9,7 @@ const record = (value: unknown): Record<string, unknown> => value && typeof valu
 function phaseOf(task: AITask, metadata: unknown): HomeworkPhase {
   if (task==="index_curriculum") return "curriculum";
   if (["generate_practice","verify_practice","grade_practice"].includes(task)) return "practice";
-  if (task === "recognize_memo" || task === "extract_homework") return "recognition";
+  if (task === "read_marked_exam" || task === "recognize_memo" || task === "extract_homework") return "recognition";
   if (task === "organize_homework") return "organization";
   if (["inspect_study_traces", "assess_written_completion", "recheck_written_parts"].includes(task)) return "completion";
   if (task === "grade_homework") return "inspection";
@@ -27,7 +27,7 @@ export class HomeworkUsageLog {
   }
   start(task: AITask, metadata: unknown, job?: Job, context?: CallContext): number {
     const data = record(metadata), date = context?.date || job?.date || "";
-    const title = (context?.title || (typeof data.title === "string" ? data.title : "") || (task === "recognize_memo" ? "备忘录" : task === "extract_homework" ? "上传的作业照片" : "当天作业")).slice(0, 180);
+    const title = (context?.title || (typeof data.title === "string" ? data.title : "") || (task === "read_marked_exam" || task === "recognize_memo" ? "备忘录" : task === "extract_homework" ? "上传的作业照片" : "当天作业")).slice(0, 180);
     return this.store.transaction(() => {
       this.store.reserve();
       return Number(this.store.db.prepare("INSERT INTO homework_ai_calls(day,task,phase,homework_date,title,run_id,page_id,attempt,started_at) VALUES(?,?,?,?,?,?,?,?,?)")

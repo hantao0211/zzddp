@@ -10,7 +10,11 @@ import {PracticeRewards} from "./rewards";
 import {z} from "zod";
 const hash=(v:unknown)=>createHash("sha256").update(JSON.stringify(v)).digest("hex");
 export type PracticeRow={id:string;date:string;subject:PracticeSubject;scope:"curricular";status:PracticeStatus;stage:string;note:string;profile:string;sources:string;paper:string|null;result:string|null;attempts:number;version:number;actor:string;reward_day:string|null;rewarded:number|null;created_at:string;updated_at:string};
+import {MistakeAnalysis} from "./mistake-analysis";
+import {Assessments} from "./assessments";
+import type {ExamMeta,Observation} from "../../domain/assessment";
 export class PracticeStore{
+ readonly exams:Assessments; readonly analysis:MistakeAnalysis;
  readonly rewards:PracticeRewards;readonly directory:string;
  constructor(readonly homework:HomeworkStore,readonly reading:ReadingStore){this.directory=join(homework.directory,"practice");mkdirSync(this.directory,{recursive:true,mode:0o700});this.rewards=new PracticeRewards(reading);homework.db.exec(`
  CREATE TABLE IF NOT EXISTS learning_scopes(mistake_id TEXT PRIMARY KEY,scope TEXT NOT NULL,actor TEXT NOT NULL,updated_at TEXT NOT NULL);
@@ -22,7 +26,7 @@ export class PracticeStore{
  CREATE TABLE IF NOT EXISTS practice_manual_reviews(id TEXT PRIMARY KEY,practice_id TEXT NOT NULL,question_id TEXT NOT NULL,before_result TEXT,after_result TEXT,reason TEXT NOT NULL,actor TEXT NOT NULL,created_at TEXT NOT NULL);
  CREATE TABLE IF NOT EXISTS practice_history(practice_id TEXT NOT NULL,version INTEGER NOT NULL,result TEXT NOT NULL,created_at TEXT NOT NULL,PRIMARY KEY(practice_id,version));
  CREATE TABLE IF NOT EXISTS practice_mistakes(id TEXT PRIMARY KEY,practice_id TEXT NOT NULL,question_id TEXT NOT NULL,subject TEXT NOT NULL,scope TEXT NOT NULL,question TEXT NOT NULL,answer TEXT NOT NULL,knowledge TEXT NOT NULL,parents TEXT NOT NULL,date TEXT NOT NULL,active INTEGER NOT NULL DEFAULT 1);
- UPDATE practice_tasks SET status='failed',note='服务重启，原题和答卷已保留，请重试。' WHERE status IN ('generating','grading');`);}
+ UPDATE practice_tasks SET status='failed',note='服务重启，原题和答卷已保留，请重试。' WHERE status IN ('generating','grading');`);this.exams=new Assessments(this);this.analysis=new MistakeAnalysis(this);}
  get db(){return this.homework.db;}today(){return this.reading.today();}time(){return this.reading.time();}
  row(id:string){const row=this.db.prepare("SELECT * FROM practice_tasks WHERE id=?").get(id) as PracticeRow|undefined;if(!row)throw new HomeworkError(404,"没有找到这份小练习。");return row;}
  scope(id:string,text:string){const r=this.db.prepare("SELECT scope FROM learning_scopes WHERE mistake_id=?").get(id) as {scope:LearningScope}|undefined;return r?.scope||inferLearningScope(text);}
@@ -33,9 +37,9 @@ export class PracticeStore{
   const retests = this.retestIndex();
   const rows = this.db.prepare(`SELECT m.*, s.scope AS saved_scope,
     (SELECT COUNT(*) FROM grading_occurrences WHERE mistake_id=m.id) AS occurrences
-    FROM (SELECT * FROM grading_mistakes WHERE status='verified' ORDER BY last_date DESC LIMIT 2000) m
+    FROM grading_mistakes m
     LEFT JOIN learning_scopes s ON s.mistake_id=m.id
-    WHERE m.subject IN ('语文','数学','英语') AND (? IS NULL OR m.subject=?)`)
+    WHERE m.status='verified' AND m.subject IN ('语文','数学','英语') AND (? IS NULL OR m.subject=?)`)
     .all(subject ?? null, subject ?? null) as {
       id: string; subject: PracticeSubject; title: string; payload: string; occurrences: number;
       first_date: string; last_date: string; page_id: string; saved_scope: LearningScope | null;
@@ -56,7 +60,7 @@ export class PracticeStore{
       answer: question.expectedAnswer, knowledgePoints: question.knowledgePoints ?? [], occurrences: row.occurrences,
       lastDate: row.last_date, scope, scopeSource, assignmentTitle: task?.title, stats, weight, origin: "homework" });
   }
-  const reviews = this.db.prepare("SELECT * FROM practice_mistakes WHERE active=1 ORDER BY date DESC LIMIT 500")
+  const reviews = this.db.prepare("SELECT * FROM practice_mistakes WHERE active=1 ORDER BY date DESC")
     .all() as { id: string; subject: PracticeSubject; question: string; answer: string; knowledge: string; date: string; scope: LearningScope }[];
   for (const row of reviews) {
     if (subject && row.subject !== subject) continue;
@@ -66,11 +70,29 @@ export class PracticeStore{
       knowledgePoints: [row.knowledge], occurrences: 1, lastDate: row.date, scope, stats,
       weight: practiceWeight({ occurrences: 1, lastDate: row.date, stats }, this.today()), origin: "practice" });
   }
+  const exams=this.db.prepare(`SELECT q.id,q.payload,p.id pageId,e.metadata,s.scope FROM exam_questions q
+    JOIN exam_pages p ON p.id=q.page_id JOIN exams e ON e.id=p.exam_id LEFT JOIN learning_scopes s ON s.mistake_id=q.id
+    WHERE q.verdict='wrong' AND (? IS NULL OR json_extract(e.metadata,'$.subject')=?)`).all(subject??null,subject??null);
+  for(const row of exams){
+    const meta=JSON.parse(String(row.metadata)) as ExamMeta, q=JSON.parse(String(row.payload)) as Observation;
+    const scope=(row.scope??meta.scope) as LearningScope,id=String(row.id);
+    const stats=retests.get(scope+":"+id)??emptyRetestStats();
+    out.push({id,pageId:String(row.pageId),origin:"exam",subject:meta.subject,title:meta.title,question:q.question,answer:q.expectedAnswer,knowledgePoints:q.knowledgePoints,occurrences:1,lastDate:meta.date,scope,stats,weight:practiceWeight({occurrences:1,lastDate:meta.date,stats},this.today())});
+  }
   return out;
  }
- selectSources(subject:PracticeSubject){return this.candidates(subject).filter(c=>c.scope==="curricular").sort((a,b)=>b.weight-a.weight).slice(0,4);}
+ selectSources(subject:PracticeSubject){
+  const candidates=this.candidates(subject);
+  const {byId,analysis}=this.analysis.query(candidates,new URLSearchParams(),subject,"curricular");
+  const frequency=new Map(analysis.focus.map(f=>[f.name,f.sources]));
+  return candidates.filter(c=>c.scope==="curricular").map(c=>{
+    const points=byId.get(c.id)?.tags.knowledge.filter(k=>k!=="待分类")??c.knowledgePoints;
+    const repeated=Math.min(3,Math.max(0,(frequency.get(points[0])??1)-1));
+    return {...c,knowledgePoints:points,weight:c.weight+repeated};
+  }).sort((a,b)=>b.weight-a.weight).slice(0,4);
+ }
  create(subjectInput:unknown,viewer:Viewer){const subject=PracticeSubjectSchema.parse(subjectInput);return this.homework.transaction(()=>{const existing=this.db.prepare("SELECT id FROM practice_tasks WHERE date=? AND subject=? AND scope='curricular'").get(this.today(),subject) as {id:string}|undefined;if(existing)return this.view(existing.id);const profile=studentProfile(this.reading);if(!profile)throw new HomeworkError(409,"请家长先补充年级和学期，避免超范围出题。");const sources=this.selectSources(subject);if(!sources.length)throw new HomeworkError(409,"还没有可用的课内错题。请先确认错题归属；课外和待分类的题不会混进来。");const id=randomUUID(),now=this.time();this.db.prepare("INSERT INTO practice_tasks(id,date,subject,status,stage,profile,sources,actor,created_at,updated_at) VALUES(?,?,?,'queued','generation',?,?,?,?,?)").run(id,this.today(),subject,JSON.stringify(profile),JSON.stringify(sources),viewer.id,now,now);return this.view(id);});}
- view(id:string):PracticeView{const r=this.row(id),p=r.paper?JSON.parse(r.paper) as PracticePaper:null;return{id:r.id,date:r.date,subject:r.subject,scope:"curricular",status:r.status,stage:r.stage,note:r.note,attempts:r.attempts,paper:p?{title:p.title,subject:p.subject,questions:p.questions.map(({answer:_a,explanation:_e,...q})=>q)}:null,result:r.result?JSON.parse(r.result):null,photos:this.currentPhotos(r).map(p=>({id:p.id,name:p.name})),rewarded:r.rewarded||0,rewardEligible:r.rewarded===2||this.rewards.eligible(r.subject,this.today()),retryAllowed:r.status==="failed"&&r.attempts<2,sources:(JSON.parse(r.sources) as PracticeCandidate[]).map(s=>{const root=this.db.prepare("SELECT page_id FROM grading_mistakes WHERE id=?").get(s.id) as {page_id:string}|undefined;const derived=this.db.prepare("SELECT r.result FROM practice_mistakes m JOIN practice_results r ON r.practice_id=m.practice_id AND r.question_id=m.question_id WHERE m.id=?").get(s.id) as {result:string}|undefined;const photo=derived?(JSON.parse(derived.result).evidenceIds as string[])[0]:null;return{id:s.id,title:s.title,question:s.question,knowledgePoints:s.knowledgePoints,photoUrl:root?"/assistant-api/learning/pages/"+encodeURIComponent(root.page_id)+"?size=screen":photo?"/assistant-api/learning/practice/photos/"+photo:null};}),profileLabel:(()=>{const profile=JSON.parse(r.profile);return `${profile.grade}年级第${profile.semester}学期`;})()};}
+ view(id:string):PracticeView{const r=this.row(id),p=r.paper?JSON.parse(r.paper) as PracticePaper:null;return{id:r.id,date:r.date,subject:r.subject,scope:"curricular",status:r.status,stage:r.stage,note:r.note,attempts:r.attempts,paper:p?{title:p.title,subject:p.subject,questions:p.questions.map(({answer:_a,explanation:_e,...q})=>q)}:null,result:r.result?JSON.parse(r.result):null,photos:this.currentPhotos(r).map(p=>({id:p.id,name:p.name})),rewarded:r.rewarded||0,rewardEligible:r.rewarded===2||this.rewards.eligible(r.subject,this.today()),retryAllowed:r.status==="failed"&&r.attempts<2,sources:(JSON.parse(r.sources) as PracticeCandidate[]).map(s=>{const root=this.db.prepare("SELECT page_id FROM grading_mistakes WHERE id=?").get(s.id) as {page_id:string}|undefined;const derived=this.db.prepare("SELECT r.result FROM practice_mistakes m JOIN practice_results r ON r.practice_id=m.practice_id AND r.question_id=m.question_id WHERE m.id=?").get(s.id) as {result:string}|undefined;const photo=derived?(JSON.parse(derived.result).evidenceIds as string[])[0]:null;return{id:s.id,title:s.title,question:s.question,knowledgePoints:s.knowledgePoints,photoUrl:s.origin==="exam"?"/assistant-api/learning/practice/exam-pages/"+s.pageId+"/photo":root?"/assistant-api/learning/pages/"+encodeURIComponent(root.page_id)+"?size=screen":photo?"/assistant-api/learning/practice/photos/"+photo:null};}),profileLabel:(()=>{const profile=JSON.parse(r.profile);return `${profile.grade}年级第${profile.semester}学期`;})()};}
  list(){this.syncRewards();return(this.db.prepare("SELECT id FROM practice_tasks ORDER BY date DESC,rowid DESC LIMIT 60").all() as {id:string}[]).map(r=>this.view(r.id));}
  photos(id:string){return this.db.prepare("SELECT id,name,sha,bytes FROM practice_photos WHERE practice_id=? ORDER BY rowid").all(id) as {id:string;name:string;sha:string;bytes:number}[];}
  currentPhotos(row:PracticeRow){const submission=this.db.prepare("SELECT photos FROM practice_submissions WHERE practice_id=? AND version=?").get(row.id,row.version) as {photos:string}|undefined;const ids=submission?JSON.parse(submission.photos) as string[]:[];return this.photos(row.id).filter(p=>ids.includes(p.id));}
