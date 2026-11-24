@@ -24,7 +24,7 @@ export function operationLabels(path: string, method: string): OperationLabels |
   if (/^reading\/activities(?:\/[^/]+)?$/.test(p)) return {pending: "正在提交活动记录…", success: "活动记录已更新，可在成长页查看。"};
   if (/^reading\/redemptions(?:\/[^/]+)?$/.test(p)) return {pending: "正在提交兑换操作，请勿重复点击…", success: "兑换记录已更新，请查看申请状态。"};
   if (/^reading\/(?:wishes|rewards)(?:\/[^/]+(?:\/(?:icon|withdraw))?)?$/.test(p)) return {pending: "正在保存心愿商城信息…", success: "心愿商城信息已保存。"};
-  if (/^reading\/(?:rules|homework-rules|activity-rules|student-profile)$/.test(p)) return {pending: "正在保存设置…", success: "设置已保存。"};
+  if (/^reading\/(?:rules|homework-rules|activity-rules?|student-profile)$/.test(p)) return {pending: "正在保存设置…", success: "设置已保存。"};
   if (/^learning\/(?:day-plan|day-plan-rules|task-completion|tasks\/[^/]+(?:\/[^/]+)?|reports\/[^/]+|grading\/[^/]+(?:\/[^/]+)?)$/.test(p)) return {pending: "正在处理作业操作…", success: "操作已保存，作业状态会自动更新。"};
   // Generation and grading acknowledge a queued job, not finished AI work.
   if (/^learning\/practice\/(?:materials|files|index-jobs)(?:\/[^/]+)*$/.test(p)) return {pending: "正在保存课程资料操作…", success: "课程资料操作已提交，可查看整理进度。"};

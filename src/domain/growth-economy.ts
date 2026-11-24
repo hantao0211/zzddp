@@ -24,8 +24,9 @@ export const money = (cents:number) => (cents/100).toLocaleString("zh-CN",{maxim
 export function shoppingCost(amount:number,previous:number,rate:number){return Math.ceil((previous+amount)/rate)-Math.ceil(previous/rate);}
 
 export const ACTIVITY_KEYS = ["english-reading","housework","badminton","english-class"] as const;
-export type ActivityKey = typeof ACTIVITY_KEYS[number];
-export const ActivityRuleSchema=z.object({key:z.enum(ACTIVITY_KEYS),title:z.string().trim().min(1).max(60),points:z.number().int().min(0).max(100),enabled:z.boolean()}).strict();
+const ActivityKeySchema = z.union([z.enum(ACTIVITY_KEYS), z.string().uuid()]);
+export type ActivityKey = z.infer<typeof ActivityKeySchema>;
+export const ActivityRuleSchema=z.object({key:ActivityKeySchema,title:z.string().trim().min(1).max(60),points:z.number().int().min(0).max(100),enabled:z.boolean(),frequency:z.enum(["daily","weekly"]).optional()}).strict().refine(r=>r.key!=="housework"||r.frequency!=="weekly","家务每天合计一次");
 export type ActivityRule=z.infer<typeof ActivityRuleSchema>;
 export const DEFAULT_ACTIVITY_RULES:ActivityRule[]=[
  {key:"english-reading",title:"英语课外阅读",points:1,enabled:true},
@@ -33,9 +34,11 @@ export const DEFAULT_ACTIVITY_RULES:ActivityRule[]=[
  {key:"badminton",title:"羽毛球课",points:5,enabled:true},
  {key:"english-class",title:"英语线上课",points:5,enabled:true},
 ];
-export const ActivityRulesSchema=z.object({rules:z.array(ActivityRuleSchema).length(4)}).strict().refine(v=>new Set(v.rules.map(r=>r.key)).size===4,"请保留四种活动且不要重复");
-export const ActivityClaimSchema=z.object({id:z.string().uuid(),key:z.enum(ACTIVITY_KEYS),date:DaySchema,note:z.string().trim().max(300).default("")}).strict();
+export const ActivityRulesSchema=z.object({rules:z.array(ActivityRuleSchema)}).strict().refine(v=>new Set(v.rules.map(r=>r.key)).size===v.rules.length,"活动编号不能重复");
+export const ActivityClaimSchema=z.object({id:z.string().uuid(),key:ActivityKeySchema,date:DaySchema,note:z.string().trim().max(300).default("")}).strict();
 export type ActivityClaim={id:string;key:ActivityKey;title:string;points:number;date:string;period:string;note:string;status:"pending"|"approved"|"rejected";parentNote:string;createdAt:string};
 export type ActivityState={rules:ActivityRule[];claims:ActivityClaim[];startOn:string};
-export const weeklyActivity=(key:ActivityKey)=>key==="badminton"||key==="english-class";
-export const activityPeriod=(key:ActivityKey,date:string)=>weeklyActivity(key)?weekOf(date):date;
+export const weeklyActivity=(rule:ActivityRule)=>rule.frequency ? rule.frequency==="weekly" : rule.key==="badminton"||rule.key==="english-class";
+export const activityPeriod=(rule:ActivityRule,date:string)=>weeklyActivity(rule)?weekOf(date):date;
+export const ActivityChangeSchema=z.object({before:ActivityRuleSchema.nullable(),after:ActivityRuleSchema.nullable()}).strict()
+ .refine(v=>!!(v.before||v.after)&&(!v.before||!v.after||v.before.key===v.after.key),"请选择一项活动");

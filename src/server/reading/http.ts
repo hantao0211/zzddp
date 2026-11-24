@@ -46,6 +46,7 @@ export class ReadingHTTP{
  if(!isParent(viewer))throw new HomeworkError(403,"奖励规则和兑换审批需要家长处理。");
  if(path==="/student-profile"&&req.method==="PATCH"){send(res,saveStudentProfile(this.store,await body(),viewer.id));return;}
  if(path==="/economy/setup"&&req.method==="POST"){z.object({}).strict().parse(await body());send(res,installFamilyPlan(this.store,viewer.id));return;}
+ if(path==="/activity-rule"&&req.method==="PATCH"){send(res,this.store.activities.changeRule(await body(),viewer));return;}
  if(path==="/activity-rules"&&req.method==="PATCH"){send(res,this.store.activities.setRules(await body(),viewer));return;}
  if(path==="/homework-rules"&&req.method==="PATCH"){send(res,this.store.setHomeworkRewardRules(await body(),viewer));return;}
  if(path==="/rules"&&req.method==="PATCH"){send(res,this.store.setRules(await body(),viewer.id));return;}

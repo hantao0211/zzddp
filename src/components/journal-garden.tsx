@@ -19,7 +19,7 @@ type Expression = typeof expressions[number];
 const eyeBeats = {
   blink: { times: "0;.11;.35;.39;.47;.78;1", open: [0, 1, 1, 0, 1, 1, 0] },
   doubleBlink: { times: "0;.11;.31;.35;.42;.50;.54;.62;.80;1", open: [0, 1, 1, 0, 1, 1, 0, 1, 1, 0] },
-  wink: { times: "0;.11;.36;.43;.56;.67;.80;1", open: [0, 1, 1, 0, 0, 1, 1, 0] },
+  wink: { times: "0;.11;.25;.32;.65;.72;.83;1", open: [0, 1, 1, 0, 0, 1, 1, 0] },
 } as const;
 const faceDuration = "2s";
 const mouths = {
@@ -98,9 +98,14 @@ function FlowerFace() {
   </svg>;
 }
 
+const playedGestures = new WeakMap<SVGSVGElement, Set<Expression>>();
 function chooseFlowerExpression(flower: SVGSVGElement) {
-  const choices = expressions.filter(face => face !== flower.dataset.expression);
+  const played = playedGestures.get(flower) ?? new Set<Expression>();
+  if (played.size === expressions.length) played.clear();
+  const choices = expressions.filter(face => !played.has(face) && face !== flower.dataset.expression);
   const pose = choices[Math.floor(Math.random() * choices.length)];
+  played.add(pose);
+  playedGestures.set(flower, played);
   flower.dataset.expression = pose;
   const motions = flower.querySelectorAll<SVGAnimationElement>(`[data-pose="${pose}"]`);
   motions.forEach(motion => motion.beginElement());
@@ -152,7 +157,7 @@ export function JournalGarden({ hint, sticker, onChoose }: { hint: string; stick
   useEffect(() => {
     const style = document.documentElement.style;
     if (!style.getPropertyValue("--journal-motto-tilt")) {
-      const tilt = (Math.random() < 0.5 ? -1 : 1) * (1.1 + Math.random() * 0.5);
+      const tilt = (Math.random() < 0.5 ? -1 : 1) * (3.5 + Math.random() * 1.5);
       style.setProperty("--journal-motto-tilt", tilt.toFixed(2) + "deg");
     }
   }, []);

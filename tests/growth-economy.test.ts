@@ -130,3 +130,51 @@ test("archived shopping contracts retain their cumulative refund math and deleti
  for(let i=0;i<100;i++)f.store.saveReward({title:"模拟商品"+i,cost:1},parent.id);assert.throws(()=>f.store.saveReward({title:"超出上限",cost:1},parent.id),/100/);
  const duplicate=f.store.rewards()[0];f.store.shop.remove(duplicate.id,{revision:duplicate.revision},parent);f.store.saveReward({title:"清理后新商品",cost:1},parent.id);assert.equal(f.store.rewards().length,100);assert.equal((f.store.db.prepare("SELECT count(*) AS n FROM rewards").get() as any).n,102);
 }finally{f.close();}});
+
+test("parent activity CRUD keeps pending promises, survives reload and uses the selected frequency",()=>{
+ const f=fixture();
+ try{
+  const a=f.store.activities, rule={key:randomUUID(),title:"跳绳",points:3,frequency:"daily",enabled:true};
+  const create={before:null,after:rule};
+  assert.throws(()=>a.changeRule(create,child),/家长/);
+  a.changeRule(create,parent);a.changeRule(create,parent);
+  assert.equal(a.state().rules.filter(r=>r.key===rule.key).length,1);
+  const original=a.submit({id:randomUUID(),key:rule.key,date:f.store.today()},child);
+  const next={...rule,title:"练习跳绳",frequency:"weekly",points:5};
+  a.changeRule({before:rule,after:next},parent);
+  assert.throws(()=>a.changeRule({before:rule,after:null},parent),/已更新/);
+  f.time("2026-11-24");
+  assert.throws(()=>a.submit({id:randomUUID(),key:rule.key,date:f.store.today()},child),/已经记录/);
+  a.changeRule({before:next,after:null},parent);
+  a.changeRule({before:next,after:null},parent);
+  assert.throws(()=>a.changeRule(create,parent),/重新新增/);
+  assert.throws(()=>a.submit({id:randomUUID(),key:rule.key,date:f.store.today()},parent),/关闭/);
+  const reopened=new ReadingStore(f.store.directory);
+  try{
+   assert.ok(!reopened.activities.state().rules.some(r=>r.key===rule.key));
+   const decided=reopened.activities.decide(original.id,"approved","",parent);
+   assert.equal(decided.points,3);assert.equal(decided.title,"跳绳");
+   reopened.activities.decide(original.id,"approved","",parent);
+   assert.equal(reopened.balance(),103);
+   for(const preset of reopened.activities.state().rules)reopened.activities.changeRule({before:preset,after:null},parent);
+   assert.equal(reopened.activities.state().rules.length,0);
+  }finally{reopened.close();}
+ }finally{f.close();}
+});
+
+test("activity rule endpoint restricts changes to parents and exposes new rules in the child snapshot",async()=>{
+ const f=fixture(),http=new ReadingHTTP(f.store);let viewer=child;
+ const server=createServer((req,res)=>void http.handle(req,res,viewer,async()=>{
+  let json="";for await(const chunk of req)json+=chunk;return JSON.parse(json);
+ }));
+ await new Promise<void>(resolve=>server.listen(0,"127.0.0.1",resolve));
+ try{
+  const base=`http://127.0.0.1:${(server.address() as {port:number}).port}/assistant-api/reading`;
+  const rule={key:randomUUID(),title:"朗读",points:2,enabled:true,frequency:"weekly"};
+  const change=()=>fetch(base+"/activity-rule",{method:"PATCH",body:JSON.stringify({before:null,after:rule})});
+  assert.equal((await change()).status,403);
+  viewer=parent;assert.equal((await change()).status,200);
+  viewer=child;const state=await (await fetch(base+"/state")).json();
+  assert.deepEqual(state.activities.rules.find((v:{key:string})=>v.key===rule.key),rule);
+ }finally{server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));f.close();}
+});

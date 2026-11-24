@@ -13,7 +13,7 @@ export function installFamilyPlan(store:ReadingStore,actor:string){return store.
  ];
  const ids=offers.map(v=>store.shop.write(RewardInputSchema.parse({...v,offerDays:45,useDays:45}),actor).id);
  const upsert=(key:string,value:unknown)=>store.db.prepare("INSERT INTO settings VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(key,JSON.stringify(value));
- upsert("rules",{...store.rules(),dailyPoints:1});upsert("homework_reward_rules",{dailyPoints:1});upsert("activity_rules",{rules:DEFAULT_ACTIVITY_RULES});
+ upsert("rules",{...store.rules(),dailyPoints:1});upsert("homework_reward_rules",{dailyPoints:1});store.db.prepare("INSERT OR IGNORE INTO settings VALUES('activity_rules',?)").run(JSON.stringify({rules:DEFAULT_ACTIVITY_RULES}));
  store.db.prepare("INSERT OR IGNORE INTO settings VALUES('activity_start',?)").run(store.today());
  const result={installedOn:store.today(),rewardIds:ids};upsert("family_plan_v1",result);store.audit(actor,"install-authorized-family-plan","family-plan-v1");return{...result,alreadyInstalled:false};
 });}

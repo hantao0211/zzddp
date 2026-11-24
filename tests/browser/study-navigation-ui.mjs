@@ -102,7 +102,7 @@ try{const page=await browser.newPage({colorScheme:process.env.SMOKE_COLOR_SCHEME
   const quote=await garden.locator('h2').evaluate(el=>[...el.querySelectorAll('.journal-motto-line')].map(line=>Math.round(line.scrollWidth-line.clientWidth)));
   assert.ok(quote.every(overflow=>overflow<=1),'Motto lines fit the available width');
   const tilts=await garden.locator('.journal-motto-line span').evaluateAll(parts=>parts.map(p=>parseFloat(getComputedStyle(p).rotate)||0));
-  assert.ok(tilts.some(a=>a<0)&&tilts.some(a=>a>0)&&tilts.every(a=>Math.abs(a)<=3.21));
+  assert.ok(tilts.some(a=>a<0)&&tilts.some(a=>a>0)&&tilts.some(a=>Math.abs(a)>=6.99)&&tilts.every(a=>Math.abs(a)<=10.01));
   const ends=await garden.locator('.journal-motto-line').evaluateAll(lines=>lines.map(line=>line.lastElementChild.getBoundingClientRect().right));
   assert.ok(Math.abs(ends[0]-ends[1])<3,'The two motto lines should end together');
   const quoteSizes=await garden.locator('.journal-motto-line').last().locator('span').evaluateAll(parts=>parts.map(part=>[getComputedStyle(part).fontSize,getComputedStyle(part).color]));
@@ -148,6 +148,9 @@ try{const page=await browser.newPage({colorScheme:process.env.SMOKE_COLOR_SCHEME
  const firstFace=await face.getAttribute('data-expression');
  assert.ok(['blink','doubleBlink','wink'].includes(firstFace));
  await page.waitForFunction(previous=>document.querySelector('.journal-flower-face')?.dataset.expression!==previous,firstFace,{timeout:6000});
+ const secondFace=await face.getAttribute('data-expression');
+ await page.waitForFunction(previous=>document.querySelector('.journal-flower-face')?.dataset.expression!==previous,secondFace,{timeout:6000});
+ assert.equal(new Set([firstFace,secondFace,await face.getAttribute('data-expression')]).size,3,'Every cycle includes the wink');
  const leafMotion=await flower.evaluate(el=>[...el.querySelectorAll('.journal-leaf-blade')].map(blade=>{
   const animation=blade.getAnimations()[0];
   if(!animation)return null;
@@ -176,7 +179,7 @@ try{const page=await browser.newPage({colorScheme:process.env.SMOKE_COLOR_SCHEME
   for(const [pose,checkpoints] of [
    ['blink',[[.4,open],[.78,resting],[1.1,open]]],
    ['doubleBlink',[[.4,open],[.70,resting],[.90,open],[1.08,resting],[1.4,open]]],
-   ['wink',[[.4,open],[.96,[1,0,0,0,1]],[1.4,open]]],
+   ['wink',[[.4,open],[.96,[1,0,0,0,1]],[1.5,open]]],
   ]){
    const t=svg.getCurrentTime()+3;
    svg.setCurrentTime(t);

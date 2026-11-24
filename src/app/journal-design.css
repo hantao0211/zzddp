@@ -65,14 +65,14 @@
 .journal-garden-copy { min-width: 0; flex: 1; padding: 12px 0; }
 .journal-tape-label { position: absolute; right: 7px; top: 1px; transform: rotate(9deg); font-size: 11px; padding: 5px 12px; background: var(--journal-yellow); color: var(--ink); border-radius: 4px; z-index: 1; pointer-events: none; }
 /* Share a line width with room for rounded CJK glyph advances. */
-.study-shell .journal-garden h2 { display: grid; gap: 7px; font-size: 25px; line-height: 1.2; margin: 11px 0 0; letter-spacing: 0; font-weight: 600; }
-.journal-motto-line { display: flex; align-items: baseline; justify-content: space-between; width: 6.6em; max-width: 100%; white-space: nowrap; }
-.journal-motto-small { rotate: calc(-2 * var(--journal-motto-tilt, 1.3deg)); font-size: .8em; font-weight: 500; }
-.journal-motto-effort { rotate: var(--journal-motto-tilt, 1.3deg); font-size: 1.4em; }
-.journal-motto-open { rotate: var(--journal-motto-tilt, 1.3deg); font-size: 1.1em; color: var(--journal-green); }
+.study-shell .journal-garden h2 { display: grid; gap: 4px; font-size: 25px; line-height: 1.2; margin: 11px 0 0; letter-spacing: -.035em; font-weight: 600; }
+.journal-motto-line { display: flex; align-items: baseline; justify-content: space-between; width: 6.35em; max-width: 100%; white-space: nowrap; }
+.journal-motto-small { rotate: calc(-2 * var(--journal-motto-tilt, 4deg)); font-size: .8em; font-weight: 500; }
+.journal-motto-effort { translate: -.025em; rotate: calc(.78 * var(--journal-motto-tilt, 4deg)); font-size: 1.4em; }
+.journal-motto-open { rotate: calc(.78 * var(--journal-motto-tilt, 4deg)); font-size: 1.1em; color: var(--journal-green); }
 .journal-motto-own { font-size: .9em; font-weight: 500; }
 .journal-motto-effort { color: #36804f; }
-.journal-motto-flower { rotate: calc(-2 * var(--journal-motto-tilt, 1.3deg)); font-size: 1.5em; color: var(--accent); }
+.journal-motto-flower { translate: -.08em; rotate: calc(-2 * var(--journal-motto-tilt, 4deg)); font-size: 1.5em; color: var(--accent); }
 @media screen and (prefers-color-scheme: dark) {
   .journal-motto-effort { color: #91cfa1; }
 }

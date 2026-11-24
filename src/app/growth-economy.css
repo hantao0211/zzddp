@@ -46,3 +46,12 @@
 }
 .exchange-unavailable > svg { flex-shrink:0;margin-top:3px }
 .exchange-unavailable p { margin:2px 0 0;font-size:14px }
+
+.activity-management-header,.activity-rule-row { display:flex; justify-content:space-between; align-items:center; gap:10px; }
+.activity-management-header h2,.activity-rule-row p { margin:0; }
+.activity-rule-row { padding-block:10px; flex-wrap:nowrap; }
+.activity-rule-row strong { overflow-wrap:anywhere; }
+.activity-rule-row .economy-actions { flex:none; gap:6px; }
+.activity-rule-row .button,.activity-rule-row .text-button { min-height:44px; padding-inline:9px; }
+.activity-rule-row .reading-token { font-size:inherit; }
+@media(max-width:360px){ .activity-rule-row .economy-actions {gap:2px;} }
