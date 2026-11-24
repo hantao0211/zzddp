@@ -12,73 +12,82 @@ const stickers = [
 ] as const;
 export type JournalSticker = typeof stickers[number]["id"];
 
-const expressions = ["wink", "laugh"] as const;
+const expressions = ["blink", "doubleBlink", "wink"] as const;
+type Expression = typeof expressions[number];
 
-// The mouth and its tongue share one animated silhouette.
+// Each beat starts and settles in the curved-eye smile. A blink closes in about 80 ms.
+const eyeBeats = {
+  blink: { times: "0;.11;.35;.39;.47;.78;1", open: [0, 1, 1, 0, 1, 1, 0] },
+  doubleBlink: { times: "0;.11;.31;.35;.42;.50;.54;.62;.80;1", open: [0, 1, 1, 0, 1, 1, 0, 1, 1, 0] },
+  wink: { times: "0;.11;.36;.43;.56;.67;.80;1", open: [0, 1, 1, 0, 0, 1, 1, 0] },
+} as const;
+const faceDuration = "2s";
 const mouths = {
   smile: "M36 54 Q36 52 38 53 Q44 56 50 53 Q52 52 52 54 Q51 64 44 64 Q37 64 36 54 Z",
   wink: "M36 55 Q36 53 38 54 Q44 56 50 51 Q52 50 52 53 Q51 63 44 63 Q38 63 36 55 Z",
   laugh: "M34 53 Q34 51 37 52 Q44 54 51 52 Q54 51 54 53 Q53 67 44 67 Q35 67 34 53 Z",
 } as const;
 
-// The eyes lead each expression and the smile follows.
-const expressionTiming = {
-  wink: { eyes: [640, "0;.02;.23;.57;1"], mouth: [760, "0;.08;.31;.54;1"] },
-  laugh: { eyes: [1050, "0;.02;.34;.57;1"], mouth: [1505, "0;.06;.38;.60;1"] },
-} as const;
-
-const faceEasing = "0 0 1 1;.2 0 .35 1;0 0 1 1;.35 0 .55 1";
-type Expression = typeof expressions[number];
-
 function FaceOpacity({ pose, from, to }: { pose: Expression; from: number; to: number }) {
-  const [duration, times] = expressionTiming[pose].eyes;
-  return <animate attributeName="opacity" data-pose={pose} begin="indefinite" dur={duration + "ms"}
-    calcMode="spline" keyTimes={times} keySplines={faceEasing} values={[from, from, to, to, from].join(";")} />;
+  return <animate attributeName="opacity" data-pose={pose} begin="indefinite" dur={faceDuration}
+    keyTimes="0;.04;.19;.79;1" values={[from, from, to, to, from].join(";")} />;
 }
 
 function FlowerEye({ right = false }: { right?: boolean }) {
-  const gestures = right ? expressions : (["laugh"] as const);
+  function opacityFrames(pose: Expression, layer: "eye" | "arc" | "wink") {
+    const beat = eyeBeats[pose];
+    return beat.open.map((open, index) => {
+      const winking = pose === "wink" && (index === 3 || index === 4);
+      if (layer === "wink") return Number(winking && right);
+      if (winking) return Number(layer === "eye" && !right);
+      return layer === "eye" ? open : 1 - open;
+    });
+  }
+  function animateOpacity(layer: "eye" | "arc" | "wink") {
+    return expressions.map(pose => <animate key={pose} attributeName="opacity" data-pose={pose}
+      begin="indefinite" dur={faceDuration} keyTimes={eyeBeats[pose].times} values={opacityFrames(pose, layer).join(";")} />);
+  }
   return <g transform={right ? "translate(60 41) scale(-1 1)" : "translate(28 41)"}>
     <path d="M-6 -15 Q-2 -18 2 -16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-    <g data-feature="eye">
-      {gestures.map(pose => <FaceOpacity key={pose} pose={pose} from={1} to={0} />)}
-      {gestures.map(pose => <animateTransform key={pose} data-pose={pose} attributeName="transform"
-        type="scale" begin="indefinite" dur={expressionTiming[pose].eyes[0] + "ms"}
-        calcMode="spline" keyTimes={expressionTiming[pose].eyes[1]} keySplines={faceEasing}
-        values={"1 1;1 1;1 .18;1 .18;1 1"} />)}
+    <g data-feature="eye" opacity="0">
+      {animateOpacity("eye")}
+      {expressions.map(pose => <animateTransform key={pose} data-pose={pose} attributeName="transform"
+        type="scale" begin="indefinite" dur={faceDuration} keyTimes={eyeBeats[pose].times}
+        values={opacityFrames(pose, "eye").map(open => open ? "1 1" : "1 .16").join(";")} />)}
       <ellipse cx="-1" cy="0" rx="7.8" ry="8" fill="#fff9ed" />
       <ellipse cx="0.9" cy="0" rx="6.2" ry="7.6" fill="currentColor" />
       <path d="M-11 -4 Q-11 -1 -8 0 Q-5 -10 2 -7 Q6 -6 7 -2" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
       <circle cx="-0.3" cy="-2.8" r="2.45" fill="#fffdf7" />
       <circle cx="3" cy="2.9" r="1.15" fill="#fffdf7" />
     </g>
-    {gestures.map(pose => <path key={pose} data-eyelid={pose} opacity="0" fill="none" stroke="currentColor"
-      strokeWidth={pose === "laugh" ? 3.2 : 2.2} strokeLinecap="round" strokeLinejoin="round"
-      d={pose === "laugh" ? "M-8 4 Q-5 -4 0 -4 Q5 -4 8 3" : "M-8 -4 Q1 -4 8 3 Q0 -1 -8 3"}>
-      <FaceOpacity pose={pose} from={0} to={1} />
-    </path>)}
+    <path data-eyelid="laugh" fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round"
+      d="M-8 4 Q-5 -4 0 -4 Q5 -4 8 3">{animateOpacity("arc")}</path>
+    {right && <path data-eyelid="wink" opacity="0" fill="none" stroke="currentColor" strokeWidth="2.2"
+      strokeLinecap="round" strokeLinejoin="round" d="M-8 -4 Q1 -4 8 3 Q0 -1 -8 3">{animateOpacity("wink")}</path>}
   </g>;
 }
 
 function FlowerFace() {
   const mouthClip = useId();
-  return <svg className="journal-flower-face" viewBox="0 0 88 82" aria-hidden="true" focusable="false">
+  const face = useIllustrationMotion<SVGSVGElement>(chooseFlowerExpression, 3200, 4800);
+  return <svg ref={face} className="journal-flower-face" viewBox="0 0 88 82" aria-hidden="true" focusable="false">
     <defs>
       <clipPath id={mouthClip}>
-        <path data-feature="mouth" d={mouths.smile}>
+        <path data-feature="mouth" d={mouths.laugh}>
           {expressions.map(pose => <animate key={pose} data-pose={pose} attributeName="d" begin="indefinite"
-            dur={expressionTiming[pose].mouth[0] + "ms"} calcMode="spline" keyTimes={expressionTiming[pose].mouth[1]}
-            keySplines={faceEasing} values={[mouths.smile, mouths.smile, mouths[pose], mouths[pose], mouths.smile].join(";")} />)}
+            dur={faceDuration} keyTimes="0;.04;.19;.42;.56;.79;1"
+            values={[mouths.laugh, mouths.laugh, mouths.smile, pose === "wink" ? mouths.wink : mouths.smile,
+              pose === "wink" ? mouths.wink : mouths.smile, mouths.smile, mouths.laugh].join(";")} />)}
         </path>
       </clipPath>
     </defs>
     <FlowerEye /><FlowerEye right />
     {[21, 67].map(x => <g key={x} transform={`translate(${x} 55) rotate(-6)`}>
-      <ellipse rx="7.2" ry="3.4" fill="#f5a49a">
-        {expressions.map(pose => <FaceOpacity key={pose} pose={pose} from={1} to={0.15} />)}
+      <ellipse rx="7.2" ry="3.4" fill="#f5a49a" opacity=".15">
+        {expressions.map(pose => <FaceOpacity key={pose} pose={pose} from={0.15} to={1} />)}
       </ellipse>
-      <path d="M-5 2l2-4 M-.5 2l2-4 M4 2l2-4" fill="none" stroke="#ef7f8a" strokeWidth="1.5" strokeLinecap="round" opacity="0">
-        {expressions.map(pose => <FaceOpacity key={pose} pose={pose} from={0} to={1} />)}
+      <path d="M-5 2l2-4 M-.5 2l2-4 M4 2l2-4" fill="none" stroke="#ef7f8a" strokeWidth="1.5" strokeLinecap="round">
+        {expressions.map(pose => <FaceOpacity key={pose} pose={pose} from={1} to={0} />)}
       </path>
       <path d="M-3 1l1-2 M0 1l1-2 M3 1l1-2" fill="none" stroke="#d77379" strokeWidth=".8" strokeLinecap="round" />
     </g>)}
@@ -89,13 +98,27 @@ function FlowerFace() {
   </svg>;
 }
 
-function chooseFlowerExpression(flower: HTMLSpanElement) {
+function chooseFlowerExpression(flower: SVGSVGElement) {
   const choices = expressions.filter(face => face !== flower.dataset.expression);
   const pose = choices[Math.floor(Math.random() * choices.length)];
   flower.dataset.expression = pose;
   const motions = flower.querySelectorAll<SVGAnimationElement>(`[data-pose="${pose}"]`);
   motions.forEach(motion => motion.beginElement());
-  return () => motions.forEach(motion => motion.endElement());
+  const blades = flower.parentElement!.querySelectorAll<HTMLElement>(".journal-leaf-blade");
+  const leaves = Array.from(blades, (blade, index) => {
+    const left = index === 0;
+    return blade.animate([
+      { transform: "rotate(0deg)", offset: 0 },
+      { transform: left ? "rotate(11deg)" : "rotate(-14deg)", offset: 0.25 },
+      { transform: left ? "rotate(-5deg)" : "rotate(6deg)", offset: 0.49 },
+      { transform: left ? "rotate(4deg)" : "rotate(-5deg)", offset: 0.68 },
+      { transform: "rotate(0deg)", offset: 1 },
+    ], { duration: 1550, delay: left ? 65 : 210, easing: "ease-in-out" });
+  });
+  return () => {
+    motions.forEach(motion => motion.endElement());
+    leaves.forEach(animation => animation.cancel());
+  };
 }
 
 /** A small, optional decoration. It never represents a reward or task progress. */
@@ -124,8 +147,15 @@ export function JournalGarden({ hint, sticker, onChoose }: { hint: string; stick
   const [open, setOpen] = useState(false);
   const tools = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
-  const flower = useIllustrationMotion(chooseFlowerExpression);
+  const flower = useIllustrationMotion();
   const pickerId = useId();
+  useEffect(() => {
+    const style = document.documentElement.style;
+    if (!style.getPropertyValue("--journal-motto-tilt")) {
+      const tilt = (Math.random() < 0.5 ? -1 : 1) * (1.1 + Math.random() * 0.5);
+      style.setProperty("--journal-motto-tilt", tilt.toFixed(2) + "deg");
+    }
+  }, []);
   useEffect(() => {
     if (!open) return;
     const outside = (event: PointerEvent) => {
@@ -161,7 +191,8 @@ export function JournalGarden({ hint, sticker, onChoose }: { hint: string; stick
               {[1, 2, 3, 4, 5].map(n => <span className={`journal-petal p${n}`} key={n} />)}
               <span className="journal-flower-center" />
               <FlowerFace />
-              <span className="journal-leaf" /><span className="journal-leaf l2" />
+              <span className="journal-leaf"><span className="journal-leaf-blade" /></span>
+              <span className="journal-leaf l2"><span className="journal-leaf-blade" /></span>
             </span>
             <span className="journal-book-stack" /><span className="journal-book-stack s2" />
             <span className="journal-pot" /><span className="journal-pot-label"><Icon size={16} /></span>

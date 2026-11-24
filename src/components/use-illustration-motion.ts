@@ -3,8 +3,10 @@
 import { useEffect, useRef } from "react";
 
 /** Each visible illustration plays on arrival, then occasionally while the reader stays. */
-export function useIllustrationMotion(onPlay?: (art: HTMLSpanElement) => () => void) {
-  const ref = useRef<HTMLSpanElement>(null);
+export function useIllustrationMotion<T extends Element = HTMLSpanElement>(
+  onPlay?: (art: T) => () => void, minDelay = 7000, maxDelay = 15000,
+) {
+  const ref = useRef<T>(null);
 
   useEffect(() => {
     const art = ref.current;
@@ -19,8 +21,10 @@ export function useIllustrationMotion(onPlay?: (art: HTMLSpanElement) => () => v
       if (!art || !inView || document.hidden || preference.matches) return;
       stopPose?.();
       stopPose = onPlay?.(art);
+      if (onPlay) return;
       if (art.hasAttribute("data-playing")) {
         for (const animation of art.getAnimations({ subtree: true })) {
+          if (!(animation instanceof CSSAnimation)) continue;
           animation.currentTime = 0;
           animation.play();
         }
@@ -36,7 +40,7 @@ export function useIllustrationMotion(onPlay?: (art: HTMLSpanElement) => () => v
         if (!inView || document.hidden || preference.matches) return;
         play();
         schedule();
-      }, 7_000 + Math.random() * 8_000);
+      }, minDelay + Math.random() * (maxDelay - minDelay));
     }
 
     function sync() {
@@ -48,7 +52,7 @@ export function useIllustrationMotion(onPlay?: (art: HTMLSpanElement) => () => v
         if (preference.matches) firstPlay = true;
         return;
       }
-      if (firstPlay) play();
+      if (firstPlay && !onPlay) play();
       schedule();
     }
 
@@ -67,7 +71,7 @@ export function useIllustrationMotion(onPlay?: (art: HTMLSpanElement) => () => v
       preference.removeEventListener("change", sync);
       art.removeAttribute("data-playing");
     };
-  }, [onPlay]);
+  }, [onPlay, minDelay, maxDelay]);
 
   return ref;
 }

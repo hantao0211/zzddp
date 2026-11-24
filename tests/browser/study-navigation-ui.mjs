@@ -101,6 +101,8 @@ try{const page=await browser.newPage({colorScheme:process.env.SMOKE_COLOR_SCHEME
   assert.deepEqual(tokens[0],tokens[1]);
   const quote=await garden.locator('h2').evaluate(el=>[...el.querySelectorAll('.journal-motto-line')].map(line=>Math.round(line.scrollWidth-line.clientWidth)));
   assert.ok(quote.every(overflow=>overflow<=1),'Motto lines fit the available width');
+  const tilts=await garden.locator('.journal-motto-line span').evaluateAll(parts=>parts.map(p=>parseFloat(getComputedStyle(p).rotate)||0));
+  assert.ok(tilts.some(a=>a<0)&&tilts.some(a=>a>0)&&tilts.every(a=>Math.abs(a)<=3.21));
   const ends=await garden.locator('.journal-motto-line').evaluateAll(lines=>lines.map(line=>line.lastElementChild.getBoundingClientRect().right));
   assert.ok(Math.abs(ends[0]-ends[1])<3,'The two motto lines should end together');
   const quoteSizes=await garden.locator('.journal-motto-line').last().locator('span').evaluateAll(parts=>parts.map(part=>[getComputedStyle(part).fontSize,getComputedStyle(part).color]));
@@ -141,52 +143,49 @@ try{const page=await browser.newPage({colorScheme:process.env.SMOKE_COLOR_SCHEME
  assert.ok(breeze&&breeze.potStill&&breeze.iterations===1);
  assert.ok(Math.abs(breeze.start)<.1&&Math.abs(breeze.left+8)<.1&&Math.abs(breeze.right-6.5)<.1&&Math.abs(breeze.rebound+1.8)<.1&&Math.abs(breeze.settled)<.1);
  const flower=page.locator('.journal-flower');
- const firstFace=await flower.getAttribute('data-expression');
- const expressions=['wink','laugh'];
- assert.ok(expressions.includes(firstFace));
- await page.waitForFunction(previous=>document.querySelector('.journal-flower')?.dataset.expression!==previous,firstFace,{timeout:17500});
- const samples=await flower.locator('.journal-flower-face').evaluate(svg=>{
-  svg.pauseAnimations();
-  const [leftEye,eye]=svg.querySelectorAll('[data-feature=eye]');
-  const mouth=svg.querySelector('[data-feature=mouth]');
-  const eyeHeight=()=>eye.getCTM().d.toFixed(4);
-  const shape=path=>Array.from({length:7},(_,i)=>{
-   const p=path.getPointAtLength(path.getTotalLength()*i/6);
-   return [p.x.toFixed(2),p.y.toFixed(2)].join(',');
-  }).join(' ');
-  svg.setCurrentTime(svg.getCurrentTime()+2);
-  const rest=[eyeHeight(),shape(mouth)];
-  const results=[];
-  for(const [pose,lead,peak] of [['wink',.045,.32],['laugh',.07,.50]]){
-   const motions=[...svg.querySelectorAll('[data-pose="'+pose+'"]')];
-   const start=svg.getCurrentTime();
-   motions.forEach(a=>a.beginElement());
-   svg.setCurrentTime(start+lead);
-   const early=[eyeHeight(),shape(mouth)];
-   svg.setCurrentTime(start+peak);
-   const closed=[...svg.querySelectorAll('[data-eyelid="'+pose+'"]')];
-   if(!closed.every(lid=>Number(getComputedStyle(lid).opacity)>.99) ||
-      Number(getComputedStyle(eye).opacity)>.01 ||
-      Number(getComputedStyle(leftEye).opacity)!==(pose==='wink'?1:0)) throw Error('Unexpected eyelids for '+pose);
-   results.push({moves:early[0]!==rest[0]&&early[0]!==eyeHeight(),mouthWaits:early[1]===rest[1],mouthMoves:shape(mouth)!==rest[1]});
-   svg.setCurrentTime(start+1.8);
-   if(eyeHeight()!==rest[0]||shape(mouth)!==rest[1])throw Error(pose+' failed to settle');
-  }
-  svg.unpauseAnimations();
-  return results;
- });
- for(const sample of samples)assert.deepEqual(sample,{moves:true,mouthWaits:true,mouthMoves:true});
+ const face=flower.locator('.journal-flower-face');
+ await page.waitForFunction(()=>document.querySelector('.journal-flower-face')?.dataset.expression,{},{timeout:6000});
+ const firstFace=await face.getAttribute('data-expression');
+ assert.ok(['blink','doubleBlink','wink'].includes(firstFace));
+ await page.waitForFunction(previous=>document.querySelector('.journal-flower-face')?.dataset.expression!==previous,firstFace,{timeout:6000});
+ const leafMotion=await flower.evaluate(el=>[...el.querySelectorAll('.journal-leaf-blade')].map(blade=>{
+  const animation=blade.getAnimations()[0];
+  if(!animation)return null;
+  animation.pause();
+  const delay=animation.effect.getTiming().delay;
+  animation.currentTime=delay+450;
+  return {delay,tilt:new DOMMatrix(getComputedStyle(blade).transform).b};
+ }));
+ assert.ok(leafMotion[0]?.tilt>.09 && leafMotion[1]?.tilt<-.09 && leafMotion[0].delay<leafMotion[1].delay);
  await page.emulateMedia({reducedMotion:'reduce'});
  assert.equal(await stalk.evaluate(el=>getComputedStyle(el).animationName),'none');
  assert.equal(await flower.getAttribute('data-playing'),null);
- const resting=await flower.evaluate(el=>{
-  const eyes=[...el.querySelectorAll('[data-feature=eye]')];
-  const disk=el.querySelector('.journal-flower-center').getBoundingClientRect();
-  return eyes.length===2 && eyes.every(eye=>eye.querySelectorAll('circle').length===2)
-   && eyes[0].getBoundingClientRect().left<disk.left && eyes[1].getBoundingClientRect().right>disk.right
-   && el.querySelector('g[clip-path] ellipse')!==null;
+ assert.equal(await flower.locator('.journal-leaf-blade').evaluateAll(blades=>blades.flatMap(b=>b.getAnimations()).length),0);
+ await face.evaluate(svg=>{
+  const [left,right]=svg.querySelectorAll('[data-feature=eye]');
+  const [leftArc,rightArc]=svg.querySelectorAll('[data-eyelid=laugh]');
+  const wink=svg.querySelector('[data-eyelid=wink]');
+  const opacity=node=>Number(getComputedStyle(node).opacity);
+  const check=(expected,label)=>{
+   const actual=[left,right,leftArc,rightArc,wink].map(opacity);
+   if(actual.some((n,i)=>Math.abs(n-expected[i])>.02))throw Error(label+': '+actual);
+  };
+  const resting=[0,0,1,1,0], open=[1,1,0,0,0];
+  check(resting,'Reduced motion idle');
+  svg.pauseAnimations();
+  for(const [pose,checkpoints] of [
+   ['blink',[[.4,open],[.78,resting],[1.1,open]]],
+   ['doubleBlink',[[.4,open],[.70,resting],[.90,open],[1.08,resting],[1.4,open]]],
+   ['wink',[[.4,open],[.96,[1,0,0,0,1]],[1.4,open]]],
+  ]){
+   const t=svg.getCurrentTime()+3;
+   svg.setCurrentTime(t);
+   svg.querySelectorAll('[data-pose="'+pose+'"]').forEach(a=>a.beginElement());
+   for(const [time,expected] of checkpoints){svg.setCurrentTime(t+time);check(expected,pose+' '+time);}
+   svg.setCurrentTime(t+2.1);check(resting,pose+' settles');
+  }
+  svg.unpauseAnimations();
  });
- assert.ok(resting,'Two glossy eyes span the flower centre and the smile includes a clipped tongue');
  await flower.screenshot({path:output+'/flower-face.png'});
  const illustrations=[
   ['课外阅读','tab-book','tab-book-page','journal-turn-page',.35],

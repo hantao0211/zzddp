@@ -105,7 +105,7 @@ input:is([type=checkbox], [type=radio]), progress { accent-color: var(--accent);
   .journal-garden .journal-petal { background: #dfa5b6; }
   .journal-garden .journal-flower-center { background: #e8ca8d; }
   .journal-garden .journal-stem { background: #7e9f83; }
-  .journal-garden .journal-leaf { background: #91b494; }
+  .journal-garden .journal-leaf-blade { background: #91b494; }
   .journal-garden .journal-book-stack { background: #d6b87e; border-left-color: #dba4b4; }
   .journal-garden .journal-book-stack.s2 { background: #96aa8c; border-left-color: #708b74; }
   .journal-garden .journal-tape-label { background: #d6bd8b; color: #493a3d; }
