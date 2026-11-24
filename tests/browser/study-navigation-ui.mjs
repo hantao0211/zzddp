@@ -115,6 +115,8 @@ try{const page=await browser.newPage({colorScheme:process.env.SMOKE_COLOR_SCHEME
  }
  const stalk=page.locator('.journal-flower-stalk');
  await page.emulateMedia({reducedMotion:'no-preference'});
+ await stalk.scrollIntoViewIfNeeded();
+ await page.waitForFunction(()=>document.querySelector('.journal-flower-stalk')?.getAnimations().length);
  const breeze=await stalk.evaluate(el=>{
   const pot=el.parentElement.querySelector('.journal-pot');
   const original=pot.getBoundingClientRect();
@@ -149,7 +151,39 @@ try{const page=await browser.newPage({colorScheme:process.env.SMOKE_COLOR_SCHEME
   assert.equal(await illustration.getAttribute('aria-hidden'),'true');
   assert.equal(await part.evaluate(el=>getComputedStyle(el).animationName),'none');
   await page.emulateMedia({reducedMotion:'no-preference'});
+  await illustration.scrollIntoViewIfNeeded();
+  await page.waitForFunction(selector=>document.querySelector(selector)?.getAnimations().length,'.'+moving);
   assert.equal(await part.evaluate(el=>getComputedStyle(el).animationName),name);
+  const firstStart=await page.waitForFunction(sel=>document.querySelector(sel)?.getAnimations()[0]?.startTime,'.'+moving);
+  let previousStart=await firstStart.jsonValue();
+  for(let replay=0;replay<2;replay++){
+   const next=await page.waitForFunction(({selector,previous})=>{
+    const start=document.querySelector(selector)?.getAnimations()[0]?.startTime;
+    return start!=null && start>previous+1000 ? start : false;
+   },{selector:'.'+moving,previous:previousStart},{timeout:18000});
+   const nextStart=await next.jsonValue();
+   const elapsed=nextStart-previousStart;
+   assert.ok(elapsed>=6800&&elapsed<=15750,'Random replay interval (ms): '+elapsed);
+   previousStart=nextStart;
+  }
+  await page.evaluate(()=>{
+   Object.defineProperty(document,'hidden',{configurable:true,value:true});
+   document.dispatchEvent(new Event('visibilitychange'));
+  });
+  assert.equal(await part.evaluate(el=>el.getAnimations().length),0);
+  await page.evaluate(()=>{
+   delete document.hidden;
+   document.dispatchEvent(new Event('visibilitychange'));
+  });
+  assert.equal(await part.evaluate(el=>el.getAnimations().length),0,'No immediate catch-up after returning');
+  await page.waitForFunction(sel=>document.querySelector(sel)?.getAnimations().length,'.'+moving,{timeout:17000});
+  if(kind==='tab-book'){
+   await page.evaluate(()=>window.scrollTo({top:document.documentElement.scrollHeight,behavior:'instant'}));
+   await page.waitForFunction(()=>!document.querySelector('.tab-book').hasAttribute('data-playing'));
+   await illustration.scrollIntoViewIfNeeded();
+   assert.equal(await part.evaluate(el=>el.getAnimations().length),0);
+   await page.waitForFunction(sel=>document.querySelector(sel)?.getAnimations().length,'.'+moving,{timeout:17000});
+  }
   const timing=await part.evaluate((el,frame)=>{
    const effect=el.getAnimations()[0];
    const {delay,duration,iterations}=effect.effect.getTiming();
@@ -173,11 +207,12 @@ try{const page=await browser.newPage({colorScheme:process.env.SMOKE_COLOR_SCHEME
   }
   await page.setViewportSize({width:390,height:844});
   await page.emulateMedia({reducedMotion:'reduce'});
+  await page.waitForFunction(sel=>!document.querySelector(sel).hasAttribute('data-playing'),'.'+kind);
   assert.ok(await illustration.evaluate(el=>el.getAnimations({subtree:true}).length===0));
  }
  await activate(nav.getByRole('link',{name:'作业',exact:true}));
  await page.emulateMedia({reducedMotion:'no-preference'});
- console.log('HOME_STUDY_TOOLS_OK=true one-entry-per-feature,route-testing,two-mobile-columns,matching-rewards,aligned-three-size-motto,pot-still,book-page-sprout-gift,one-cycle,four-tabs-reduced-motion');
+ console.log('HOME_STUDY_TOOLS_OK=true one-entry-per-feature,route-testing,two-mobile-columns,matching-rewards,aligned-three-size-motto,pot-still,book-page-sprout-gift,two-real-replays,background-and-scroll-pause,four-tabs-reduced-motion');
  await page.setViewportSize({width:390,height:844});await page.evaluate(()=>window.__studyDocument='same-document');await activate(page.getByRole('link',{name:'课外阅读',exact:true}));assert.equal(await page.evaluate(()=>window.__studyDocument),'same-document');await page.getByLabel('正在读的书',{exact:true}).waitFor();assert.ok(page.url().includes('studyDate=2026-11-19'));await page.goto(base+'/reading/?view=manage&studyDate=2026-11-19',{waitUntil:'networkidle'});await page.getByLabel('正在读的书',{exact:true}).waitFor();assert.ok(!page.url().includes('view=manage'),'A child must return to reading from a stale parent settings URL');
  await page.getByLabel('开始页',{exact:true}).fill('13');await page.getByLabel('结束页',{exact:true}).fill('18');await page.getByLabel('时长（分钟）',{exact:true}).fill('17');await page.locator('#reading-summary').fill('我读到一个有趣的故事，还想再说说人物为什么这样做。');
  await page.getByRole('button',{name:'开始阅读计时',exact:true}).click();await activate(page.getByRole('button',{name:'成长与奖励',exact:true}));assert.ok(page.url().includes('view=growth'));await activate(page.getByRole('button',{name:'课外阅读',exact:true}));assert.equal(await page.locator('#reading-summary').inputValue(),'我读到一个有趣的故事，还想再说说人物为什么这样做。');assert.equal(await page.getByLabel('时长（分钟）',{exact:true}).inputValue(),'17');await page.getByRole('button',{name:'结束计时并计入',exact:true}).waitFor();assert.deepEqual(dialogs,[],'Same-page navigation must never discard a draft or trigger a leave warning');

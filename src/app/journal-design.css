@@ -263,11 +263,11 @@
 }
 
 @media screen and (prefers-reduced-motion: no-preference) {
-  .journal-flower-stalk { animation: journal-flower-sway 4.6s ease-in-out both; }
-  .tab-book-page { animation: journal-turn-page 1.8s .18s ease-in-out both; }
-  .tab-sprout-shoot { animation: journal-sprout-grow 1.7s .18s ease-in-out both; }
-  .tab-gift-lid { animation: journal-open-gift 1.8s .18s ease-in-out both; }
-  .tab-gift-sparks { animation: journal-gift-sparks 1.8s .18s ease-out both; }
+  .journal-flower[data-playing] .journal-flower-stalk { animation: journal-flower-sway 4.6s ease-in-out both; }
+  .tab-book[data-playing] .tab-book-page { animation: journal-turn-page 1.8s .18s ease-in-out both; }
+  .tab-sprout[data-playing] .tab-sprout-shoot { animation: journal-sprout-grow 1.7s .18s ease-in-out both; }
+  .tab-gift[data-playing] .tab-gift-lid { animation: journal-open-gift 1.8s .18s ease-in-out both; }
+  .tab-gift[data-playing] .tab-gift-sparks { animation: journal-gift-sparks 1.8s .18s ease-out both; }
 }
 @keyframes journal-flower-sway {
   0%, 100% { transform: rotate(0); }

@@ -3,6 +3,8 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { Flower2, Pencil, Star, Sun } from "lucide-react";
 
+import { useIllustrationMotion } from "./use-illustration-motion";
+
 const stickers = [
   { id: "flower", label: "花朵", Icon: Flower2 },
   { id: "sun", label: "太阳", Icon: Sun },
@@ -36,6 +38,7 @@ export function JournalGarden({ hint, sticker, onChoose }: { hint: string; stick
   const [open, setOpen] = useState(false);
   const tools = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
+  const flower = useIllustrationMotion();
   const pickerId = useId();
   useEffect(() => {
     if (!open) return;
@@ -65,7 +68,7 @@ export function JournalGarden({ hint, sticker, onChoose }: { hint: string; stick
     }}>
       <button type="button" className="journal-garden-trigger" ref={trigger} aria-label="装饰我的花盆" title="装饰我的花盆" aria-expanded={open} aria-controls={pickerId} onClick={() => setOpen(!open)}>
         <span className="journal-garden-decoration" role="img" aria-label={`花盆贴着${selected.label}贴纸`}>
-          <span className="journal-flower" aria-hidden="true">
+          <span ref={flower} className="journal-flower" aria-hidden="true">
             <span className="journal-ground" />
             <span className="journal-flower-stalk">
               <span className="journal-stem" />
