@@ -39,3 +39,10 @@
 .mall-item-footer{display:flex;align-items:center;justify-content:space-between;gap:5px;width:100%;margin-top:auto;min-width:0}
 .mall-item-footer .mall-item-more{margin:0;flex-shrink:0;white-space:nowrap}
 .mall-grid .mall-item .mall-item-footer small{font-size:11px;line-height:1.35}
+
+.exchange-unavailable {
+  display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border-radius:10px;
+  background:var(--theme-warm-soft,#f3ead7);color:var(--theme-warm-text,#6a4c2c);
+}
+.exchange-unavailable > svg { flex-shrink:0;margin-top:3px }
+.exchange-unavailable p { margin:2px 0 0;font-size:14px }

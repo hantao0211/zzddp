@@ -48,12 +48,12 @@
     padding: 10px 14px;
     border: 0;
     border-radius: 10px;
-    background: #80613b;
+    background: var(--button-brown-bg);
     color: #fffdf7;
     box-shadow: none;
     gap: 8px;
   }
-  .study-shell .reading-timer > .button:enabled:hover { background: #735735; }
+  .study-shell .reading-timer > .button:enabled:hover { background: var(--button-brown-hover); }
   .study-shell .reading-timer > .button:enabled:active { background: #674e2f; }
   .study-shell .reading-timer > .button:focus-visible {
     outline: 2px solid var(--theme-warm-text, #80613b);

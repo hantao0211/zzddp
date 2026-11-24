@@ -180,14 +180,6 @@
 .memo-editor .hw-date-edit[open] > summary > svg { transform:rotate(180deg) }
 .memo-editor .hw-date-edit > summary:hover { color:var(--accent) }
 .memo-editor .hw-date-edit .hw-scope-field { max-width:none;margin-block:8px }
-.memo-editor .hw-scope-form .button.primary:enabled {
-  color:var(--button-tool-ink);background:var(--button-tool-bg);border-color:currentColor;
-}
-.memo-editor .hw-scope-form .button.primary:enabled:hover { background:var(--accent-soft) }
-.memo-editor :is(.memo-edit-form,.hw-scope-form) .button.primary:disabled {
-  background:var(--button-tool-bg);border-color:transparent;color:var(--button-tool-ink);
-}
-
 .memo-edit-section-heading { display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:44px }
 .memo-edit-section-heading > h3 { margin:0;font-size:16px;line-height:1.4 }
 .memo-edit-identity { display:grid;grid-template-columns:minmax(75px,.7fr) minmax(0,2fr);gap:10px }
