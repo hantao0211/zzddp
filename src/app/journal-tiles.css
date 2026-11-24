@@ -40,6 +40,8 @@
     display: block; margin: 0; min-height: 18px; font-size: var(--tile-note-size);
     font-weight: 400; line-height: 1.5; color: var(--muted);
   }
+  .mall-price { flex-wrap: wrap; gap: 1px 4px; }
+  .mall-price-label { font-size: 13px; font-weight: 500; }
   .mall-terms { display: grid; gap: 2px; }
   .mall-frequency { display: flex; flex-wrap: wrap; column-gap: .65em; font-size: 13px; line-height: 1.45; color: var(--ink); }
   .mall-frequency > span, .mall-item-footer time { white-space: nowrap; }

@@ -1,6 +1,6 @@
 "use client";
 import {useEffect,useRef,useState} from "react";
-import {Gift,ShoppingBag,Pencil,Plus,X,Footprints,ChevronRight,LockKeyhole,Trash2} from "lucide-react";
+import {Gift,ShoppingBag,Pencil,Plus,X,ChevronRight,LockKeyhole,Trash2} from "lucide-react";
 import {RewardIcon} from "./reward-icon";
 import {REWARD_ICONS,defaultRewardIcon,type RewardIconId} from "@/domain/reward-icons";
 import {accountRequest} from "./account-login";
@@ -53,10 +53,10 @@ function Exchange({reward:r,data,refresh,close}:Props&{reward:Reward;close:()=>v
    <form onSubmit={submit}>
     {shopping&&<>
      <label>本次实际购物金额（元）<input type="number" inputMode="decimal" min="0.01" step="0.01" max={budget/100} value={amount} required disabled={busy||!!restriction} onChange={e=>setAmount(e.target.value)}/></label>
-     <p>每个小脚步对应 {money(r.rateCents)} 元；本月还可购物 {money(r.usage?.remainingCents??r.monthlyBudgetCents??0)} 元。</p>
+     <p>每个小脚步对应 {money(r.rateCents||200)} 元；本月还可购物 {money(r.usage?.remainingCents??r.monthlyBudgetCents??0)} 元。</p>
      <p className="reading-muted">按本月同一期累计金额计算，不因分多次购买多扣小脚步。取消时也会重算累计金额。</p>
     </>}
-    <p>本次暂扣 <StepAmount value={cost}/>，当前余额 <StepAmount value={data.growth.balance}/>。</p>
+    <p>{needsAmount ? "填写金额后显示本次消耗" : <>本次暂扣 <StepAmount value={cost}/></>}，当前余额 <StepAmount value={data.growth.balance}/>。</p>
     {error&&<p role="alert" className="form-error">{error}</p>}
     {!busy&&unavailable?<div className="exchange-unavailable" role="status">
      <LockKeyhole size={19} aria-hidden="true"/>
@@ -78,9 +78,12 @@ export function FamilyRewardShop({data,refresh}:Props) {
   <div className="reading-rewards mall-grid">{rewards.map(r=>{
    const status=blocked(r,data);
    const amount=r.kind==="shopping" ? `本月剩余${money(r.usage?.remainingCents??r.monthlyBudgetCents??0)}元` : r.valueCents ? `最高${money(r.valueCents)}元` : null;
-   return <article key={r.id}><button className="mall-item journal-tile" aria-label={`查看${r.title}详情`} aria-describedby={`mall-terms-${r.id} mall-date-${r.id}`} onClick={()=>setSelected(r)}>
+   return <article key={r.id}><button className="mall-item journal-tile" aria-label={`查看${r.title}详情`} aria-describedby={`mall-price-${r.id} mall-terms-${r.id} mall-date-${r.id}`} onClick={()=>setSelected(r)}>
     <span className="mall-item-heading journal-tile-heading"><span className="mall-item-icon journal-tile-icon"><RewardIcon icon={r.icon} title={r.title}/></span><h3 className="journal-tile-title">{r.title}</h3></span>
-    <strong className="journal-tile-value">{r.kind==="shopping"?<span className="reading-token" aria-label={`1个小脚步兑换${money(r.rateCents)}元`}><Footprints size={20} aria-hidden="true"/><span>1 = {money(r.rateCents)}元</span></span>:<StepAmount value={r.cost}/>}</strong>
+    <strong className="journal-tile-value mall-price" id={`mall-price-${r.id}`}>
+     <span className="mall-price-label">{r.kind==="shopping" ? `每${money(r.rateCents||200)}元消耗` : "消耗"}</span>
+     <StepAmount value={r.kind==="shopping" ? 1 : r.cost}/>
+    </strong>
     <span className="mall-terms" id={`mall-terms-${r.id}`}>
      <span className="mall-frequency">
       {r.monthLimit && <span>每月限{r.monthLimit}次</span>}
