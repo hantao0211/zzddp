@@ -56,7 +56,7 @@ try{
  await editor.getByLabel('作业形式',{exact:true}).selectOption('oral');
  await editor.getByRole('button',{name:'保存并重新整理',exact:true}).click();await editor.waitFor({state:'hidden'});
  await row().getByRole('button',{name:'确认朗读课文完成',exact:true}).click();
- await row().getByText('已完成',{exact:true}).waitFor();assert.equal(completed,true);
+ await row().getByText('已完成（手动）',{exact:true}).waitFor();assert.equal(completed,true);
  assert.deepEqual(errors,[]);
  console.log('MEMO_RECHECK_UI_OK=true immediate-title,pending-not-old-done,correct-spinner-wording,other-subject-preserved,failed-original-photo-retry,nonwritten-confirm-during-recheck,320-390-768-1280');
 }finally{await browser.close();}

@@ -47,7 +47,11 @@ try {
  await editor().getByLabel('作业名称', { exact: true }).fill('数学练习册P74');
  await editor().getByLabel('作业具体要求', { exact: true }).fill('完成数学练习册第74页，不是“练居”。');
  fail = true; await editor().getByRole('button', { name: '保存并重新整理', exact: true }).click();
- await editor().getByRole('alert').filter({ hasText: '连接失败' }).waitFor();
+ const failureReceipt = editor().locator('.memo-edit-feedback').getByRole('alert').filter({ hasText: '连接失败' });
+ await failureReceipt.waitFor();
+ const closeBox = await editor().getByRole('button', { name: '关闭修改清单', exact: true }).boundingBox();
+ const receiptBox = await failureReceipt.boundingBox();
+ assert.ok(closeBox && receiptBox && closeBox.y + closeBox.height <= receiptBox.y, 'The receipt must leave the close button visible');
  assert.equal(await editor().getByLabel('作业名称', { exact: true }).inputValue(), '数学练习册P74');
  fail = false; await editor().getByRole('button', { name: '保存并重新整理', exact: true }).click(); await editor().waitFor({ state: 'hidden' });
  assert.equal(requests[0].requestId, requests[1].requestId); assert.equal(requests[1].entryId, entryId);

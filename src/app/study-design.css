@@ -134,15 +134,86 @@
 .study-status-explanation p{font-size:15px;line-height:1.8;color:var(--muted);margin:8px 0 20px}
 .study-status-explanation h4{margin:16px 0 0;font-size:15px}
 .study-status-actions{display:flex;flex-wrap:wrap;align-items:center;gap:16px;margin-top:16px}
-.memo-editor .dialog-header h2{display:flex;align-items:center;gap:8px;font-size:18px}
-.memo-edit-intro{font-size:14px;line-height:1.8;color:var(--muted);margin-top:0}
-.memo-edit-list{display:flex;flex-direction:column;gap:8px}
-.memo-edit-list>button{display:flex;align-items:center;gap:12px;padding:14px;border:1px solid var(--border);border-radius:10px;text-align:left;background:var(--theme-surface, #fff);min-height:56px;color:var(--ink)}
-.memo-edit-list>button>span{color:var(--muted);font-size:13px;flex-shrink:0}.memo-edit-list>button>strong{flex:1;overflow-wrap:anywhere}.memo-edit-list>button>svg{flex-shrink:0;color:var(--accent)}
-.memo-editor form>label,.memo-edit-format label{display:flex;flex-direction:column;gap:8px;margin:16px 0;font-size:14px}
-.memo-editor input,.memo-editor textarea,.memo-editor select{width:100%;min-width:0;border:1px solid var(--border);border-radius:9px;padding:11px 12px;background:var(--theme-surface, #fff);color:var(--ink);font:inherit;font-size:16px;line-height:1.6}
-.memo-editor textarea{resize:vertical;min-height:100px}.memo-edit-format{color:var(--muted);font-size:14px}.memo-edit-format summary{min-height:40px;cursor:pointer}.memo-edit-back{display:flex;align-items:center;gap:6px;min-height:40px}
-@media(max-width:600px){.hw-summary-heading>div{gap:4px 9px}.study-edit-list{font-size:12px}.study-status-actions>.button{font-size:14px}.memo-editor .dialog-body{padding:16px}.memo-editor .dialog-footer{gap:8px}.memo-editor .dialog-footer>.button{font-size:14px;padding:10px 12px}}
+.memo-editor > .dialog-header {
+  display:grid;
+  grid-template-columns:minmax(0,1fr) 44px;
+  column-gap:8px;
+  padding-block:12px;
+}
+.memo-editor .dialog-header h2 { display:flex;align-items:center;gap:8px;font-size:18px }
+.memo-editor .dialog-header h2 > svg { flex-shrink:0;color:var(--accent) }
+.memo-editor .dialog-header > .icon-button {
+  width:44px;height:44px;display:grid;place-items:center;padding:0;
+}
+.memo-edit-feedback { grid-column:1 / -1 }
+.memo-edit-feedback:empty { display:none }
+.memo-editor .memo-edit-feedback .study-operation-feedback {
+  position:static;inset:auto;transform:none;width:100%;max-width:none;margin-block-start:8px;
+  padding:4px 4px 4px 10px;gap:8px;border:0;border-radius:9px;box-shadow:none;
+  background:var(--theme-green-soft,#e7ede2);color:var(--theme-ink,var(--ink));font-size:14px;
+}
+.memo-editor .memo-edit-feedback .study-operation-feedback:is([data-phase=error],[data-phase=pending]) {
+  background:var(--button-tool-bg);color:var(--button-tool-ink);
+}
+.memo-edit-feedback .study-operation-feedback > span { flex:1;min-width:0 }
+.memo-edit-feedback .study-operation-feedback > button { min-width:44px;min-height:44px;justify-content:center;align-items:center }
+.memo-edit-intro { font-size:14px;color:var(--muted);margin:0 0 8px }
+.memo-edit-list > button {
+  display:flex;align-items:center;gap:12px;width:100%;min-height:52px;
+  padding:9px 4px;border:0;border-bottom:1px solid var(--border);
+  text-align:left;background:transparent;color:var(--ink);
+}
+.memo-edit-list > button:hover { background:var(--accent-soft) }
+.memo-edit-list > button > span {
+  color:var(--theme-success-text,#405744);background:var(--theme-green-soft,#e7ede2);
+  padding:3px 8px;border-radius:6px;font-size:13px;flex-shrink:0;
+}
+.memo-edit-list > button > strong { min-width:0;flex:1;overflow-wrap:anywhere }
+.memo-edit-list > button > svg { flex-shrink:0;color:var(--accent) }
+
+.memo-editor .hw-date-edit { padding:0 0 10px;margin:0 0 12px }
+.memo-editor .hw-date-edit > summary {
+  display:flex;align-items:center;justify-content:space-between;gap:8px;
+  min-height:44px;list-style:none;font-weight:600;
+}
+.memo-editor .hw-date-edit > summary::-webkit-details-marker { display:none }
+.memo-editor .hw-date-edit[open] > summary > svg { transform:rotate(180deg) }
+.memo-editor .hw-date-edit > summary:hover { color:var(--accent) }
+.memo-editor .hw-date-edit .hw-scope-field { max-width:none;margin-block:8px }
+.memo-editor .hw-scope-form .button.primary:enabled {
+  color:var(--button-tool-ink);background:var(--button-tool-bg);border-color:currentColor;
+}
+.memo-editor .hw-scope-form .button.primary:enabled:hover { background:var(--accent-soft) }
+.memo-editor :is(.memo-edit-form,.hw-scope-form) .button.primary:disabled {
+  background:transparent;border:1px dashed var(--field-border);color:var(--muted);
+}
+
+.memo-edit-section-heading { display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:44px }
+.memo-edit-section-heading > h3 { margin:0;font-size:16px;line-height:1.4 }
+.memo-edit-identity { display:grid;grid-template-columns:minmax(75px,.7fr) minmax(0,2fr);gap:10px }
+.memo-editor :is(form > label,.memo-edit-identity label,.memo-edit-format label) {
+  display:flex;flex-direction:column;gap:6px;min-width:0;margin-block:12px;font-size:14px;
+}
+.memo-editor :is(input,textarea,select) {
+  width:100%;min-width:0;min-height:44px;border:1px solid var(--border);border-radius:9px;
+  padding:9px 10px;background:var(--theme-surface,#fff);color:var(--ink);font:inherit;font-size:16px;line-height:1.6;
+}
+.memo-editor :is(.hw-scope-form,.memo-edit-form) > .hw-secondary { margin-block:6px 0 }
+.memo-editor textarea { resize:vertical;min-height:100px }
+.memo-editor :is(.memo-edit-back,.memo-edit-reload,.memo-edit-cancel) {
+  display:inline-flex;align-items:center;gap:6px;min-height:44px;padding-inline:6px;
+}
+.memo-editor .memo-edit-cancel { min-width:52px;justify-content:center;color:var(--muted) }
+.memo-editor :is(.memo-edit-cancel,.memo-edit-reload):hover { text-decoration:underline;text-underline-offset:3px }
+.memo-editor .dialog-footer { gap:10px;margin-top:16px;padding-top:12px }
+.memo-editor .dialog-footer .button { min-height:44px;justify-content:center }
+.memo-editor .memo-edit-save-note { text-align:right }
+
+@media(max-width:600px){
+  .hw-summary-heading>div{gap:4px 9px}.study-edit-list{font-size:12px}.study-status-actions>.button{font-size:14px}
+  .memo-editor .dialog-body{padding:16px}
+  .memo-editor .dialog-footer>.button{font-size:14px;padding:10px 12px}
+}
 
 .study-homework-reward{display:flex;align-items:center;gap:7px;flex-wrap:wrap;padding:10px 12px;margin:10px 0;background:var(--theme-rose-soft, #faf3f6);border-radius:10px;color:var(--accent);font-size:13px}
 .study-homework-reward>.reading-token{font-size:14px}.study-homework-reward>.reading-token svg{width:16px;height:16px}.study-homework-reward>.reading-token small{font-size:12px}
