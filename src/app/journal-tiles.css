@@ -42,6 +42,11 @@
   }
   .mall-price { flex-wrap: wrap; gap: 1px 4px; }
   .mall-price-label { font-size: 13px; font-weight: 500; }
+  .reward-description-preview {
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+    overflow-wrap: anywhere; color: var(--muted); font-size: var(--tile-note-size); line-height: 1.45;
+  }
+  .reward-description-full { white-space: pre-line; overflow-wrap: anywhere; }
   .mall-terms { display: grid; gap: 2px; }
   .mall-frequency { display: flex; flex-wrap: wrap; column-gap: .65em; font-size: 13px; line-height: 1.45; color: var(--ink); }
   .mall-frequency > span, .mall-item-footer time { white-space: nowrap; }
