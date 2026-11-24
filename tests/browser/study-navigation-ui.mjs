@@ -135,21 +135,49 @@ try{const page=await browser.newPage({colorScheme:process.env.SMOKE_COLOR_SCHEME
  assert.ok(Math.abs(breeze.start)<.1&&Math.abs(breeze.left+4)<.1&&Math.abs(breeze.right-3.5)<.1);
  await page.emulateMedia({reducedMotion:'reduce'});
  assert.equal(await stalk.evaluate(el=>getComputedStyle(el).animationName),'none');
- const accents=[['课外阅读','reading-journal-heading .study-page-subtitle > svg'],['成长与奖励','growth-heading .reading-token > svg'],['心愿商城','mall-heading .study-page-subtitle > svg']];
+ const illustrations=[
+  ['课外阅读','tab-book','tab-book-page','journal-turn-page',.35],
+  ['成长与奖励','tab-sprout','tab-sprout-shoot','journal-sprout-grow',.76],
+  ['心愿商城','tab-gift','tab-gift-lid','journal-open-gift',.55],
+ ];
  const nav=page.getByRole('navigation',{name:'底部学习导航',exact:true});
- for (const [label,selector] of accents) {
+ for (const [label,kind,moving,name,previewFrame] of illustrations) {
   await activate(nav.getByLabel(label,{exact:true}));
-  const icon=page.locator('.'+selector);
-  await icon.waitFor();
-  assert.equal(await icon.evaluate(el=>getComputedStyle(el).animationName),'none');
+  const illustration=page.locator('.study-tab-illustration.'+kind);
+  const part=illustration.locator('.'+moving);
+  await illustration.waitFor();
+  assert.equal(await illustration.getAttribute('aria-hidden'),'true');
+  assert.equal(await part.evaluate(el=>getComputedStyle(el).animationName),'none');
   await page.emulateMedia({reducedMotion:'no-preference'});
-  assert.equal(await icon.evaluate(el=>getComputedStyle(el).animationName),'journal-icon-nudge');
-  assert.equal(await icon.evaluate(el=>getComputedStyle(el).animationIterationCount),'1');
+  assert.equal(await part.evaluate(el=>getComputedStyle(el).animationName),name);
+  const timing=await part.evaluate((el,frame)=>{
+   const effect=el.getAnimations()[0];
+   const {delay,duration,iterations}=effect.effect.getTiming();
+   effect.pause();
+   effect.currentTime=delay+duration*.05;
+   const start=getComputedStyle(el).transform;
+   effect.currentTime=delay+duration*frame;
+   const peak=getComputedStyle(el).transform;
+   const spark=el.parentElement.querySelector('.tab-gift-sparks')?.getAnimations()[0];
+   if(spark) { spark.pause(); spark.currentTime=delay+duration*frame; }
+   return {start,peak,iterations};
+  },previewFrame);
+  assert.equal(timing.iterations,1);
+  assert.notEqual(timing.start,timing.peak);
+  for (const width of [320,390,1280]) {
+   await page.setViewportSize({width,height:844});
+   const box=await illustration.boundingBox();
+   assert.ok(box.width===34&&box.height===34&&box.x>=0&&box.x+box.width<=width);
+   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+   if(width===390)await page.screenshot({path:output+`/illustration-${kind}.png`});
+  }
+  await page.setViewportSize({width:390,height:844});
   await page.emulateMedia({reducedMotion:'reduce'});
+  assert.ok(await illustration.evaluate(el=>el.getAnimations({subtree:true}).length===0));
  }
  await activate(nav.getByRole('link',{name:'作业',exact:true}));
  await page.emulateMedia({reducedMotion:'no-preference'});
- console.log('HOME_STUDY_TOOLS_OK=true one-entry-per-feature,route-testing,two-mobile-columns,matching-rewards,aligned-three-size-motto,pot-still,four-tabs-reduced-motion');
+ console.log('HOME_STUDY_TOOLS_OK=true one-entry-per-feature,route-testing,two-mobile-columns,matching-rewards,aligned-three-size-motto,pot-still,book-page-sprout-gift,one-cycle,four-tabs-reduced-motion');
  await page.setViewportSize({width:390,height:844});await page.evaluate(()=>window.__studyDocument='same-document');await activate(page.getByRole('link',{name:'课外阅读',exact:true}));assert.equal(await page.evaluate(()=>window.__studyDocument),'same-document');await page.getByLabel('正在读的书',{exact:true}).waitFor();assert.ok(page.url().includes('studyDate=2026-11-19'));await page.goto(base+'/reading/?view=manage&studyDate=2026-11-19',{waitUntil:'networkidle'});await page.getByLabel('正在读的书',{exact:true}).waitFor();assert.ok(!page.url().includes('view=manage'),'A child must return to reading from a stale parent settings URL');
  await page.getByLabel('开始页',{exact:true}).fill('13');await page.getByLabel('结束页',{exact:true}).fill('18');await page.getByLabel('时长（分钟）',{exact:true}).fill('17');await page.locator('#reading-summary').fill('我读到一个有趣的故事，还想再说说人物为什么这样做。');
  await page.getByRole('button',{name:'开始阅读计时',exact:true}).click();await activate(page.getByRole('button',{name:'成长与奖励',exact:true}));assert.ok(page.url().includes('view=growth'));await activate(page.getByRole('button',{name:'课外阅读',exact:true}));assert.equal(await page.locator('#reading-summary').inputValue(),'我读到一个有趣的故事，还想再说说人物为什么这样做。');assert.equal(await page.getByLabel('时长（分钟）',{exact:true}).inputValue(),'17');await page.getByRole('button',{name:'结束计时并计入',exact:true}).waitFor();assert.deepEqual(dialogs,[],'Same-page navigation must never discard a draft or trigger a leave warning');

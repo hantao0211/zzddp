@@ -196,26 +196,101 @@
   .home-study-entry-title svg:last-child { display: none; }
 }
 
+/* Small illustrations fit inside the existing section heading rows. */
+.study-tab-illustration {
+  position: relative; isolation: isolate; flex: 0 0 auto; display: inline-block;
+  width: 34px; height: 34px; pointer-events: none;
+}
+.study-tab-illustration > span, .tab-sprout-shoot > span { position: absolute; display: block; }
+.tab-book { perspective: 85px; }
+.tab-book-cover {
+  inset: 8px 1px 5px; border-radius: 4px 4px 7px 7px; background: var(--accent); transform: rotate(-3deg);
+}
+.tab-book-pages, .tab-book-page {
+  height: 17px; top: 7px; border: 1px solid var(--accent-dark); border-radius: 4px 3px 2px 5px;
+  background: repeating-linear-gradient(to bottom, var(--journal-paper) 0 3px, var(--journal-pink) 3px 4px);
+}
+.tab-book-pages { left: 3px; width: 28px; }
+.tab-book-page {
+  left: 17px; width: 14px; transform-origin: left center;
+  background: repeating-linear-gradient(to bottom, var(--journal-paper) 0 3px, var(--journal-yellow) 3px 4px);
+  border-radius: 2px 4px 5px 2px;
+}
+
+.tab-sprout-soil {
+  bottom: 3px; left: 5px; width: 24px; height: 6px;
+  background: var(--theme-warm-text, #9b7250); border-radius: 50%;
+}
+.tab-sprout-shoot { inset: 0; transform-origin: 50% 84%; }
+.tab-sprout-stem {
+  bottom: 7px; left: 16px; width: 3px; height: 19px;
+  background: var(--journal-green); border-radius: 3px;
+}
+.tab-sprout-leaf {
+  width: 13px; height: 9px; border: 1px solid var(--journal-green);
+  background: var(--journal-sage);
+}
+.tab-sprout-leaf.left {
+  top: 12px; left: 5px; border-radius: 80% 20% 75% 30%; transform: rotate(31deg);
+}
+.tab-sprout-leaf.right {
+  top: 6px; right: 4px; border-radius: 80% 20% 75% 30%; transform: rotate(-32deg);
+  background: var(--journal-green);
+}
+
+.tab-gift {
+  --gift-paper: var(--journal-pink); --gift-ribbon: var(--accent-dark);
+}
+.tab-gift-box {
+  left: 6px; top: 15px; width: 22px; height: 15px; border-radius: 1px 1px 4px 4px;
+  border: 1px solid var(--accent-dark);
+  background: linear-gradient(90deg, var(--gift-paper) 42%, var(--gift-ribbon) 42% 58%, var(--gift-paper) 58%);
+}
+.tab-gift-lid {
+  left: 4px; top: 11px; width: 26px; height: 6px; border-radius: 3px;
+  background: var(--accent); transform-origin: 80% center;
+}
+.tab-gift-lid::before, .tab-gift-lid::after {
+  content: ""; position: absolute; top: -5px; width: 7px; height: 6px;
+  border: 2px solid var(--gift-ribbon);
+}
+.tab-gift-lid::before { left: 6px; border-radius: 80% 70% 10% 70%; transform: rotate(15deg); }
+.tab-gift-lid::after { right: 6px; border-radius: 70% 80% 70% 10%; transform: rotate(-15deg); }
+.tab-gift-sparks {
+  top: 15px; left: 14px; width: 4px; height: 4px; border-radius: 1px;
+  background: var(--theme-warm-text, #a57232); opacity: 0;
+  box-shadow: -8px 3px var(--accent), 7px -4px var(--journal-green);
+}
+
 @media screen and (prefers-reduced-motion: no-preference) {
   .journal-flower-stalk { animation: journal-flower-sway 4.6s ease-in-out both; }
-  .reading-journal-heading .study-page-subtitle > svg {
-    --journal-icon-turn: -9deg; animation: journal-icon-nudge .85s ease-in-out both;
-  }
-  .growth-heading .reading-token > svg {
-    --journal-icon-lift: -2px; animation: journal-icon-nudge .85s ease-in-out both;
-  }
-  .mall-heading .study-page-subtitle > svg {
-    --journal-icon-scale: 1.13; animation: journal-icon-nudge .85s ease-in-out both;
-  }
+  .tab-book-page { animation: journal-turn-page 1.8s .18s ease-in-out both; }
+  .tab-sprout-shoot { animation: journal-sprout-grow 1.7s .18s ease-in-out both; }
+  .tab-gift-lid { animation: journal-open-gift 1.8s .18s ease-in-out both; }
+  .tab-gift-sparks { animation: journal-gift-sparks 1.8s .18s ease-out both; }
 }
 @keyframes journal-flower-sway {
   0%, 100% { transform: rotate(0); }
   25% { transform: rotate(-4deg); }
   68% { transform: rotate(3.5deg); }
 }
-@keyframes journal-icon-nudge {
-  0%, 100% { transform: none; }
-  48% { transform: translateY(var(--journal-icon-lift, 0)) rotate(var(--journal-icon-turn, 0deg)) scale(var(--journal-icon-scale, 1)); }
+@keyframes journal-turn-page {
+  0%, 12% { transform: rotateY(0); }
+  68%, 100% { transform: rotateY(-180deg); }
+}
+@keyframes journal-sprout-grow {
+  0%, 10% { transform: scale(.25); }
+  76% { transform: scale(1.06); }
+  100% { transform: scale(1); }
+}
+@keyframes journal-open-gift {
+  0%, 12%, 100% { transform: none; }
+  48%, 70% { transform: translateY(-7px) rotate(-13deg); }
+}
+@keyframes journal-gift-sparks {
+  0%, 22% { opacity: 0; transform: translateY(0) scale(.4); }
+  55% { opacity: 1; transform: translateY(-6px) scale(1); }
+  90%, 100% { opacity: 0; transform: translateY(-12px) scale(.7); }
 }
 
 .study-side-card { position: relative; border-radius: 5px 19px 19px 19px; background: var(--journal-sage); padding: 19px; }
