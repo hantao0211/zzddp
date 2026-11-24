@@ -8,6 +8,7 @@ import { PhotoPreviewButton } from "./photo-preview";
 import { PracticePrintPreview } from "./practice-print-preview";
 import {TutorialButton} from "./study-tutorial";
 import {preparePracticePhoto} from "./practice-photos";
+import { formatPracticeQuestionText } from "@/domain/practice-question-text";
 import type {PracticeView,PracticeSubject,PracticeAnswer} from "@/domain/practice";
 import type { HomeworkScopeSource } from "@/domain/homework-scope";
 import type {StudentProfileView} from "@/domain/student-profile";
@@ -57,7 +58,24 @@ function PracticeDetail({item:p,parent,close,refresh}:{item:PracticeView;parent:
  const working=["queued","generating","grading"].includes(p.status),complete=p.status==="graded"&&p.result?.scopeComplete&&p.result.answers.every(a=>!["blank","uncertain"].includes(a.verdict));
  return <dialog ref={ref} className="reading-dialog practice-dialog" aria-labelledby="practice-detail-title" onCancel={e=>{e.preventDefault();if(!busy)close();}}><header><h2 id="practice-detail-title">{p.subject} · 课内小练习</h2><div className="economy-actions"><TutorialButton topic="practice"/><button className="icon-button" disabled={busy} aria-label="关闭小练习" onClick={close}><X/></button></div></header><div className="reading-dialog-body"><p>{p.date} · {p.profileLabel} · {labels[p.status]}</p>{p.note&&<p className="practice-status-note">{p.note}</p>}{error&&<p className="form-error" role="alert">{error}</p>}{p.rewarded>0?<p className="reading-notice"><Check size={18}/>完成奖励已到账 <StepAmount value={p.rewarded} signed/></p>:!p.rewardEligible?<p className="reading-muted">今天这科奖励已领取，本次继续记录学习，不重复发放。</p>:<p className="reading-muted">真实做完这一套可攒 <StepAmount value={2}/>，批改正确率不影响奖励。</p>}
  {p.sources.length>0&&<details><summary>这次练习来自哪些错题</summary>{p.sources.map(s=><article className="practice-question-preview" key={s.id}><strong>{s.title}</strong><p>{s.question}</p><p>知识点：{s.knowledgePoints.join("、")}</p>{s.photoUrl&&<PhotoPreviewButton src={s.photoUrl} alt={`${s.title}的来源照片`}>查看来源原图</PhotoPreviewButton>}</article>)}</details>}
- {p.paper&&<><h3>{p.paper.title}</h3><div className="economy-actions"><button ref={printButton} className="button primary" disabled={busy} aria-haspopup="dialog" onClick={()=>setPreviewOpen(true)}><Printer size={18}/>打印／另存PDF</button><button className="button secondary" disabled={busy} onClick={()=>void downloadDocument()}><Download size={18}/>下载题单</button>{parent&&<button className="text-button" disabled={busy} onClick={()=>void downloadDocument(true)}><Download size={17}/>单独保存参考答案</button>}</div><details><summary>先看看这套题 · 约{p.paper.questions.reduce((n,q)=>n+q.estimatedMinutes,0)}分钟</summary>{p.paper.questions.map((q,i)=><article className="practice-question-preview" key={q.id}><strong>{i+1}. {q.knowledgePoint}</strong><p>{q.question}</p></article>)}</details></>}
+ {p.paper && <>
+   <h3>{p.paper.title}</h3>
+   <div className="economy-actions">
+     <button ref={printButton} className="button primary" disabled={busy} aria-haspopup="dialog" onClick={() => setPreviewOpen(true)}>
+       <Printer size={18} />打印／另存PDF
+     </button>
+     <button className="button secondary" disabled={busy} onClick={() => void downloadDocument()}><Download size={18} />下载题单</button>
+     {parent && <button className="text-button" disabled={busy} onClick={() => void downloadDocument(true)}><Download size={17} />单独保存参考答案</button>}
+   </div>
+   <details className="practice-paper-preview">
+     <summary>先看看这套题 · 约{p.paper.questions.reduce((minutes, question) => minutes + question.estimatedMinutes, 0)}分钟</summary>
+     <ol>
+       {p.paper.questions.map(question => <li key={question.id}>
+         <p>{formatPracticeQuestionText(question.question)}</p>
+       </li>)}
+     </ol>
+   </details>
+ </>}
  {p.paper&&!complete&&<section className="practice-upload"><h3><Camera size={19}/>交这份练习的答卷</h3><p className="reading-muted">一次选择1–3张完整清晰的页面，题号要拍全。补拍时重新选择本次需要批改的完整答卷，旧照片保留在历史里。</p><label>选择答卷照片<input type="file" accept="image/*" multiple disabled={busy||working} onChange={async e=>{const input=e.currentTarget,files=Array.from(input.files||[]);if(!files.length)return;if(files.length>3){setError("每次最多选择3张完整答卷照片。");input.value="";return;}setBusy(true);setError("");try{setPhotos(await Promise.all(files.map(preparePracticePhoto)));}catch(e){setError(message(e));}finally{input.value="";setBusy(false);}}}/></label>{photos.length>0&&<><div className="practice-photo-grid">{photos.map((photo,i)=><figure key={i}><img src={"data:image/jpeg;base64,"+photo.image} alt={"待提交答卷第"+(i+1)+"张"}/><figcaption>{photo.name}</figcaption></figure>)}</div><button className="button primary" disabled={busy||working} onClick={()=>void run(async()=>{const result=await call(`items/${p.id}/submit`,{photos});if(result.status==="failed")throw Error("这组照片已保存，但处理尚未完成。请家长重试，或更换清晰的完整答卷。");setPhotos([]);},"答卷已对应到这份练习，批改后自动更新。")}>上传并批改这份练习</button></>}</section>}
  {!!p.photos.length&&<details><summary>这次对应的答卷 · {p.photos.length}张</summary><div className="practice-photo-grid">{p.photos.map(photo=><PhotoPreviewButton key={photo.id} className="photo-preview-thumbnail" src={"/assistant-api/learning/practice/photos/"+photo.id} alt={photo.name}><img src={"/assistant-api/learning/practice/photos/"+photo.id} alt={photo.name} loading="lazy" /><span>查看完整答卷</span></PhotoPreviewButton>)}</div></details>}
  {p.result&&<section className="practice-results"><h3>逐题结果</h3><p className="reading-muted">复测通过率只统计已确认的对错；待确认的题先核对，不直接算错。</p>{p.result.answers.map((a,i)=><article key={a.questionId} className={"practice-verdict-"+a.verdict}><header><strong>第{i+1}题</strong><span>{{correct:"正确",wrong:"需要订正",blank:"未作答",uncertain:"待确认"}[a.verdict]}</span></header><p>{p.paper?.questions.find(q=>q.id===a.questionId)?.question}</p><p>识别到的作答：{a.studentAnswer||"未填写或未识别清楚"}</p>{a.verdict!=="uncertain"&&<p>参考答案：{a.expectedAnswer}</p>}<p>{a.explanation}</p>{parent&&<button className="text-button" onClick={()=>setReview(a)}>家长核对／更正</button>}</article>)}</section>}

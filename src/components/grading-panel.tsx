@@ -9,7 +9,7 @@ import { gradingProgressText } from "@/domain/grading-progress";
 import { useEffect, useRef, useState } from "react";
 import { homeworkPost, homeworkRequest } from "@/services/homework-gateway";
 import type { GradedQuestion, GradingBatchView, GradingSummary, MistakeView } from "@/domain/grading";
-import { Image, ChevronUp, MessageCircle, PencilLine, Lightbulb, CircleCheck, Check, CircleAlert, X } from "lucide-react";
+import { Image, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, MessageCircle, PencilLine, Lightbulb, CircleCheck, Check, CircleAlert, X } from "lucide-react";
 import { StatusIndicator } from "./status-indicator";
 const verdicts = { correct: "正确", wrong: "错误 · 已入错题本", blank: "未作答", uncertain: "AI尚未确认", feedback: "主观题点评" };
 const filterLabels = { correct: "正确", wrong: "错误", blank: "未作答", uncertain: "未确认", feedback: "点评" };
@@ -76,6 +76,7 @@ export function GradingPanel({ date, canManage = true, focusFailures = false }: 
     </>}
   </section>;
 }
+const MISTAKE_PAGE_SIZE = 10;
 type MistakePage = { total: number; items: MistakeView[] };
 function mistakeSourceLabel(item: MistakeView, compact = false) {
   const source = item.provenance;
@@ -88,7 +89,7 @@ function mistakeSourceLabel(item: MistakeView, compact = false) {
 type MistakeFilters = { subject: PracticeSubject | ""; scope: LearningScope | "" };
 
 function readMistakes(filters: MistakeFilters, offset: number, signal: AbortSignal) {
-  const query = new URLSearchParams({ offset: String(offset) });
+  const query = new URLSearchParams({ offset: String(offset), limit: String(MISTAKE_PAGE_SIZE) });
   if (filters.subject) query.set("subject", filters.subject);
   if (filters.scope) query.set("scope", filters.scope);
   return homeworkRequest<MistakePage>(`/mistakes?${query}`, { signal });
@@ -161,66 +162,74 @@ export function MistakeBook({ canManage = false }: { canManage?: boolean }) {
   const [error, setError] = useState("");
   const [revision, setRevision] = useState(0);
   const [editing, setEditing] = useState<MistakeView | null>(null);
-  const [loadingMore, setLoadingMore] = useState(false);
+  const [page, setPage] = useState(0);
+  const [openId, setOpenId] = useState<string | null>(null);
   const requests = useRef<AbortController>(null);
-  const expanded = useRef(false);
+  const heading = useRef<HTMLHeadingElement>(null);
+  const openIdRef = useRef(openId);
+  openIdRef.current = openId;
 
   useEffect(() => {
     const controller = new AbortController();
     const { signal } = controller;
     requests.current = controller;
-    expanded.current = false;
-    setLoadingMore(false);
     let loading = false;
+
     async function load() {
       if (loading) return;
       loading = true;
       try {
-        const next = await readMistakes(filters, 0, signal);
-        if (!signal.aborted && !expanded.current) {
-          setData(next);
-          setError("");
+        const next = await readMistakes(filters, page * MISTAKE_PAGE_SIZE, signal);
+        if (signal.aborted) return;
+        const lastPage = Math.max(0, Math.ceil(next.total / MISTAKE_PAGE_SIZE) - 1);
+        if (page > lastPage) {
+          setData(null);
+          setOpenId(null);
+          setPage(lastPage);
+          return;
         }
+        setData(next);
+        setOpenId(current => next.items.some(item => item.id === current) ? current : null);
+        setError("");
       } catch (e) {
-        if (!signal.aborted && !expanded.current) setError(e instanceof Error ? e.message : "错题本暂未读取成功。");
+        if (!signal.aborted) setError(e instanceof Error ? e.message : "错题本暂未读取成功。");
       } finally {
         loading = false;
       }
     }
     void load();
-    const timer = setInterval(() => { if (!document.hidden && !expanded.current) void load(); }, 6000);
+    const timer = setInterval(() => {
+      if (!document.hidden && page === 0 && !openIdRef.current) void load();
+    }, 6000);
     return () => {
       controller.abort();
       clearInterval(timer);
     };
-  }, [filters, revision]);
+  }, [filters, page, revision]);
 
-  function changeFilters(next: MistakeFilters) {
-    if (next.subject === filters.subject && next.scope === filters.scope) return;
+  function resetResults() {
     requests.current?.abort();
     setData(null);
     setError("");
+    setOpenId(null);
+  }
+
+  function changeFilters(next: MistakeFilters) {
+    if (next.subject === filters.subject && next.scope === filters.scope) return;
+    resetResults();
+    setPage(0);
     setFilters(next);
   }
 
-  async function loadMore() {
-    const signal = requests.current?.signal;
-    if (!data || !signal || signal.aborted || loadingMore) return;
-    expanded.current = true;
-    setLoadingMore(true);
-    setError("");
-    try {
-      const next = await readMistakes(filters, data.items.length, signal);
-      if (!signal.aborted) setData({ total: next.total, items: [...data.items, ...next.items] });
-    } catch (e) {
-      if (!signal.aborted) setError(e instanceof Error ? e.message : "暂未读取成功。");
-    } finally {
-      if (!signal.aborted) setLoadingMore(false);
-    }
+  function changePage(next: number) {
+    resetResults();
+    setPage(next);
+    heading.current?.focus();
   }
 
+  const pageCount = Math.ceil((data?.total ?? 0) / MISTAKE_PAGE_SIZE);
   return <section className="card grade-panel mistake-book" aria-label="错题本">
-    <h2>我的错题本{data ? ` · ${data.total}题` : ""}</h2>
+    <h2 ref={heading} tabIndex={-1}>我的错题本{data ? ` · ${data.total}题` : ""}</h2>
     <p className="grade-source">已核验的错题会沿用原作业归属，可单独纠正个别题。</p>
     <div className="tabs grade-filters" role="group" aria-label="按科目筛选">
       {(["", ...PracticeSubjectSchema.options] as const).map(subject =>
@@ -232,13 +241,23 @@ export function MistakeBook({ canManage = false }: { canManage?: boolean }) {
         <button type="button" key={scope} aria-pressed={filters.scope === scope} className={filters.scope === scope ? "selected" : ""}
           onClick={() => changeFilters({ ...filters, scope })}>{scope ? scopeLabels[scope] : "全部归属"}</button>)}
     </div>
-    {error && <p className="form-error" role="alert">{error}</p>}
+    {error && <div className="form-error" role="alert">{error} <button type="button" className="text-button" onClick={() => {
+      resetResults();
+      setRevision(value => value + 1);
+    }}>重试</button></div>}
     {!data && !error && <p role="status">正在打开错题本…</p>}
     {data?.total === 0 && <p>这个分类暂时没有已核验的错题。</p>}
     {data?.items.map(item => {
       const scope = scopeLabels[item.scope || "unknown"];
       const source = mistakeSourceLabel(item, true);
+      const open = openId === item.id;
+      const detailsId = `mistake-details-${item.id}`;
       return <section className="mistake-entry" key={item.id}>
+        <button type="button" className="mistake-toggle" aria-expanded={open} aria-controls={detailsId}
+          onClick={() => setOpenId(open ? null : item.id)}>
+          <span><strong>{item.question.label}</strong><small>{item.date} · {item.subject}</small></span>
+          {open ? <ChevronUp size={18} aria-hidden="true" /> : <ChevronDown size={18} aria-hidden="true" />}
+        </button>
         <div className="mistake-scope">
           {canManage ? <button type="button" className="mistake-scope-edit" aria-label={`${scope}，更改本题归属`}
             title="更改本题归属" aria-haspopup="dialog" onClick={() => setEditing(item)}>
@@ -246,18 +265,26 @@ export function MistakeBook({ canManage = false }: { canManage?: boolean }) {
           </button> : <strong className="mistake-scope-chip">{scope}</strong>}
           <span className="mistake-origin" title={source}>{source}</span>
         </div>
+        <div id={detailsId} hidden={!open}>
+        {open && <>
         {item.retest && <p className="mistake-retest">复测{item.retest.rounds}轮 · 已判定{item.retest.attempts}题 · 通过率{item.retest.passRate === null ? "暂无" : `${item.retest.passRate}%`}{item.retest.uncertain ? ` · ${item.retest.uncertain}题待确认` : ""}{item.retest.blank ? ` · ${item.retest.blank}题未作答` : ""}{item.retest.lastDate ? ` · 最近${item.retest.lastDate}` : ""}。通过率只统计已确认的对错。</p>}
         <QuestionCard question={item.question} date={item.date} subject={item.subject} pageId={item.pageId} imageUrl={item.imageUrl} />
+        </>}
+        </div>
       </section>;
     })}
-    {data && data.items.length < data.total && <button type="button" className="button secondary" disabled={loadingMore} onClick={() => void loadMore()}>
-      {loadingMore ? "正在读取…" : "查看更多错题"}
-    </button>}
+    {pageCount > 1 && <nav className="mistake-pagination" aria-label="错题本分页">
+      <button type="button" className="button secondary compact" disabled={page === 0} onClick={() => changePage(page - 1)}>
+        <ChevronLeft size={16} aria-hidden="true" />上一页
+      </button>
+      <span role="status">第{page + 1}／{pageCount}页</span>
+      <button type="button" className="button secondary compact" disabled={page + 1 >= pageCount} onClick={() => changePage(page + 1)}>
+        下一页<ChevronRight size={16} aria-hidden="true" />
+      </button>
+    </nav>}
     {canManage && editing && <MistakeScopeEditor item={editing} close={() => setEditing(null)} saved={() => {
-      requests.current?.abort();
+      resetResults();
       setEditing(null);
-      setData(null);
-      setError("");
       setRevision(value => value + 1);
     }} />}
   </section>;

@@ -10,7 +10,7 @@ async function ready(page,id,status){await assert.doesNotReject(async()=>{await 
 function syntheticPDF(){const stream="BT /F1 18 Tf 40 220 Td (Synthetic curriculum addition) Tj ET",objects=["<< /Type /Catalog /Pages 2 0 R >>","<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 >>","<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 300] /Resources << /Font << /F1 5 0 R >> >> /Contents 6 0 R >>","<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 300] /Resources << /Font << /F1 5 0 R >> >> /Contents 6 0 R >>","<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",`<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`];let result="%PDF-1.4\n",offsets=[0];for(let i=0;i<objects.length;i++){offsets.push(Buffer.byteLength(result));result+=`${i+1} 0 obj\n${objects[i]}\nendobj\n`;}const xref=Buffer.byteLength(result);result+=`xref\n0 ${objects.length+1}\n0000000000 65535 f \n`+offsets.slice(1).map(n=>String(n).padStart(10,'0')+" 00000 n \n").join('')+`trailer\n<< /Size ${objects.length+1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;return Buffer.from(result);}
 async function noOverflow(page){assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'page overflow');for(const selector of ['.reading-dialog[open]','.study-tutorial[open]'])for(const d of await page.locator(selector).all()){const b=await d.boundingBox();if(b)assert.ok(b.x>=0&&b.x+b.width<=await page.evaluate(()=>innerWidth)+1,selector+' overflow');}}
 try{
- const ctx=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true,ignoreHTTPSErrors:true,acceptDownloads:true}),page=await ctx.newPage();page.on('pageerror',e=>{console.log('PAGE_ERROR_CHILD',(e.stack||e.message).split("\n").slice(0,4).join("\n"),page.url());errors.push(e.message);});page.on('dialog',d=>void d.accept());await page.goto(base,{waitUntil:'networkidle'});
+ const ctx=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true,ignoreHTTPSErrors:true,acceptDownloads:true,colorScheme:process.env.SMOKE_COLOR_SCHEME || 'light'}),page=await ctx.newPage();page.on('pageerror',e=>{console.log('PAGE_ERROR_CHILD',(e.stack||e.message).split("\n").slice(0,4).join("\n"),page.url());errors.push(e.message);});page.on('dialog',d=>void d.accept());await page.goto(base,{waitUntil:'networkidle'});
  const password='Synthetic-practice-2026',code=(await readFile(dir+'/parent-setup-code','utf8')).trim();assert.equal((await api(page,'parent-setup','POST',{setupCode:code,username:'qa-admin',name:'模拟家长',password})).status,200);assert.equal((await api(page,'admin/accounts','POST',{username:'qa-child',name:'模拟孩子',role:'child',password})).status,200);assert.equal((await api(page,'reading/student-profile','PATCH',{grade:4,semester:2,school:'模拟学校',region:'模拟地区'})).status,200);
  await api(page,'session','DELETE');await api(page,'session','POST',{username:'qa-child',password});await page.evaluate(()=>window.dispatchEvent(new Event('xiaobu:session-changed')));await page.getByRole('button',{name:'15分钟小练习',exact:true}).tap();await page.getByRole('heading',{name:'15分钟小练习',exact:true}).waitFor();
  assert.equal((await api(page,'learning/practice/materials','POST',{})).status,403);assert.equal((await api(page,'learning/practice/state')).data.subjects.find(s=>s.subject==='数学').curricular,1);
@@ -18,6 +18,23 @@ try{
  const subject=page.locator('.practice-subjects article').filter({has:page.getByRole('heading',{name:'数学',exact:true})});await subject.getByRole('button',{name:'准备这科练习'}).tap();let detail=page.locator('.practice-dialog');await detail.waitFor();let state=(await api(page,'learning/practice/state')).data,paper=state.items.find(p=>p.subject==='数学');await ready(page,paper.id,'ready');await detail.getByRole('button',{name:'下载题单',exact:true}).waitFor();
  assert.equal((await page.request.get(base+`/assistant-api/learning/practice/items/${paper.id}/document?answers=1`)).status(),403);
  const downloadWait=page.waitForEvent('download');await detail.getByRole('button',{name:'下载题单',exact:true}).tap();const download=await downloadWait,html=await readFile(await download.path(),'utf8');assert.ok(html.includes('模拟题1'));assert.ok(!html.includes('参考答案'));assert.ok(html.includes('@page'));
+ const paperPreview = detail.locator(".practice-paper-preview");
+ await paperPreview.locator("summary").tap();
+ const previewItems = paperPreview.locator("li p");
+ assert.equal(await previewItems.count(), 3);
+ const firstQuestion = "模拟题1：1+0等于几？\nA. 1\nB. 2\nC. 3\n你的答案：____";
+ const secondQuestion = "模拟题2：2+0等于几？\n（1） 写答案\n（2） 写过程\n作答区：\n（1） ____\n（2） ____";
+ assert.equal(await previewItems.nth(0).textContent(), firstQuestion);
+ assert.equal(await previewItems.nth(1).textContent(), secondQuestion);
+ assert.ok(html.includes(firstQuestion), "Downloaded sheet keeps answer and option lines");
+ for (const width of [320, 390, 768, 1280]) {
+  await page.setViewportSize({width, height: 844});
+  await noOverflow(page);
+  const formatting = await previewItems.nth(0).evaluate(item => ({ whitespace:getComputedStyle(item).whiteSpace, overflow:item.scrollWidth>item.clientWidth }));
+  assert.deepEqual(formatting, { whitespace:"pre-wrap", overflow:false });
+ }
+ await page.setViewportSize({width:390, height:844});
+ await page.screenshot({path:output+"/practice-paper-preview.png"});
  const printEntry=detail.getByRole('button',{name:'打印／另存PDF',exact:true});
  const preview=page.getByRole('dialog',{name:'题单预览',exact:true});
  const backToPractice=preview.getByRole('button',{name:'返回练习',exact:true});
@@ -28,6 +45,7 @@ try{
  await page.evaluate(()=>{window.print=()=>{window.__practicePrintCalls=(window.__practicePrintCalls??0)+1;};});
  await printEntry.tap();
  await preview.getByText(/模拟题1：1\+0等于几？/).waitFor();
+ assert.equal(await preview.locator("article h3").first().textContent(), "1. " + firstQuestion);
  assert.equal(popupCount,0);
  assert.equal(page.url(),originalUrl);
  assert.ok(!((await preview.innerText()).includes('参考答案')));
@@ -85,7 +103,7 @@ try{
  assert.ok(await fullAnswer.evaluate(button=>document.activeElement===button));
  for(const scheme of ['light','dark']){await page.emulateMedia({colorScheme:scheme});for(const width of [320,390,768,1280]){await page.setViewportSize({width,height:900});await noOverflow(page);await page.screenshot({path:output+`/practice-${scheme}-${width}.png`});}}
  await detail.getByRole('button',{name:'关闭小练习',exact:true}).tap();await page.setViewportSize({width:390,height:844});
- const pc=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true,ignoreHTTPSErrors:true,acceptDownloads:true}),parent=await pc.newPage();parent.on('pageerror',e=>{console.log('PAGE_ERROR_PARENT',(e.stack||e.message).split("\n").slice(0,4).join("\n"),parent.url());errors.push(e.message);});parent.on('dialog',d=>void d.accept());await parent.goto(base,{waitUntil:'networkidle'});await api(parent,'session','POST',{username:'qa-admin',password});await parent.evaluate(()=>window.dispatchEvent(new Event('xiaobu:session-changed')));await parent.getByRole('button',{name:'15分钟小练习',exact:true}).tap();await parent.locator('.practice-subjects article').filter({has:parent.getByRole('heading',{name:'数学',exact:true})}).getByRole('button',{name:'打开今日练习'}).tap();detail=parent.locator('.practice-dialog');await detail.getByRole('heading',{name:'逐题结果',exact:true}).waitFor();await detail.locator('.practice-results article').nth(2).getByRole('button',{name:'家长核对／更正'}).tap();const review=parent.getByRole('dialog',{name:'家长核对这道题',exact:true});await review.getByLabel('核对结论').selectOption('correct');await review.getByLabel('更正依据').fill('模拟：家长核对实际写了3。');await review.getByRole('button',{name:'保存家长核对'}).tap();await review.waitFor({state:'hidden'});assert.equal(await detail.count(),1);assert.equal((await api(parent,'reading/state')).data.growth.balance,2);await detail.getByText(/完成奖励已到账/).waitFor();await detail.getByRole('button',{name:'关闭小练习',exact:true}).tap();
+ const pc=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true,ignoreHTTPSErrors:true,acceptDownloads:true,colorScheme:process.env.SMOKE_COLOR_SCHEME || 'light'}),parent=await pc.newPage();parent.on('pageerror',e=>{console.log('PAGE_ERROR_PARENT',(e.stack||e.message).split("\n").slice(0,4).join("\n"),parent.url());errors.push(e.message);});parent.on('dialog',d=>void d.accept());await parent.goto(base,{waitUntil:'networkidle'});await api(parent,'session','POST',{username:'qa-admin',password});await parent.evaluate(()=>window.dispatchEvent(new Event('xiaobu:session-changed')));await parent.getByRole('button',{name:'15分钟小练习',exact:true}).tap();await parent.locator('.practice-subjects article').filter({has:parent.getByRole('heading',{name:'数学',exact:true})}).getByRole('button',{name:'打开今日练习'}).tap();detail=parent.locator('.practice-dialog');await detail.getByRole('heading',{name:'逐题结果',exact:true}).waitFor();await detail.locator('.practice-results article').nth(2).getByRole('button',{name:'家长核对／更正'}).tap();const review=parent.getByRole('dialog',{name:'家长核对这道题',exact:true});await review.getByLabel('核对结论').selectOption('correct');await review.getByLabel('更正依据').fill('模拟：家长核对实际写了3。');await review.getByRole('button',{name:'保存家长核对'}).tap();await review.waitFor({state:'hidden'});assert.equal(await detail.count(),1);assert.equal((await api(parent,'reading/state')).data.growth.balance,2);await detail.getByText(/完成奖励已到账/).waitFor();await detail.getByRole('button',{name:'关闭小练习',exact:true}).tap();
  const getPracticeSubjects=async()=> (await api(parent,'learning/practice/state')).data.subjects;
  const english=subjects=>subjects.find(s=>s.subject==='英语');
  const baseline=await getPracticeSubjects();

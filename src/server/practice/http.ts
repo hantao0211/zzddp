@@ -37,11 +37,11 @@ export class PracticeHTTP{
   return { kind: "unmatched", title: namedSource(item.title) ? item.title.trim() : undefined };
  }
 
- mistakes(subject: PracticeSubject | undefined, scope: LearningScope | undefined, offset: number) {
+ mistakes(subject: PracticeSubject | undefined, scope: LearningScope | undefined, offset: number, limit = 30) {
   const items = this.store.candidates(subject)
     .filter(item => !scope || item.scope === scope)
-    .sort((a, b) => b.lastDate.localeCompare(a.lastDate));
-  return { total: items.length, items: items.slice(offset, offset + 30).map(item => this.mistakeView(item)) };
+    .sort((a, b) => b.lastDate.localeCompare(a.lastDate) || a.id.localeCompare(b.id));
+  return { total: items.length, items: items.slice(offset, offset + limit).map(item => this.mistakeView(item)) };
  }
 
  private mistakeView(item: PracticeCandidate): MistakeView {

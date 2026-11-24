@@ -11,10 +11,12 @@ import {join} from "node:path";
 import {randomUUID} from "node:crypto";
 import {DailyReportSchema, UploadInputSchema} from "../src/domain/homework";
 import {HomeworkStore} from "../src/server/homework/store";
+import { HomeworkHTTP } from "../src/server/homework/http";
 import {ReadingStore} from "../src/server/reading/store";
 import {saveStudentProfile} from "../src/server/reading/student-profile";
 import {PracticeStore} from "../src/server/practice/store";
 import {PracticeWorker,reconcilePractice} from "../src/server/practice/worker";
+import { formatPracticeQuestionText } from "../src/domain/practice-question-text";
 import {practiceDocument} from "../src/server/practice/document";
 import type {PracticePaper,PracticeGrade} from "../src/domain/practice";
 import type {StructuredAI} from "../src/server/ai/provider";
@@ -113,6 +115,44 @@ test("actual completed work earns two regardless of correctness, exactly once, a
 test("unclear or blank answers never become wrong retests; parents can confirm real completion without changing verdicts",async()=>{const f=setup();try{const source=f.seed(),provider=fakeAI("uncertain"),worker=new PracticeWorker(f.store,()=>provider.ai),paper=f.store.create("数学",child);await worker.tick();f.store.submit(paper.id,{photos:[{name:"模拟答卷",image:jpeg()}]},child);await worker.tick();assert.equal(f.reading.balance(),0);assert.equal(f.store.view(paper.id).result!.answers[0].verdict,"uncertain");assert.equal(f.store.stats(source,"curricular").attempts,2);assert.equal(f.store.stats(source,"curricular").uncertain,1);assert.throws(()=>f.store.manualComplete(paper.id,"实际完成",child),/家长/);f.store.manualComplete(paper.id,"家长看过完整答卷，实际都写了。",parent);f.store.manualComplete(paper.id,"再次确认",parent);assert.equal(f.reading.balance(),2);assert.equal(f.store.view(paper.id).result!.answers[0].verdict,"uncertain");assert.equal((f.store.db.prepare("SELECT COUNT(*) AS n FROM practice_manual_reviews").get() as any).n,1);}finally{f.close();}});
 test("new uploads replace the grading set and preserve history; incomplete attempts do not inflate rates",async()=>{const f=setup();try{const source=f.seed(),blank=fakeAI("blank"),worker=new PracticeWorker(f.store,()=>blank.ai),paper=f.store.create("数学",child);await worker.tick();f.store.submit(paper.id,{photos:[{name:"空白",image:jpeg()}]},child);await worker.tick();assert.equal(f.reading.balance(),0);f.store.submit(paper.id,{photos:[{name:"补齐",image:jpeg(2)}]},child);assert.equal(f.store.currentPhotos(f.store.row(paper.id)).length,1);assert.equal(f.store.photos(paper.id).length,2);const correct=fakeAI(),second=new PracticeWorker(f.store,()=>correct.ai);await second.tick();assert.equal(f.reading.balance(),2);assert.equal(f.store.stats(source,"curricular").attempts,3);assert.equal((f.store.db.prepare("SELECT COUNT(*) AS n FROM practice_history").get() as any).n,2);}finally{f.close();}});
 test("different old papers completed on the same day share the subject reward cap, even after restart reconciliation",async()=>{const f=setup();try{f.seed();const provider=fakeAI(),worker=new PracticeWorker(f.store,()=>provider.ai),old=f.store.create("数学",child);await worker.tick();f.time("2026-11-24");const current=f.store.create("数学",child);await worker.tick();f.store.submit(old.id,{photos:[{name:"旧答卷",image:jpeg()}]},child);await worker.tick();assert.equal(f.reading.balance(),2);assert.throws(()=>f.store.submit(current.id,{photos:[{name:"复用同图",image:jpeg()}]},child),/另一份练习/);f.store.submit(current.id,{photos:[{name:"新答卷",image:jpeg(2)}]},child);await worker.tick();assert.equal(f.reading.balance(),2);assert.equal(f.store.view(current.id).rewarded,0);assert.equal(f.store.rewards.credit(old.id,"数学",f.reading.today(),child.id),2);assert.equal(f.reading.balance(),2);}finally{f.close();}});
+test("practice question layout restores option and answer lines without flattening existing paragraphs", () => {
+  assert.equal(formatPracticeQuestionText("选出正确句子。 A. Option one B. Option two C. Option three 你的答案：______"),
+    "选出正确句子。\nA. Option one\nB. Option two\nC. Option three\n你的答案：______");
+  assert.equal(formatPracticeQuestionText("读句子。\r\n（1） 第一题 （2） 第二题 作答区： （1） ____ （2） ____"),
+    "读句子。\n（1） 第一题\n（2） 第二题\n作答区：\n（1） ____\n（2） ____");
+  assert.equal(formatPracticeQuestionText("The first number is 2.5. Mr. A. came to class."), "The first number is 2.5. Mr. A. came to class.");
+  assert.equal(formatPracticeQuestionText("题干\n\n另一段"), "题干\n\n另一段");
+});
+
+test("the mistake endpoint bounds each page and keeps same-day pages disjoint", async () => {
+  const f = setup();
+  for (let n = 0; n < 21; n++) f.seed("数学", "课堂练习");
+  f.seed("英语", "课堂练习");
+  f.seed("数学", "课外拓展");
+  const homework = new HomeworkHTTP(f.homework, undefined, new PracticeHTTP(f.store));
+  const server = createServer((req, res) => void homework.handle(req, res, parent));
+  await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+  try {
+    const address = server.address();
+    assert.ok(address && typeof address !== "string");
+    const endpoint = `http://127.0.0.1:${address.port}/assistant-api/learning/mistakes?subject=数学&scope=curricular`;
+    const pages = await Promise.all([0, 10, 20].map(async offset => {
+      const response = await fetch(`${endpoint}&limit=10&offset=${offset}`);
+      assert.equal(response.status, 200);
+      return await response.json() as { total: number; items: { id: string }[] };
+    }));
+    assert.deepEqual(pages.map(page => page.total), [21, 21, 21]);
+    assert.deepEqual(pages.map(page => page.items.length), [10, 10, 1]);
+    assert.equal(new Set(pages.flatMap(page => page.items.map(item => item.id))).size, 21);
+    const legacy = await fetch(endpoint);
+    assert.equal((await legacy.json()).items.length, 21);
+    assert.equal((await fetch(endpoint + "&limit=31")).status, 400);
+  } finally {
+    server.close();
+    f.close();
+  }
+});
+
 test("print documents escape all supplied text and never leak answers in a child question sheet",()=>{const paper:PracticePaper={title:'<script>bad</script>',subject:"数学",questions:[{id:"q",sourceMistakeIds:["m"],knowledgePoint:"加法",question:'1+1？<img onerror="bad">',answer:"SECRET-ANSWER",explanation:"SECRET-SOLUTION",estimatedMinutes:5}]};const plain=practiceDocument(paper,"4年级第2学期","2026-11-23");assert.ok(!plain.includes('<script>'));assert.ok(plain.includes('&lt;img'));assert.ok(!plain.includes("SECRET-ANSWER"));assert.ok(practiceDocument(paper,"模拟阶段","2026-11-23",true).includes("SECRET-ANSWER"));});
 
 test("parent correction preserves original AI result and audit, and a later retest updates the original source chain",async()=>{const f=setup();try{const root=f.seed(),provider=fakeAI("wrong"),worker=new PracticeWorker(f.store,()=>provider.ai),p=f.store.create("数学",child);await worker.tick();f.store.submit(p.id,{photos:[{name:"答卷",image:jpeg()}]},child);await worker.tick();const original=(f.store.db.prepare("SELECT result FROM practice_history WHERE practice_id=?").get(p.id) as any).result;assert.throws(()=>f.store.reviewAnswer(p.id,"q1",{verdict:"correct",studentAnswer:"1",expectedAnswer:"1",reason:"核对"},child),/家长/);f.store.reviewAnswer(p.id,"q1",{verdict:"correct",studentAnswer:"1",expectedAnswer:"1",reason:"家长逐字核对原答卷"},parent);assert.equal((f.store.db.prepare("SELECT result FROM practice_history WHERE practice_id=?").get(p.id) as any).result,original);assert.equal(f.store.stats(root,"curricular").passRate,100);assert.equal(f.reading.balance(),2);assert.equal((f.store.db.prepare("SELECT COUNT(*) AS n FROM practice_manual_reviews").get() as any).n,1);

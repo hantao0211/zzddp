@@ -72,8 +72,17 @@ export class HomeworkHTTP {
       if (path === "/mistakes" && req.method === "GET") {
         const subject = url.searchParams.get("subject");
         const offset = Number(url.searchParams.get("offset") || 0);
-        if ((subject && !["语文", "数学", "英语"].includes(subject)) || !Number.isSafeInteger(offset) || offset < 0 || offset > 100000) throw new HomeworkError(400, "筛选条件无效。");
-        const scope=url.searchParams.get("scope");if(scope&&!LearningScopeSchema.safeParse(scope).success)throw new HomeworkError(400,"请选择课内、课外或待分类。");json(res,this.practice?this.practice.mistakes(subject as PracticeSubject||undefined,scope as "curricular"|"extracurricular"|"unknown"||undefined,offset):this.store.grading.mistakes(subject, offset)); return;
+        const limit = Number(url.searchParams.get("limit") ?? 30);
+        if ((subject && !["语文", "数学", "英语"].includes(subject)) ||
+          !Number.isSafeInteger(offset) || offset < 0 || offset > 100000 ||
+          !Number.isSafeInteger(limit) || limit < 1 || limit > 30) throw new HomeworkError(400, "筛选条件无效。");
+        const scope = url.searchParams.get("scope");
+        const parsedScope = LearningScopeSchema.safeParse(scope);
+        if (scope && !parsedScope.success) throw new HomeworkError(400, "请选择课内、课外或待分类。");
+        json(res, this.practice
+          ? this.practice.mistakes(subject as PracticeSubject || undefined, parsedScope.data, offset, limit)
+          : this.store.grading.mistakes(subject, offset, limit));
+        return;
       }
       if (path === "/uploads" && req.method === "POST") {
         const parsed = UploadInputSchema.safeParse(await input(req));

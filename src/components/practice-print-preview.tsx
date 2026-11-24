@@ -2,6 +2,7 @@
 import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { ArrowLeft, Printer } from "lucide-react";
+import { formatPracticeQuestionText } from "@/domain/practice-question-text";
 import type { PracticeView } from "@/domain/practice";
 
 type SheetProps = Pick<PracticeView, "date" | "profileLabel"> & {
@@ -17,7 +18,7 @@ function PracticePrintSheet({ paper, profileLabel, date }: SheetProps) {
       <p>{date} · 预计{minutes}分钟 · 姓名：____________　实际用时：________</p>
     </div>
     {paper.questions.map((question, index) => <article key={question.id}>
-      <h3>{index + 1}. {question.question}</h3>
+      <h3>{index + 1}. {formatPracticeQuestionText(question.question)}</h3>
       <div className="practice-document-space" aria-hidden="true" />
     </article>)}
     <p className="practice-document-footer">做完后回到这份小练习上传答卷。</p>

@@ -30,7 +30,20 @@ try {
       return json({ date, status: "processed", pending: false, note: "模拟资料", dates: [date], quota: { calls: 1, limit: 60 }, grading: summary(), writtenCompletionEnabled: true, uploads: [{ id: "synthetic-upload", date, kind: "memo", status: "processed", createdAt: "", subjects: ["数学"], note: "", aiMs: 0, issues: [], files: [{ id: "synthetic-file", name: "synthetic.png", size: 1, stored: true, pages: [] }] }], report: { date, memoId: "synthetic-upload", updatedAt: "", familyNotes: [], unclassified: [], unassigned: [], uncertainties: [], tasks: [{ id: "synthetic-task", title: "数学练习", subject: "数学", requirement: "完成模拟练习第12页", format: "written", memoEvidence: [], evidence: [], coverage: "complete", missing: [], reviewActivity: null, writtenCompletion: { version: "written-v2", status: "done", reason: "均有模拟作答", parts: [] } }] } });
     }
     if (path.endsWith("/learning/grading")) return json({ summary: summary(), batches: [{ id: "synthetic-run", title: "数学练习", subject: "数学", attempts: failed ? 3 : 1, retryAllowed: failed, failure: failed ? { code: "INVALID_ENVELOPE", stage: "verification", failedAt: "2026-11-21T14:58:51.833Z", source: "runtime", reason: "AI返回的内容未能正常解析，没能读到可用的批改回复。", nextStep: "原件已保存，不用重新上传。可以请家长重试。" } : null, status: pending ? "queued" : failed ? "failed" : "done", note: pending && quotaPaused ? "今天的AI额度已用完，批改会在明天继续，原件已保存。" : failed ? "批改未完成，原件保留。" : "", primaryPageId: "synthetic-page", result: pending || failed ? null : { version: "grading-v1", scopeComplete: true, note: "", questions: currentQuestions() } }, { id: "synthetic-english", title: "英语练习", subject: "英语", status: "done", note: "", primaryPageId: "synthetic-english-page", result: { version: "grading-v1", scopeComplete: true, note: "", questions: [q("correct", 7)] } }] });
-    if (path.endsWith("/learning/mistakes")) return json({ total: url.searchParams.get("subject") === "英语" ? 0 : 1, items: url.searchParams.get("subject") === "英语" ? [] : [{ id: "synthetic-mistake", date: selectedDate, lastDate: selectedDate, subject: "数学", title: "已上传作业", provenance: { kind: "assignment", title: fullAssignment }, pageId: "synthetic-page", occurrences: 1, question: questions[1] }] });
+    if (path.endsWith("/learning/mistakes")) {
+      const subject = url.searchParams.get("subject");
+      const offset = Number(url.searchParams.get("offset"));
+      const limit = Number(url.searchParams.get("limit"));
+      assert.equal(limit, 10);
+      const total = subject === "英语" ? 0 : subject === "数学" ? 1 : 301;
+      const items = Array.from({ length: Math.min(limit, total - offset) }, (_, index) => {
+        const number = offset + index + 2;
+        return { id: "synthetic-mistake-" + number, date: selectedDate, lastDate: selectedDate, subject: "数学",
+          title: "已上传作业", provenance: { kind: "assignment", title: fullAssignment }, pageId: "synthetic-page",
+          occurrences: 1, question: number === 2 ? questions[1] : q("wrong", number) };
+      });
+      return json({ total, items });
+    }
     if (path.endsWith("/learning/grading/retry")) { failed = false; pending = true; return json({ queued: 1 }); }
     if (path.includes("/learning/pages/")) { photos++; return route.fulfill({ contentType: "image/png", body: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jA5sAAAAASUVORK5CYII=", "base64") }); }
     throw new Error("Unexpected simulated endpoint: " + path);
@@ -89,10 +102,31 @@ try {
   assert.equal(await panel.getByRole('button', { name: '先看需要留意的题', exact: true }).getAttribute('aria-pressed'), 'true');
   await page.getByRole("button", { name: "错题本", exact: true }).click();
   const book = page.getByRole("region", { name: "错题本", exact: true });
+  const toggle = number => book.getByRole("button", { name: new RegExp(`^第${number}题 `) });
+  await toggle(2).waitFor();
+  assert.equal(await book.locator(".mistake-entry").count(), 10);
+  assert.equal(await book.locator(".grade-question").count(), 0);
+  assert.equal(await book.getByText("第1／31页", { exact: true }).count(), 1);
+  await toggle(2).click();
+  await toggle(3).click();
+  assert.equal(await toggle(2).getAttribute("aria-expanded"), "false");
+  assert.equal(await toggle(3).getAttribute("aria-expanded"), "true");
+  assert.equal(await book.locator(".grade-question").count(), 1);
+  await book.getByRole("button", { name: "下一页", exact: true }).click();
+  await toggle(12).waitFor();
+  assert.equal(await book.locator(".mistake-entry").count(), 10);
+  assert.equal(await book.locator(".grade-question").count(), 0);
+  assert.equal(await toggle(2).count(), 0);
+  await book.getByRole("button", { name: "上一页", exact: true }).click();
+  await toggle(2).waitFor();
+  await book.getByRole("button", { name: "下一页", exact: true }).click();
+  await toggle(12).waitFor();
+  await book.getByRole("button", { name: "数学", exact: true }).click();
+  await toggle(2).click();
   await book.getByText("可能的错因 · 计算错误", { exact: true }).waitFor();
   assert.equal(await book.locator(".grade-question").count(), 1);
   const sourceText = `来自作业 · ${fullAssignment}`;
-  const row = book.locator(".mistake-scope");
+  const row = book.locator(".mistake-scope").first();
   const editScope = row.getByRole("button", { name: /更改本题归属/ });
   await row.getByText(`作业 · ${fullAssignment}`, { exact: true }).waitFor();
   assert.ok(!(await book.innerText()).includes("已上传作业"));
@@ -132,6 +166,7 @@ try {
   await book.getByRole("button", { name: "英语", exact: true }).click();
   await book.getByText("这个分类暂时没有已核验的错题。", { exact: true }).waitFor();
   await book.getByRole("button", { name: "数学", exact: true }).click();
+  await toggle(2).click();
   await book.getByRole("button", { name: "让小步帮我弄懂", exact: true }).click();
   await page.locator("#assistant-question").waitFor();
   assert.match(await page.locator("#assistant-question").inputValue(), /第2题.*2\+3/);

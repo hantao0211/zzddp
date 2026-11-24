@@ -17,7 +17,12 @@
 .practice-dialog{max-width:850px}
 .practice-status-note{padding:16px;background:var(--journal-sage);border-radius:12px;margin-bottom:20px}
 .practice-question-preview{padding-left:24px;margin:18px 0}
-.practice-question-preview li{padding:14px 0;border-bottom:1px solid var(--border);white-space:pre-wrap;overflow-wrap:anywhere}
+.practice-paper-preview{margin-top:14px}
+.practice-paper-preview ol{margin:10px 0 0;padding-left:2em}
+.practice-paper-preview li{padding:14px 0 14px 4px;border-bottom:1px solid var(--border)}
+.practice-paper-preview li:last-child{border-bottom:0}
+.practice-paper-preview li::marker{color:var(--accent);font-weight:650}
+.practice-paper-preview li p{margin:0;color:var(--ink);font-size:inherit;line-height:1.75;white-space:pre-wrap;overflow-wrap:anywhere}
 .practice-upload{display:block;padding:18px;border:1px dashed var(--field-border);background:var(--field-bg);border-radius:12px;margin:20px 0}
 .practice-upload input,.curriculum-upload input{display:block;max-width:100%;min-width:0;margin-top:12px;font-size:14px}
 .practice-photo-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:16px 0}
@@ -38,7 +43,16 @@
 .curriculum-library .reading-fields{margin:22px 0}
 .curriculum-library .reading-fields label{min-width:0}
 .curriculum-library select,.curriculum-card input{min-width:0;width:100%;max-width:100%}
-.mistake-scope{display:flex;align-items:center;gap:10px;min-width:0;margin-top:25px;font-size:14px}
+.mistake-book .mistake-entry{padding:9px 0;border-bottom:1px solid var(--border);min-width:0}
+.mistake-toggle{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;min-height:44px;padding:7px 0;background:transparent;color:var(--ink);text-align:left;border-radius:8px;font:inherit}
+.mistake-toggle span{display:grid;gap:2px;min-width:0}
+.mistake-toggle strong{line-height:1.45;overflow-wrap:anywhere}
+.mistake-toggle small{color:var(--muted);font-size:.8em}
+.mistake-toggle svg{flex:none;color:var(--accent)}
+.mistake-pagination{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:7px;margin-top:18px}
+.mistake-pagination span{color:var(--muted);font-size:13px}
+.mistake-pagination .button{gap:4px;padding-inline:8px}
+.mistake-scope{display:flex;align-items:center;gap:10px;min-width:0;font-size:14px}
 .mistake-scope-chip{display:inline-flex;align-items:center;gap:5px;flex:none;padding:4px 9px;border-radius:8px;background:var(--journal-sage);font-weight:600;line-height:20px;white-space:nowrap}
 .mistake-scope-edit{display:inline-flex;align-items:center;flex:none;min-height:44px;padding:0;border:0;border-radius:8px;background:transparent;color:inherit;font:inherit;cursor:pointer}
 .mistake-origin{overflow-wrap:anywhere}
