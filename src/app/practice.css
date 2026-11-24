@@ -56,3 +56,35 @@
 .hw-scope-form .button{min-height:44px}
 .hw-task-scope{display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap}
 .hw-task-scope .text-button{min-height:44px}
+
+.practice-print-dialog.reading-dialog[open]{
+  display:grid;grid-template-rows:auto minmax(0,1fr);width:min(820px,calc(100% - 24px));
+  height:min(900px,calc(100dvh - 24px));max-height:none;overflow:hidden
+}
+.practice-print-dialog>header{position:static;padding:8px 14px}
+.practice-print-dialog>header .button{white-space:nowrap}
+.practice-print-body{overflow:auto;overscroll-behavior:contain;background:#fff;padding:24px}
+.practice-document-sheet{max-width:760px;margin:0 auto;color:#222;background:#fff;font:16px/1.8 "Songti SC","SimSun",serif;overflow-wrap:anywhere}
+.practice-document-heading{border-bottom:2px solid #444;padding-bottom:14px}
+.practice-document-heading p{margin:5px 0;font-size:14px}
+.practice-document-heading h2{display:block;margin:0 0 8px;font-size:25px;line-height:1.4}
+.practice-document-sheet article{break-inside:avoid;margin-top:22px}
+.practice-document-sheet h3{margin:0;font-size:17px;font-weight:500;white-space:pre-wrap}
+.practice-document-space{height:145px;border-bottom:1px dashed #aaa}
+.practice-document-footer{font-size:12px;border-top:1px solid #aaa;margin-top:26px;padding-top:8px}
+.practice-print-output{display:none}
+@media(max-width:600px){
+  .practice-print-dialog.reading-dialog[open]{width:100%;height:100dvh;margin:0;border:0;border-radius:0}
+  .practice-print-dialog>header{padding-top:max(8px,env(safe-area-inset-top))}
+  .practice-print-body{padding:20px 16px max(20px,env(safe-area-inset-bottom))}
+}
+@media print{
+  @page xiaobu-practice{size:A4;margin:18mm}
+  html:has(.practice-print-host),body:has(>.practice-print-host){
+    position:static!important;width:auto!important;height:auto!important;min-height:0!important;
+    overflow:visible!important;margin:0!important;padding:0!important
+  }
+  body:has(>.practice-print-host)>:not(.practice-print-host),.practice-print-dialog{display:none!important}
+  .practice-print-output{display:block;page:xiaobu-practice}
+  .practice-print-output .practice-document-sheet{max-width:none}
+}

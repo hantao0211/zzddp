@@ -18,7 +18,59 @@ try{
  const subject=page.locator('.practice-subjects article').filter({has:page.getByRole('heading',{name:'数学',exact:true})});await subject.getByRole('button',{name:'准备这科练习'}).tap();let detail=page.locator('.practice-dialog');await detail.waitFor();let state=(await api(page,'learning/practice/state')).data,paper=state.items.find(p=>p.subject==='数学');await ready(page,paper.id,'ready');await detail.getByRole('button',{name:'下载题单',exact:true}).waitFor();
  assert.equal((await page.request.get(base+`/assistant-api/learning/practice/items/${paper.id}/document?answers=1`)).status(),403);
  const downloadWait=page.waitForEvent('download');await detail.getByRole('button',{name:'下载题单',exact:true}).tap();const download=await downloadWait,html=await readFile(await download.path(),'utf8');assert.ok(html.includes('模拟题1'));assert.ok(!html.includes('参考答案'));assert.ok(html.includes('@page'));
- const popupWait=page.waitForEvent('popup');await detail.getByRole('button',{name:'打印／另存PDF',exact:true}).tap();const popup=await popupWait;popup.on('dialog',d=>void d.accept());await popup.getByText('模拟题1：1+0等于几？',{exact:false}).waitFor();await popup.close();
+ const printEntry=detail.getByRole('button',{name:'打印／另存PDF',exact:true});
+ const preview=page.getByRole('dialog',{name:'题单预览',exact:true});
+ const backToPractice=preview.getByRole('button',{name:'返回练习',exact:true});
+ let popupCount=0;
+ const countPopup=()=>popupCount++;
+ page.on('popup',countPopup);
+ const originalUrl=page.url();
+ await page.evaluate(()=>{window.print=()=>{window.__practicePrintCalls=(window.__practicePrintCalls??0)+1;};});
+ await printEntry.tap();
+ await preview.getByText(/模拟题1：1\+0等于几？/).waitFor();
+ assert.equal(popupCount,0);
+ assert.equal(page.url(),originalUrl);
+ assert.ok(!((await preview.innerText()).includes('参考答案')));
+ const sheetBody=preview.getByRole('region',{name:'练习题单',exact:true});
+ for(const scheme of ['light','dark']){
+  await page.emulateMedia({colorScheme:scheme});
+  for(const width of [320,390,768,1280]){
+   await page.setViewportSize({width,height:585});
+   const returnButton=await backToPractice.boundingBox();
+   const printButton=await preview.getByRole('button',{name:'打印／另存PDF',exact:true}).boundingBox();
+   for(const target of [returnButton,printButton])assert.ok(target.x>=0&&target.x+target.width<=width&&target.y>=0&&target.y+target.height<=585&&target.height>=44);
+   await sheetBody.evaluate(el=>el.scrollTop=el.scrollHeight);
+   assert.ok(await backToPractice.isVisible());
+  }
+ }
+ await page.setViewportSize({width:390,height:585});
+ await preview.getByRole('button',{name:'打印／另存PDF',exact:true}).tap();
+ assert.equal(await page.evaluate(()=>window.__practicePrintCalls),1);
+ assert.ok(await preview.isVisible(), "Returning from system print leaves the preview available");
+ await page.emulateMedia({media:'print'});
+ await page.locator('.practice-print-output').waitFor({state:'visible'});
+ assert.ok(!(await preview.isVisible()));
+ assert.ok(!(await detail.isVisible()));
+ assert.equal(await page.locator('.practice-print-output article').count(),paper.paper?.questions?.length??3);
+ assert.equal(await page.evaluate(()=>getComputedStyle(document.body).position),'static');
+ if(engine===chromium)await page.pdf({path:output+'/practice-printed.pdf',preferCSSPageSize:true});
+ await page.emulateMedia({media:'screen',colorScheme:'light'});
+ await backToPractice.tap();
+ await preview.waitFor({state:'hidden'});
+ assert.ok(await detail.isVisible());
+ assert.ok(await printEntry.evaluate(button=>document.activeElement===button));
+ assert.equal(await page.evaluate(()=>document.body.style.position),'fixed');
+ await printEntry.tap();
+ await preview.waitFor();
+ await page.keyboard.press('Escape');
+ await preview.waitFor({state:'hidden'});
+ assert.ok(await detail.isVisible());
+ assert.equal(page.url(),originalUrl);
+ assert.equal(popupCount,0);
+ page.off('popup',countPopup);
+ await page.setViewportSize({width:390,height:844});
+ console.log('PRACTICE_PRINT_PREVIEW_OK=true no-popup,return,escape,print-sheet-only,320-390-768-1280');
+
  await detail.getByRole('button',{name:'小练习使用教程',exact:true}).tap();await page.keyboard.press('Escape');assert.equal(await detail.count(),1);assert.equal(await page.evaluate(()=>document.body.style.position),'fixed');
  const photo=await page.evaluate(()=>{const c=document.createElement('canvas');c.width=900;c.height=1200;const x=c.getContext('2d');x.fillStyle='white';x.fillRect(0,0,900,1200);x.fillStyle='black';x.font='40px sans-serif';x.fillText('Synthetic practice answers 8,2,3',20,100);return c.toDataURL('image/jpeg').split(',')[1];});
  await detail.getByLabel('选择答卷照片',{exact:false}).setInputFiles({name:'synthetic-answers.jpg',mimeType:'image/jpeg',buffer:Buffer.from(photo,'base64')});await detail.getByRole('button',{name:'上传并批改这份练习',exact:true}).tap();await ready(page,paper.id,'graded');await detail.getByRole('heading',{name:'逐题结果',exact:true}).waitFor();assert.equal((await api(page,'reading/state')).data.growth.balance,0);const completed=(await api(page,'learning/practice/items/'+paper.id)).data;assert.equal(completed.result.answers[0].verdict,'wrong');assert.equal(completed.result.answers[2].verdict,'uncertain');
