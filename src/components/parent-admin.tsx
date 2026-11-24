@@ -29,13 +29,16 @@ export function ParentAdmin() {
   useEffect(() => { void load(); }, []);
   async function action(work: () => Promise<void>, success = "已保存") { setBusy(true); setMessage(""); try { await work(); setMessage(success); } catch (e) { setMessage((e as Error).message); } finally { setBusy(false); } }
   async function logout() { await accountRequest("session", undefined, "DELETE"); sessionChanged(); setOverview(null); await load(); }
-  return <div className="admin-app"><header><a href="/" className="admin-brand">小步学习</a><span>家长管理</span><div>{overview && <span>{overview.viewer.name} · {ROLE_LABELS[overview.viewer.role]}</span>}<a href="/">打开学习空间</a>{overview && <button onClick={() => void logout()}>退出账号</button>}</div></header><main>
+  return <div className="admin-app"><header>
+    <div className="admin-identity"><a href="/" className="admin-brand">小步学习</a>{overview && <small>{overview.viewer.name} · {ROLE_LABELS[overview.viewer.role]}</small>}</div>
+    <div className="admin-session"><a href="/" aria-label="打开学习空间">学习空间</a>{overview && <button onClick={() => void logout()} aria-label="退出账号">退出</button>}</div>
+  </header><main>
     {status === "loading" ? <p role="status">正在验证家长身份…</p> : status === "setup" ? <section className="card admin-auth"><h1>开通家长管理</h1><p>首次开通需要服务器上的一次性开通码。请由家长在14.103.24.55服务器终端执行：</p><pre>sudo cat /var/lib/xiaobu-assistant/parent-setup-code</pre><p>此码只用于建立第一个管理员，开通后失效。旧家庭访问码不能开通管理员。</p><form onSubmit={e => { e.preventDefault(); void action(async () => { await accountRequest("parent-setup", { setupCode, username, name, password }); setSetupCode(""); setPassword(""); setUsername(""); setName(""); sessionChanged(); await load(); }); }}><label>一次性开通码<input type="password" autoComplete="off" value={setupCode} onChange={e => setSetupCode(e.target.value)} required /></label><label>家长登录名<input autoComplete="username" placeholder="例如 parent" pattern="[A-Za-z0-9_.-]{2,32}" value={username} onChange={e => setUsername(e.target.value)} required /></label><label>称呼<input value={name} onChange={e => setName(e.target.value)} maxLength={30} required /></label><label>设置密码（至少8位）<input type="password" autoComplete="new-password" minLength={8} maxLength={128} value={password} onChange={e => setPassword(e.target.value)} required /></label><button className="button primary" disabled={busy}>建立家长管理员账号</button></form></section> : status === "login" ? <section className="card admin-auth"><h1>家长登录</h1><p>使用家长或管理员的独立账号，孩子账号不能进入管理页。</p><AccountLogin onSignedIn={() => void load()} /></section> : status === "child" ? <section className="card admin-auth"><h1>这里需要家长账号</h1><p>当前是孩子学习身份。管理家庭账号、知识记忆和设置，需要家长登录。</p><button className="button primary" onClick={() => void logout()}>切换到家长账号</button><a href="/">返回学习空间</a></section> : status === "error" ? <section className="card"><h1>暂时未能打开管理页</h1><button className="button primary compact" onClick={() => void load()}>重新连接</button></section> : overview && <>
       <div className="admin-heading">
         <h1>家长管理</h1>
         <div className="admin-heading-actions">
           <a className="button primary plum-action" href="/reading/?view=manage"><BookOpen aria-hidden="true" />阅读与奖励</a>
-          <button className="button primary plum-action" disabled={busy} onClick={() => void action(refresh, "已刷新学习资料")}><RefreshCw aria-hidden="true" />刷新</button>
+          <button className="button primary plum-action" disabled={busy} title="刷新" onClick={() => void action(refresh, "已刷新学习资料")}><RefreshCw aria-hidden="true" /><span className="visually-hidden">刷新</span></button>
         </div>
       </div>
       <nav className="admin-sections" aria-label="家长管理导航">
@@ -46,7 +49,25 @@ export function ParentAdmin() {
         })}
       </nav>
       {tab === "password" && <OwnPassword changed={async () => { sessionChanged(); setOverview(null); setTab("records"); await load(); setMessage("密码已修改，请重新登录。"); }} />}
-      {tab === "records" && <section className="card"><h2>最近60个有记录的日期</h2><p>查看上传、清单与批改情况，打开对应日期继续看原件和具体题目。</p>{overview.days.length ? overview.days.map(day => <article className="admin-day" key={day.date}><div><h3>{day.date} · {label[day.status] || "处理中"}</h3><p>{day.originals}份原件 · {day.tasks}项作业{day.grading.pending ? ` · ${day.grading.pending}页待批改` : day.grading.correct + day.grading.wrong + day.grading.blank + day.grading.uncertain ? ` · ${day.grading.wrong}道错题 · ${day.grading.blank}处漏答 · ${day.grading.uncertain}题未确认` : ""}</p>{["failed", "needs_rescan"].includes(day.status) && <p>{day.note}</p>}</div><div><a className="button primary admin-open-day" href={`/?studyDate=${day.date}`}>查看当天作业<ArrowRight aria-hidden="true" size={16}/></a>{day.status === "failed" && <button className="button primary compact" disabled={busy} onClick={() => { if (confirm("重新整理会调用AI，原件和已有记录保留。确定重试吗？")) void action(async () => { await accountRequest("learning/retry-day", { date: day.date }); await refresh(); }); }}>重试整理</button>}{day.grading.failed > 0 && <button className="button primary compact" disabled={busy} onClick={() => { if (confirm("确定重试这一天失败的AI批改吗？")) void action(async () => { await accountRequest("learning/grading/retry", { date: day.date }); await refresh(); }); }}>重试批改</button>}</div></article>) : <p>尚未上传学习资料。</p>}</section>}
+      {tab === "records" && <section className="admin-records">
+        <header><h2>学习记录</h2><small>最近 {overview.days.length} 个记录日</small></header>
+        {overview.days.map(day => <article className="admin-day" key={day.date}>
+          <div className="admin-day-heading">
+            <h3><time dateTime={day.date}>{day.date}</time></h3><span>{label[day.status] || "处理中"}</span>
+            <a className="button primary admin-open-day" href={`/?studyDate=${day.date}`} aria-label="查看当天作业">查看作业<ArrowRight aria-hidden="true" size={15}/></a>
+          </div>
+          <p className="admin-day-summary"><span>{day.originals} 份原件</span><span>{day.tasks} 项作业</span>
+            {day.grading.wrong > 0 && <span>{day.grading.wrong} 道错题</span>}
+            {day.grading.blank > 0 && <span>{day.grading.blank} 处漏答</span>}
+            {day.grading.uncertain > 0 && <span>{day.grading.uncertain} 题未确认</span>}
+            {day.grading.pending > 0 && <span>{day.grading.pending} 页待批改</span>}
+            {day.grading.correct > 0 && !(day.grading.wrong || day.grading.blank || day.grading.uncertain || day.grading.pending) && <span>{day.grading.correct} 题正确</span>}
+          </p>
+          {["failed", "needs_rescan"].includes(day.status) && day.note && <p>{day.note}</p>}
+          {(day.status === "failed" || day.grading.failed > 0) && <div className="admin-day-retries">{day.status === "failed" && <button className="button primary compact" disabled={busy} onClick={() => { if (confirm("重新整理会调用AI，原件和已有记录保留。确定重试吗？")) void action(async () => { await accountRequest("learning/retry-day", { date: day.date }); await refresh(); }); }}>重试整理</button>}{day.grading.failed > 0 && <button className="button primary compact" disabled={busy} onClick={() => { if (confirm("确定重试这一天失败的AI批改吗？")) void action(async () => { await accountRequest("learning/grading/retry", { date: day.date }); await refresh(); }); }}>重试批改</button>}</div>}
+        </article>)}
+        {!overview.days.length && <p>尚未上传学习资料。</p>}
+      </section>}
       {tab === "memories" && <KnowledgePanel knowledge={overview.knowledge || { rules: overview.memories, corrections: [], history: [] }} busy={busy} revoke={id => { if (confirm("停用后不再用于后续识别和问答，确定吗？")) void action(async () => { await accountRequest(`memories/${id}/revoke`, {}); await refresh(); }); }} />}
       {tab === "accounts" && overview.viewer.role === "admin" && <><section className="card"><h2>新增家庭账号</h2><p>管理员可管理账号和设置；家长可查看记录、处理异常及知识；孩子可上传、看反馈和使用小助手。</p><form className="admin-create" onSubmit={e => { e.preventDefault(); void action(async () => { await accountRequest("admin/accounts", { username, name, password, role }); setUsername(""); setName(""); setPassword(""); await refresh(); }); }}><label>登录名<input autoComplete="off" pattern="[A-Za-z0-9_.-]{2,32}" placeholder="例如 child" value={username} onChange={e => setUsername(e.target.value)} required /></label><label>称呼<input value={name} onChange={e => setName(e.target.value)} maxLength={30} required /></label><label>密码<input type="password" autoComplete="new-password" minLength={8} maxLength={128} value={password} onChange={e => setPassword(e.target.value)} required /></label><label>角色<select aria-label="角色" value={role} onChange={e => setRole(e.target.value as Role)}>{Object.entries(ROLE_LABELS).map(([value, text]) => <option key={value} value={value}>{text}</option>)}</select></label><button className="button primary" disabled={busy}>建立账号</button></form></section><section className="card"><h2>已有账号</h2><div className="admin-members">{members.map(member => <MemberEditor key={member.id} member={member} saved={refresh} />)}</div></section></>}
       {tab === "settings" && <>
