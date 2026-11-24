@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 
 /** Each visible illustration plays on arrival, then occasionally while the reader stays. */
-export function useIllustrationMotion() {
+export function useIllustrationMotion(onPlay?: (art: HTMLSpanElement) => void) {
   const ref = useRef<HTMLSpanElement>(null);
 
   useEffect(() => {
@@ -16,6 +16,7 @@ export function useIllustrationMotion() {
 
     function play() {
       if (!art || !inView || document.hidden || preference.matches) return;
+      onPlay?.(art);
       if (art.hasAttribute("data-playing")) {
         for (const animation of art.getAnimations({ subtree: true })) {
           animation.currentTime = 0;
@@ -61,7 +62,7 @@ export function useIllustrationMotion() {
       preference.removeEventListener("change", sync);
       art.removeAttribute("data-playing");
     };
-  }, []);
+  }, [onPlay]);
 
   return ref;
 }

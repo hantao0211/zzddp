@@ -136,8 +136,24 @@ try{const page=await browser.newPage({colorScheme:process.env.SMOKE_COLOR_SCHEME
  });
  assert.ok(breeze&&breeze.potStill&&breeze.iterations===1);
  assert.ok(Math.abs(breeze.start)<.1&&Math.abs(breeze.left+4)<.1&&Math.abs(breeze.right-3.5)<.1);
+ const flower=page.locator('.journal-flower');
+ const firstFace=await flower.getAttribute('data-expression');
+ assert.ok(['blink','wink','grin'].includes(firstFace));
+ await page.waitForFunction(previous=>document.querySelector('.journal-flower')?.dataset.expression!==previous,firstFace,{timeout:17500});
+ const expressions=await flower.evaluate(el=>{
+  const original=el.dataset.expression;
+  const faces=['blink','wink','grin'].map(face=>{
+   el.dataset.expression=face;
+   return [...el.querySelectorAll('.journal-eye,.journal-smile')].map(part=>getComputedStyle(part).animationName);
+  });
+  el.dataset.expression=original;
+  return faces;
+ });
+ assert.deepEqual(expressions,[['journal-blink','journal-blink','none'],['none','journal-blink','none'],['none','none','journal-grin']]);
  await page.emulateMedia({reducedMotion:'reduce'});
  assert.equal(await stalk.evaluate(el=>getComputedStyle(el).animationName),'none');
+ assert.equal(await flower.locator('.journal-flower-center').evaluate(center=>center.getAnimations({subtree:true}).length),0);
+ await flower.screenshot({path:output+'/flower-face.png'});
  const illustrations=[
   ['课外阅读','tab-book','tab-book-page','journal-turn-page',.35],
   ['成长与奖励','tab-sprout','tab-sprout-shoot','journal-sprout-grow',.76],

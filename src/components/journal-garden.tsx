@@ -12,6 +12,13 @@ const stickers = [
 ] as const;
 export type JournalSticker = typeof stickers[number]["id"];
 
+const expressions = ["blink", "wink", "grin"] as const;
+
+function chooseFlowerExpression(flower: HTMLSpanElement) {
+  const choices = expressions.filter(face => face !== flower.dataset.expression);
+  flower.dataset.expression = choices[Math.floor(Math.random() * choices.length)];
+}
+
 /** A small, optional decoration. It never represents a reward or task progress. */
 export function useJournalDecoration(viewerKey: string) {
   const [sticker, setSticker] = useState<JournalSticker>("flower");
@@ -38,7 +45,7 @@ export function JournalGarden({ hint, sticker, onChoose }: { hint: string; stick
   const [open, setOpen] = useState(false);
   const tools = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
-  const flower = useIllustrationMotion();
+  const flower = useIllustrationMotion(chooseFlowerExpression);
   const pickerId = useId();
   useEffect(() => {
     if (!open) return;
@@ -73,7 +80,11 @@ export function JournalGarden({ hint, sticker, onChoose }: { hint: string; stick
             <span className="journal-flower-stalk">
               <span className="journal-stem" />
               {[1, 2, 3, 4, 5].map(n => <span className={`journal-petal p${n}`} key={n} />)}
-              <span className="journal-flower-center" /><span className="journal-leaf" /><span className="journal-leaf l2" />
+              <span className="journal-flower-center">
+                <span className="journal-eye left-eye" /><span className="journal-eye right-eye" />
+                <span className="journal-smile" />
+              </span>
+              <span className="journal-leaf" /><span className="journal-leaf l2" />
             </span>
             <span className="journal-book-stack" /><span className="journal-book-stack s2" />
             <span className="journal-pot" /><span className="journal-pot-label"><Icon size={16} /></span>
