@@ -57,7 +57,7 @@ export function JournalGarden({ hint, sticker, onChoose }: { hint: string; stick
   return <section className="journal-garden" aria-label="手帐花园">
     <span className="journal-tape-label">今天也在长大</span>
     <div className="journal-garden-copy">
-      <h2 className="journal-motto"><span className="journal-motto-line">让<span className="journal-motto-small">小小</span>的<span className="journal-motto-effort">努力</span></span><span className="journal-motto-line">开出自己的<span className="journal-motto-flower">花</span></span></h2>
+      <h2 className="journal-motto"><span className="journal-motto-line">让<span className="journal-motto-small">小小</span>的<span className="journal-motto-effort">努力</span></span><span className="journal-motto-line"><span className="journal-motto-open">开出</span><span className="journal-motto-own">自己的</span><span className="journal-motto-flower">花</span></span></h2>
       <p className="study-next-step">{hint}</p>
     </div>
     <div className="journal-garden-tools" ref={tools} onBlur={event => {
@@ -66,9 +66,12 @@ export function JournalGarden({ hint, sticker, onChoose }: { hint: string; stick
       <button type="button" className="journal-garden-trigger" ref={trigger} aria-label="装饰我的花盆" title="装饰我的花盆" aria-expanded={open} aria-controls={pickerId} onClick={() => setOpen(!open)}>
         <span className="journal-garden-decoration" role="img" aria-label={`花盆贴着${selected.label}贴纸`}>
           <span className="journal-flower" aria-hidden="true">
-            <span className="journal-ground" /><span className="journal-stem" />
-            {[1, 2, 3, 4, 5].map(n => <span className={`journal-petal p${n}`} key={n} />)}
-            <span className="journal-flower-center" /><span className="journal-leaf" /><span className="journal-leaf l2" />
+            <span className="journal-ground" />
+            <span className="journal-flower-stalk">
+              <span className="journal-stem" />
+              {[1, 2, 3, 4, 5].map(n => <span className={`journal-petal p${n}`} key={n} />)}
+              <span className="journal-flower-center" /><span className="journal-leaf" /><span className="journal-leaf l2" />
+            </span>
             <span className="journal-book-stack" /><span className="journal-book-stack s2" />
             <span className="journal-pot" /><span className="journal-pot-label"><Icon size={16} /></span>
           </span>

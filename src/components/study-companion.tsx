@@ -1,7 +1,51 @@
 "use client";
-import {type ReactNode} from "react";
-import {BookOpen,Footprints,Sprout,Heart,ArrowRight} from "lucide-react";
+import { Archive, ArrowRight, BookOpen, CircleAlert, ClipboardList, Pencil, Sprout } from "lucide-react";
+import type { HomeworkSnapshot } from "@/domain/homework";
 import type {ReadingBook} from "@/domain/reading";
 import {StepAmount} from "./growth-tokens";
 export function ReadingCompanion({book,days,minutes}:{book?:ReadingBook;days:number;minutes:number}){return <aside className="study-companion"><section className="study-side-card"><div className="study-book-spot" aria-hidden="true">{book?<div className="study-book-cover"><Sprout/><span>{book.title}</span></div>:<BookOpen size={48}/>}</div><h2>{book?.title||"读一点喜欢的书"}</h2>{book&&<p>{book.author}{book.author&&" · "}已记录{book.uniquePages}页</p>}<p>{days?`连续阅读${days}天 · 累计${minutes}分钟` : "从今天的一小段故事开始。"}</p>{book?.totalPages&&<progress aria-label="这本书已记录的页数" value={book.uniquePages} max={book.totalPages}/>}</section></aside>;}
-export function HomeCompanion({rewardNote,onPractice,onMistakes}:{date:string;viewerKey:string;rewardNote?:ReactNode;onPractice:()=>void;onMistakes:()=>void}){return <aside className="study-companion study-home-companion" aria-label="错题与课内练习"><section className="study-side-card"><span className="journal-eyebrow"><BookOpen size={15}/>错题回顾</span><h2>把没弄懂的，再想一想</h2><p>原题、作答和复测记录都留在这里。</p><button className="text-button" onClick={onMistakes}>打开我的错题本<ArrowRight size={16}/></button></section><section className="study-side-card journal-wish-pocket"><span className="journal-eyebrow"><Sprout size={15}/>15分钟小练习</span><h2>从课内错题出发</h2><p>打印题单，纸上做一做，再拍照交给小步。</p><button className="text-button" onClick={onPractice}>准备一份练习<ArrowRight size={16}/></button><p>每科每天最多攒 <StepAmount value={2}/>。</p>{rewardNote}</section></aside>;}
+type HomeStudyView = "grading" | "mistakes" | "practice" | "materials";
+
+export function HomeStudyTools({ grading, homeworkReward, onNavigate }: {
+  grading: HomeworkSnapshot["grading"];
+  homeworkReward: HomeworkSnapshot["homeworkReward"];
+  onNavigate: (view: HomeStudyView, focusFailures?: boolean) => void;
+}) {
+  const checked = grading && grading.correct + grading.wrong + grading.blank + grading.uncertain + grading.feedback;
+  const gradingNote = grading?.failed
+    ? `${grading.failed}页批改未完成${grading.pending ? ` · ${grading.pending}页待批改` : ""}`
+    : grading?.pending ? `${grading.pending}页待批改`
+    : grading?.finished ? `已批改${checked}题 · ${grading.wrong}道错题${grading.uncertain ? ` · ${grading.uncertain}题待确认` : ""}`
+    : "上传后自动批改";
+  const entries = [
+    { view: "grading", title: grading?.failed ? "查看未完成原因" : "查看批改", note: gradingNote,
+      Icon: grading?.failed ? CircleAlert : ClipboardList },
+    { view: "mistakes", title: "我的错题本", note: "回顾原题和复测记录", Icon: BookOpen },
+    { view: "practice", title: "15分钟小练习", note: "从课内错题出发", Icon: Pencil },
+    { view: "materials", title: "课程资料库", note: "查看教材和练习册", Icon: Archive },
+  ] as const;
+
+  return <section className="home-study-tools" aria-labelledby="home-study-title">
+    <h2 id="home-study-title">批改与练习</h2>
+    <div className="home-study-entries">
+      {entries.map(({ view, title, note, Icon }) => (view !== "grading" || grading?.enabled) &&
+        <button type="button" className={`home-study-entry home-study-${view}`} key={view}
+          aria-labelledby={`home-study-${view}-title`} aria-describedby={`home-study-${view}-note`}
+          onClick={() => onNavigate(view, view === "grading" && !!grading?.failed)}>
+          <span className="home-study-entry-title">
+            <Icon size={18} aria-hidden="true" />
+            <strong id={`home-study-${view}-title`}>{title}</strong>
+            <ArrowRight size={14} aria-hidden="true" />
+          </span>
+          <small id={`home-study-${view}-note`}>{note}</small>
+        </button>)}
+    </div>
+    <div className="home-study-rewards" aria-label="小脚步奖励">
+      <p><span>小练习每科每天最多攒</span> <StepAmount value={2} /></p>
+      {homeworkReward?.eligible && <p className="study-homework-reward" role="status">
+        <span>{homeworkReward.earned ? "作业完成奖励已到账" : "当天作业全部做完，攒"}</span>
+        <StepAmount value={homeworkReward.points} signed />
+      </p>}
+    </div>
+  </section>;
+}

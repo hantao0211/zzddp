@@ -64,13 +64,15 @@
 }
 .journal-garden-copy { min-width: 0; flex: 1; padding: 12px 0; }
 .journal-tape-label { position: absolute; right: 7px; top: 1px; transform: rotate(9deg); font-size: 11px; padding: 5px 12px; background: var(--journal-yellow); color: var(--ink); border-radius: 4px; z-index: 1; pointer-events: none; }
-/* Six characters per line: .8em small words and 1.4em key words balance both widths. */
+/* Both lines total 6.4em to keep their ends aligned. */
 .study-shell .journal-garden h2 { display: grid; gap: 7px; font-size: 25px; line-height: 1.2; margin: 11px 0 0; letter-spacing: 0; font-weight: 600; }
 .journal-motto-line { display: flex; align-items: baseline; white-space: nowrap; }
 .journal-motto-small { font-size: .8em; font-weight: 500; }
-.journal-motto-effort, .journal-motto-flower { font-size: 1.4em; }
+.journal-motto-effort { font-size: 1.4em; }
+.journal-motto-open { font-size: 1.1em; color: var(--journal-green); }
+.journal-motto-own { font-size: .9em; font-weight: 500; }
 .journal-motto-effort { color: #36804f; }
-.journal-motto-flower { color: var(--accent); }
+.journal-motto-flower { font-size: 1.5em; color: var(--accent); }
 @media screen and (prefers-color-scheme: dark) {
   .journal-motto-effort { color: #91cfa1; }
 }
@@ -78,7 +80,8 @@
 .journal-garden .study-next-step { margin: 12px 0 0; color: var(--muted); font-size: 13px; line-height: 1.7; }
 .journal-garden-decoration { display: block; width: var(--garden-width); height: var(--garden-height); position: relative; }
 .journal-flower { position: absolute; top: 3px; left: 0; width: 225px; height: 210px; transform: scale(var(--garden-scale)); transform-origin: top left; pointer-events: none; }
-.journal-flower > span { display: block; position: absolute; }
+.journal-flower > span, .journal-flower-stalk > span { display: block; position: absolute; }
+.journal-flower-stalk { inset: 0; transform-origin: 105px 115px; }
 .journal-ground { bottom: 14px; left: 12px; width: 192px; height: 24px; border-radius: 50%; background: #493a3d10; }
 .journal-stem { width: 3px; height: 100px; background: var(--journal-green); left: 113px; top: 35px; transform: rotate(7deg); border-radius: 3px; }
 .journal-petal { width: 33px; height: 46px; background: var(--journal-pink); border-radius: 75% 75% 65% 65%; left: 99px; top: 7px; transform-origin: 50% 100%; }
@@ -147,8 +150,6 @@
 .study-shell .hw-home-summary .status-indicator { font-size: 12px; padding: 3px 0; gap: 4px; }
 .study-shell .hw-home-summary .status-indicator svg { width: 16px; height: 16px; }
 .study-shell .study-row-upload { font-size: 12px; padding: 0; min-height: 36px; }
-.study-shell .study-homework-reward, .study-shell .study-homework-reward.earned { background: none; padding: 0; margin: 8px 0; color: var(--muted); font-size: 12px; }
-.study-shell .study-homework-reward > .reading-token { font-size: 12px; }
 .journal-list-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .study-shell .journal-expand-tasks { min-height: 44px; font-size: 13px; }
 .study-shell .study-completion-note { margin-top: 0; font-size: 12px; }
@@ -156,25 +157,69 @@
 .study-shell .hw-home-status { background: none; padding: 10px 0; margin-top: 4px; color: var(--muted); font-size: 13px; }
 .study-shell .hw-home-status .hw-status-question { font-size: 13px; }
 .study-shell .hw-status-question small { display: none; }
-.study-shell .hw-grading-overview { background: none; border: 0; border-top: 1px solid var(--border); border-radius: 0; padding: 10px 0 0; margin: 20px 0 0; display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
-.study-shell .hw-grading-overview p { font-size: 12px; margin: 0; }
-.study-shell .hw-grading-overview .text-button { font-size: 12px; min-height: 44px; }
 .study-shell .hw-details-link { background: none; border-radius: 0; justify-content: flex-start; padding: 8px 0; min-height: 44px; width: fit-content; color: var(--accent); font-size: 13px; }
 .study-shell .card { background: var(--journal-paper); border: 1px solid var(--border); border-radius: 15px; }
 .study-shell .hw-tabs > button { background: var(--journal-paper); }
 .study-shell .hw-tabs > button.selected { background: var(--journal-pink); color: var(--accent-dark); }
 
 /* Reading and rewards sit below the day's small plan. */
-.study-home-companion { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 16px; padding: 0; margin-top: 24px; }
+.home-study-tools { margin: 24px 0 0; padding: 16px 0 0; border-top: 1px solid var(--border); }
+.home-study-tools h2 { font-size: 17px; margin: 0 0 12px; }
+.home-study-entries { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.home-study-entry {
+  display: grid; align-content: start; gap: 6px; min-width: 0; min-height: 78px;
+  padding: 12px; border: 0; border-radius: 12px; text-align: left; color: var(--ink);
+  background: var(--entry-paper); font: inherit;
+}
+.home-study-grading { --entry-paper: var(--accent-soft); }
+.home-study-mistakes { --entry-paper: var(--journal-sage); }
+.home-study-practice { --entry-paper: var(--journal-lilac); }
+.home-study-materials { --entry-paper: var(--journal-yellow); }
+.home-study-entry-title { display: flex; align-items: center; gap: 6px; }
+.home-study-entry-title strong { flex: 1; min-width: 0; font-size: 14px; font-weight: 650; line-height: 1.4; }
+.home-study-entry-title svg { flex: none; color: var(--accent-dark); }
+.home-study-entry small { color: var(--muted); font-size: 12px; line-height: 1.5; }
+@media (hover: hover) and (pointer: fine) {
+  .home-study-entry:hover { box-shadow: inset 0 0 0 1px var(--accent); }
+}
+.home-study-rewards { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 22px; margin-top: 10px; }
+.home-study-rewards p { display: flex; align-items: center; flex-wrap: wrap; gap: 3px 6px; margin: 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.home-study-rewards .reading-token { gap: 4px; font-size: 16px; font-weight: 650; line-height: 20px; }
+.home-study-rewards .reading-token > svg { width: 16px; height: 16px; }
+.home-study-rewards .reading-token small { margin-left: 3px; font-size: 12px; font-weight: 400; }
+@media (max-width: 720px) {
+  .home-study-entries { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 359px) {
+  .home-study-entry { padding: 10px; }
+  .home-study-entry-title strong { font-size: 13px; }
+  .home-study-entry-title svg:last-child { display: none; }
+}
+
+@media screen and (prefers-reduced-motion: no-preference) {
+  .journal-flower-stalk { animation: journal-flower-sway 4.6s ease-in-out both; }
+  .reading-journal-heading .study-page-subtitle > svg {
+    --journal-icon-turn: -9deg; animation: journal-icon-nudge .85s ease-in-out both;
+  }
+  .growth-heading .reading-token > svg {
+    --journal-icon-lift: -2px; animation: journal-icon-nudge .85s ease-in-out both;
+  }
+  .mall-heading .study-page-subtitle > svg {
+    --journal-icon-scale: 1.13; animation: journal-icon-nudge .85s ease-in-out both;
+  }
+}
+@keyframes journal-flower-sway {
+  0%, 100% { transform: rotate(0); }
+  25% { transform: rotate(-3deg); }
+  68% { transform: rotate(2.5deg); }
+}
+@keyframes journal-icon-nudge {
+  0%, 100% { transform: none; }
+  48% { transform: translateY(var(--journal-icon-lift, 0)) rotate(var(--journal-icon-turn, 0deg)) scale(var(--journal-icon-scale, 1)); }
+}
+
 .study-side-card { position: relative; border-radius: 5px 19px 19px 19px; background: var(--journal-sage); padding: 19px; }
 .study-side-card::before { content: ""; position: absolute; left: 25px; top: -5px; width: 51px; height: 12px; transform: rotate(-8deg); background: #f2ddb2cc; pointer-events: none; }
-.study-home-companion .study-side-card h2 { margin: 12px 0 4px; font-size: 17px; font-weight: 550; }
-.study-home-companion .study-side-card p { font-size: 12px; color: var(--muted); margin: 0; line-height: 1.8; }
-.study-home-companion .study-side-card > .text-button { font-size: 13px; min-height: 44px; margin-top: 7px; padding: 9px 0; }
-.study-home-companion .journal-wish-pocket { background: transparent; padding: 14px 8px; align-self: center; border-radius: 0; }
-.study-home-companion .journal-wish-pocket::before { display: none; }
-.study-home-companion .journal-wish-pocket > p { margin-top: 6px; }
-.study-home-companion .journal-wish-pocket > .text-button { font-size: 12px; margin-top: 2px; }
 .study-side-card .text-button { color: var(--accent-dark); }
 .study-side-card .reading-token { font-size: 29px; font-weight: 600; }
 .study-side-card .reading-token small { font-size: 12px; font-weight: 400; }
@@ -266,15 +311,6 @@
   .study-shell .study-task-title > .study-edit-task { width: 27px; }
   .study-shell .hw-home-summary .status-indicator { font-size: 11px; }
   .study-shell .hw-home-summary .status-indicator svg { width: 15px; height: 15px; }
-  .study-home-companion { gap: 12px; margin-top: 20px; }
-  .study-home-companion .study-side-card { padding: 17px 14px; }
-  .study-home-companion .journal-wish-pocket { padding: 8px 2px; }
-  .study-home-companion .study-side-card h2 { font-size: 16px; }
-  .study-home-companion .study-side-card p { font-size: 11px; }
-  .study-home-companion .study-side-card > .text-button { font-size: 12px; }
-  .study-home-companion .journal-wish-pocket > .text-button { font-size: 11px; }
-  .study-home-companion .reading-token { font-size: 26px; gap: 5px; flex-wrap: wrap; white-space: normal; }
-  .study-home-companion .reading-token small { margin-left: 0; font-size: 11px; }
   .study-shell .reading-heading { padding: 5px 0 18px; gap: 12px; }
   .study-shell .reading-main .card { padding: 20px 16px; }
   .study-shell .reading-heading .reading-muted { font-size: 13px; }
@@ -299,8 +335,6 @@
   .study-shell .hw-summary-heading > div { gap: 5px; }
   .study-shell .hw-summary-receipts { font-size: 11px; gap: 9px; }
   .study-shell .study-task-title > .study-edit-task { width: 24px; }
-  .study-home-companion .study-side-card { padding: 17px 12px; }
-  .study-home-companion .journal-wish-pocket { padding: 8px 0; }
 }
 @media print {
   .study-workspace { margin: 0; min-height: 0; border: 0; background: var(--theme-surface, #fff); }

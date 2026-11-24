@@ -25,7 +25,7 @@ try {
  const card = page.locator('.study-homework-reward'); await card.waitFor(); assert.match(await card.innerText(), /当天作业全部做完/); assert.match(await card.innerText(), /\+1/);
  earned = true; await page.evaluate(() => window.dispatchEvent(new Event('xiaobu:homework-updated')));
  await card.filter({ hasText: '奖励已到账' }).waitFor();
- await page.locator('.study-home-companion .reading-token').filter({ hasText: '1' }).waitFor({ state: 'attached' });
+ await page.locator('.home-study-rewards .reading-token').filter({ hasText: '1' }).waitFor({ state: 'attached' });
  for (const viewport of [{ width: 320, height: 568 }, { width: 390, height: 844 }, { width: 768, height: 1024 }, { width: 1280, height: 900 }]) {
   await page.setViewportSize(viewport); assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
   await page.screenshot({ path: output + `/homework-credit-${viewport.width}.png` });

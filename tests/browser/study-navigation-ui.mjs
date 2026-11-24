@@ -8,6 +8,7 @@ const uuid='11111111-1111-4111-8111-111111111111',bookId='22222222-2222-4222-822
 let holdReads=false;const pendingReads=[];let documentRequests=0;
 const viewer={id:uuid,name:'模拟孩子',username:'synthetic-child',role:'child'};
 const reading={today:'2026-11-20',viewer,books:[{id:bookId,title:'模拟阅读书',author:'模拟作者',isbn:'',publisher:'',totalPages:100,catalogId:null,description:'',sourceUrl:null,createdAt:'2026-11-20T00:00:00Z',finished:false,minutes:20,uniquePages:12,logCount:1}],logs:[],rules:{dailyPoints:2,backfillCounts:false,milestones:[{days:3,points:3},{days:7,points:10}]},stats:{days:3,minutes:20,pages:12,currentStreak:3,bestStreak:3,booksFinished:0},growth:{balance:9,earned:9,ledger:[]},wishes:[],rewards:[],redemptions:[],calendar:[],reviewBudget:{used:0,limit:20},hasMore:false};
+const grading = { enabled:true, correct:76, wrong:12, blank:0, uncertain:29, feedback:13, finished:1, failed:0, pending:0, incomplete:0, tasks:{} };
 const task=(id,subject,title)=>({id,subject,title,requirement:'模拟练习要求',format:'written',coverage:'complete',memoEvidence:[],evidence:[],missing:[],reviewActivity:null,writtenCompletion:{status:'done',reason:'模拟题目均已填写',parts:[]}});
 const engine=process.env.SMOKE_BROWSER==='webkit'?webkit:chromium;
 const touch=process.env.SMOKE_TOUCH==='1';
@@ -19,7 +20,11 @@ try{const page=await browser.newPage({colorScheme:process.env.SMOKE_COLOR_SCHEME
   if(path.endsWith('/reading/state')){if(holdReads)await new Promise(resolve=>pendingReads.push(resolve));return json(reading);}
   if(path.endsWith('/homework-context'))return json({date:'2026-11-19',revision:1,hasMaterials:false,availableDates:[],pending:false,entries:[],uncertainties:[],familyNotes:[]});
   if(path.endsWith('/memories'))return json({items:[]});
-  if(path.endsWith('/learning/state')){const date=url.searchParams.get('date'),tasks=[task('math','数学','数学练习册 P32'),{...task('chinese','语文','语文预习'),format:'reading',writtenCompletion:null,reviewActivity:{status:'marked',reason:'模拟圈画'}},task('english','英语','英语抄写')];return json({date,status:'processed',pending:false,note:'模拟记录',dates:[date],quota:{calls:0,limit:60},reviewPolicy:{version:'review-traces-v1',description:'按痕迹判断'},writtenCompletionEnabled:true,uploads:['memo','homework'].map(kind=>({id:kind,date,kind,status:'processed',createdAt:'2026-11-20T00:00:00Z',subjects:['数学','语文','英语'],files:[{id:kind+'-file',stored:true,pages:[],name:'synthetic.jpg',size:100,mimeType:'image/jpeg'}],aiMs:0,issues:[],note:'模拟照片'})),report:{date,memoId:'memo',tasks:[...tasks,...Array.from({length:6},(_,i)=>task('extra-'+i,'英语','补充练习 '+(i+1)))],unclassified:[],unassigned:[],uncertainties:[],familyNotes:[],updatedAt:'2026-11-20T00:00:00Z'},grading:{enabled:true,pending:0,failed:0,pages:1,finished:1,incomplete:0,correct:8,wrong:2,blank:0,uncertain:0,feedback:0,tasks:{}}});}
+  if(path.endsWith('/learning/grading'))return json({summary:grading,batches:[]});
+  if(path.endsWith('/learning/mistakes'))return json({total:0,items:[]});
+  if(path.endsWith('/learning/practice/state'))return json({today:'2026-11-19',viewer,profile:null,subjects:[],items:[]});
+  if(path.endsWith('/learning/practice/materials'))return json({items:[]});
+  if(path.endsWith('/learning/state')){const date=url.searchParams.get('date'),tasks=[task('math','数学','数学练习册 P32'),{...task('chinese','语文','语文预习'),format:'reading',writtenCompletion:null,reviewActivity:{status:'marked',reason:'模拟圈画'}},task('english','英语','英语抄写')];return json({date,status:'processed',pending:false,note:'模拟记录',dates:[date],grading,homeworkReward:{eligible:true,earned:true,points:1},quota:{calls:0,limit:60},reviewPolicy:{version:'review-traces-v1',description:'按痕迹判断'},writtenCompletionEnabled:true,uploads:['memo','homework'].map(kind=>({id:kind,date,kind,status:'processed',createdAt:'2026-11-20T00:00:00Z',subjects:['数学','语文','英语'],files:[{id:kind+'-file',stored:true,pages:[],name:'synthetic.jpg',size:100,mimeType:'image/jpeg'}],aiMs:0,issues:[],note:'模拟照片'})),report:{date,memoId:'memo',tasks:[...tasks,...Array.from({length:6},(_,i)=>task('extra-'+i,'英语','补充练习 '+(i+1)))],unclassified:[],unassigned:[],uncertainties:[],familyNotes:[],updatedAt:'2026-11-20T00:00:00Z'},grading:{enabled:true,pending:0,failed:0,pages:1,finished:1,incomplete:0,correct:8,wrong:2,blank:0,uncertain:0,feedback:0,tasks:{}}});}
   throw Error('Unexpected synthetic endpoint '+path);
  });
  await page.goto(base+'/?studyDate=2026-11-19',{waitUntil:'networkidle'});await page.locator('.hw-home-summary tbody tr').first().waitFor();
@@ -77,7 +82,72 @@ try{const page=await browser.newPage({colorScheme:process.env.SMOKE_COLOR_SCHEME
  await decorate.click();await stickers.getByRole('button',{name:'选择花朵贴纸',exact:true}).click();
  await page.evaluate(()=>window.scrollTo({top:0,behavior:'instant'}));
  console.log('JOURNAL_OVERVIEW_UI_OK=true real-total-and-completed-counts,three-row-overview,expand-all-nine,status-dialog-for-extra-row,collapse,sticker-persistence');
- for(const width of [320,390,768,900,1280]){await page.setViewportSize({width,height:900});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));const quote=await garden.locator('h2').evaluate(el=>({height:el.getBoundingClientRect().height,lineHeight:parseFloat(getComputedStyle(el).lineHeight)}));assert.ok(quote.height<=quote.lineHeight*2+1,'Garden message keeps the reference two-line layout');assert.ok((await garden.boundingBox()).height>=150&&(await garden.boundingBox()).height<=214,'Full flower stays visible without a separate picker row');assert.ok((await page.locator('.hw-primary-actions').boundingBox()).y<410,'Uploads stay near the top');assert.ok((await overview.locator('tbody tr').first().boundingBox()).y<610,'Homework is visible without scrolling');await decorate.click();const pickerBox=await stickers.boundingBox();assert.ok(pickerBox.x>=0&&pickerBox.x+pickerBox.width<=width);await page.screenshot({path:output+`/home-picker-${width}.png`});await page.keyboard.press('Escape');await page.locator('.hw-simple-heading h1').click();const note=await page.locator('.study-home-companion').boundingBox(),summary=await overview.boundingBox();assert.ok(note.y>=summary.y+summary.height,'Reading and little steps belong BELOW the journal list');if(width>=900)assert.ok((await page.locator('.hw-main').boundingBox()).width<=880,'Desktop journal keeps the selected compact reading width');const nav=page.getByRole('navigation',{name:width>=900?'主要学习导航':'底部学习导航',exact:true});assert.ok(await nav.isVisible());assert.equal(await nav.getByRole('button',{name:'问问小步',exact:true}).count(),0);for(const control of await nav.locator('a,button').all()){const b=await control.boundingBox();assert.ok(b.width>=40&&b.height>=40);}assert.equal(await page.getByRole('button',{name:'问问小步',exact:true}).count(),1);await page.screenshot({path:output+`/home-${width}.png`,fullPage:true});}
+ for(const width of [320,390,768,900,1280]){await page.setViewportSize({width,height:900});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));const quote=await garden.locator('h2').evaluate(el=>({height:el.getBoundingClientRect().height,lineHeight:parseFloat(getComputedStyle(el).lineHeight)}));assert.ok(quote.height<=quote.lineHeight*2+1,'Garden message keeps the reference two-line layout');assert.ok((await garden.boundingBox()).height>=150&&(await garden.boundingBox()).height<=214,'Full flower stays visible without a separate picker row');assert.ok((await page.locator('.hw-primary-actions').boundingBox()).y<410,'Uploads stay near the top');assert.ok((await overview.locator('tbody tr').first().boundingBox()).y<610,'Homework is visible without scrolling');await decorate.click();const pickerBox=await stickers.boundingBox();assert.ok(pickerBox.x>=0&&pickerBox.x+pickerBox.width<=width);await page.screenshot({path:output+`/home-picker-${width}.png`});await page.keyboard.press('Escape');await page.locator('.hw-simple-heading h1').click();const note=await page.locator('.home-study-tools').boundingBox(),summary=await overview.boundingBox();assert.ok(note.y>=summary.y+summary.height,'Study tools are grouped directly below the homework list');if(width>=900)assert.ok((await page.locator('.hw-main').boundingBox()).width<=880,'Desktop journal keeps the selected compact reading width');const nav=page.getByRole('navigation',{name:width>=900?'主要学习导航':'底部学习导航',exact:true});assert.ok(await nav.isVisible());assert.equal(await nav.getByRole('button',{name:'问问小步',exact:true}).count(),0);for(const control of await nav.locator('a,button').all()){const b=await control.boundingBox();assert.ok(b.width>=40&&b.height>=40);}assert.equal(await page.getByRole('button',{name:'问问小步',exact:true}).count(),1);await page.screenshot({path:output+`/home-${width}.png`,fullPage:true});}
+ const tools = page.getByRole('region',{name:'批改与练习',exact:true});
+ const targets = [['查看批改','批改结果'],['我的错题本','错题本'],['15分钟小练习','课内小练习'],['课程资料库','课程资料库']];
+ const amounts = tools.locator('.home-study-rewards .reading-token');
+ await tools.getByText('已批改130题 · 12道错题 · 29题待确认',{exact:true}).waitFor();
+ for (const width of [320,390,720,1280]) {
+  await page.setViewportSize({width,height:844});
+  const tiles = await tools.locator('.home-study-entry').evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect().toJSON()));
+  assert.equal(tiles.length,4);
+  assert.ok(tiles.every(tile=>tile.height>=44&&tile.left>=0&&tile.right<=width));
+  assert.equal(new Set(tiles.map(tile=>tile.top)).size, width<=720?2:1);
+  const tokens=await amounts.evaluateAll(nodes=>nodes.map(node=>{
+   const style=getComputedStyle(node), icon=node.querySelector('svg').getBoundingClientRect();
+   return [style.fontSize,style.fontWeight,icon.width,getComputedStyle(node.querySelector('small')).fontSize];
+  }));
+  assert.deepEqual(tokens[0],tokens[1]);
+  const quote=await garden.locator('h2').evaluate(el=>[...el.querySelectorAll('.journal-motto-line')].map(line=>Math.round(line.scrollWidth-line.clientWidth)));
+  assert.ok(quote.every(overflow=>overflow<=1),'Motto lines fit the available width');
+  const ends=await garden.locator('.journal-motto-line').evaluateAll(lines=>lines.map(line=>line.lastElementChild.getBoundingClientRect().right));
+  assert.ok(Math.abs(ends[0]-ends[1])<3,'The two motto lines should end together');
+  const quoteSizes=await garden.locator('.journal-motto-line').last().locator('span').evaluateAll(parts=>parts.map(part=>[getComputedStyle(part).fontSize,getComputedStyle(part).color]));
+  assert.equal(new Set(quoteSizes.map(([size])=>size)).size,3);
+  assert.equal(new Set(quoteSizes.map(([,color])=>color)).size,3);
+ }
+ await page.setViewportSize({width:390,height:844});
+ for (const [button, region] of targets) {
+  assert.equal(await tools.getByRole('button',{name:button,exact:true}).count(),1);
+  await activate(tools.getByRole('button',{name:button,exact:true}));
+  await page.getByRole('region',{name:region,exact:true}).waitFor();
+  await page.getByRole('button',{name:'返回首页',exact:true}).click();
+ }
+ const stalk=page.locator('.journal-flower-stalk');
+ await page.emulateMedia({reducedMotion:'no-preference'});
+ const breeze=await stalk.evaluate(el=>{
+  const pot=el.parentElement.querySelector('.journal-pot');
+  const original=pot.getBoundingClientRect();
+  const wind=el.getAnimations()[0];
+  if(!wind)return null;
+  wind.pause(); wind.currentTime=0;
+  const start=getComputedStyle(el).transform;
+  wind.currentTime=1150;
+  const left=getComputedStyle(el).transform;
+  wind.currentTime=3128;
+  const right=getComputedStyle(el).transform;
+  const still=pot.getBoundingClientRect();
+  wind.play();
+  return {start,left,right,potStill:original.x===still.x&&original.y===still.y,iterations:wind.effect.getTiming().iterations};
+ });
+ assert.ok(breeze&&breeze.left!==breeze.start&&breeze.right!==breeze.left&&breeze.potStill&&breeze.iterations===1);
+ await page.emulateMedia({reducedMotion:'reduce'});
+ assert.equal(await stalk.evaluate(el=>getComputedStyle(el).animationName),'none');
+ const accents=[['课外阅读','reading-journal-heading .study-page-subtitle > svg'],['成长与奖励','growth-heading .reading-token > svg'],['心愿商城','mall-heading .study-page-subtitle > svg']];
+ const nav=page.getByRole('navigation',{name:'底部学习导航',exact:true});
+ for (const [label,selector] of accents) {
+  await activate(nav.getByLabel(label,{exact:true}));
+  const icon=page.locator('.'+selector);
+  await icon.waitFor();
+  assert.equal(await icon.evaluate(el=>getComputedStyle(el).animationName),'none');
+  await page.emulateMedia({reducedMotion:'no-preference'});
+  assert.equal(await icon.evaluate(el=>getComputedStyle(el).animationName),'journal-icon-nudge');
+  assert.equal(await icon.evaluate(el=>getComputedStyle(el).animationIterationCount),'1');
+  await page.emulateMedia({reducedMotion:'reduce'});
+ }
+ await activate(nav.getByRole('link',{name:'作业',exact:true}));
+ await page.emulateMedia({reducedMotion:'no-preference'});
+ console.log('HOME_STUDY_TOOLS_OK=true one-entry-per-feature,route-testing,two-mobile-columns,matching-rewards,aligned-three-size-motto,pot-still,four-tabs-reduced-motion');
  await page.setViewportSize({width:390,height:844});await page.evaluate(()=>window.__studyDocument='same-document');await activate(page.getByRole('link',{name:'课外阅读',exact:true}));assert.equal(await page.evaluate(()=>window.__studyDocument),'same-document');await page.getByLabel('正在读的书',{exact:true}).waitFor();assert.ok(page.url().includes('studyDate=2026-11-19'));await page.goto(base+'/reading/?view=manage&studyDate=2026-11-19',{waitUntil:'networkidle'});await page.getByLabel('正在读的书',{exact:true}).waitFor();assert.ok(!page.url().includes('view=manage'),'A child must return to reading from a stale parent settings URL');
  await page.getByLabel('开始页',{exact:true}).fill('13');await page.getByLabel('结束页',{exact:true}).fill('18');await page.getByLabel('时长（分钟）',{exact:true}).fill('17');await page.locator('#reading-summary').fill('我读到一个有趣的故事，还想再说说人物为什么这样做。');
  await page.getByRole('button',{name:'开始阅读计时',exact:true}).click();await activate(page.getByRole('button',{name:'成长与奖励',exact:true}));assert.ok(page.url().includes('view=growth'));await activate(page.getByRole('button',{name:'课外阅读',exact:true}));assert.equal(await page.locator('#reading-summary').inputValue(),'我读到一个有趣的故事，还想再说说人物为什么这样做。');assert.equal(await page.getByLabel('时长（分钟）',{exact:true}).inputValue(),'17');await page.getByRole('button',{name:'结束计时并计入',exact:true}).waitFor();assert.deepEqual(dialogs,[],'Same-page navigation must never discard a draft or trigger a leave warning');

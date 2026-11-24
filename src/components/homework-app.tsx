@@ -8,7 +8,7 @@ import { HomeworkDaySettings } from "./homework-day-settings";
 import { resolveHomeworkDayPlan } from "@/domain/homework-calendar";
 import { taskSubmission } from "@/domain/task-submission";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { BookOpen, Camera, ClipboardList, Download, FolderOpen, Heart, LoaderCircle, LogOut, RefreshCw, ShieldCheck, Sparkles, Sprout, Upload, X, MessageCircle, Pencil, CircleAlert, CalendarDays, Sun } from "lucide-react";
+import { BookOpen, Camera, ClipboardList, Download, FolderOpen, Heart, LoaderCircle, LogOut, RefreshCw, ShieldCheck, Sparkles, Sprout, Upload, X, MessageCircle, Pencil, CalendarDays, Sun } from "lucide-react";
 import type { HomeworkSnapshot, UploadView, UploadTarget } from "@/domain/homework";
 import { DaySchema, shanghaiDay } from "@/domain/homework";
 import { reviewActivityLabel, needsReviewTraceUpdate } from "@/domain/review-policy";
@@ -18,14 +18,13 @@ import { useStudyNavigation } from "./study-navigation";
 import { useStudyRefresh } from "./app-interactions";
 import { StudyShell } from "./study-shell";
 import { StudyHeadingDate, StudyPageHeading } from "./study-page-heading";
-import { HomeCompanion } from "./study-companion";
+import { HomeStudyTools } from "./study-companion";
 import { JournalGarden, useJournalDecoration } from "./journal-garden";
 import { FamilyNotes } from "./family-notes";
 import { StatusIndicator } from "./status-indicator";
 import { AccountLogin, useViewer, sessionChanged } from "./account-login";
 import { isParent, ROLE_LABELS } from "@/domain/accounts";
 import { writtenCompletionLabel } from "@/domain/written-completion";
-import { StepAmount } from "./growth-tokens";
 import { HomeworkPhoto } from "./homework-photo";
 import { PhotoPreviewButton } from "./photo-preview";
 import { pagePhotoUrl } from "@/services/homework-photo";
@@ -172,14 +171,12 @@ export function HomeworkApp({ onDemo, onDateChange, active=true }: { onDemo: () 
               </div>
             </div>
           </section>}
+          <HomeStudyTools grading={snapshot?.grading} homeworkReward={dayPlan.noHomework ? undefined : snapshot?.homeworkReward} onNavigate={showGrading} />
           <div className="hw-day-plan-line"><span>{snapshot && dayPlan.noHomework ? dayPlan.source === "date" ? "这一天设为无作业日" : "按每周安排休息" : ""}</span><button className="text-button" disabled={!snapshot || dayPlanBusy} onClick={() => { setDayPlanError(""); setDaySettingsOpen(true); }}><CalendarDays size={16} aria-hidden="true" />无作业日设置</button></div>
           {dayPlanError && !daySettingsOpen && <p className="error-text" role="alert">{dayPlanError}</p>}
-          <HomeCompanion onPractice={()=>showGrading("practice")} onMistakes={()=>showGrading("mistakes")} date={date} viewerKey={viewer?.id||"legacy"} rewardNote={!dayPlan.noHomework && snapshot?.homeworkReward?.eligible && <div className={`study-homework-reward ${snapshot.homeworkReward.earned ? "earned" : ""}`} role="status"><span>{snapshot.homeworkReward.earned ? "作业完成奖励已到账" : "当天作业全部做完，攒"}</span><StepAmount value={snapshot.homeworkReward.points} signed/></div>}/>
           {!!snapshot?.uploads.length && !(alreadyCovered&&snapshot?.grading?.enabled&&snapshot.grading.finished&&!snapshot.grading.pending&&!snapshot.grading.failed&&!homeStatus.help) && <div className={`hw-home-status ${homeStatus.help ? "hw-home-question" : ""}`} role="status">{homeStatus.help ? <button className="hw-status-question" aria-label="和小步说说" onClick={askAboutDay}><MessageCircle size={23} /><span>{homeStatus.text}<small>点这里，和小步说说</small></span></button> : <>{homeStatus.busy ? <LoaderCircle size={23} className="spin" /> : <Sparkles size={23} />}<p>{homeStatus.text}</p></>}</div>}
-          {snapshot?.grading?.enabled && <div className="hw-grading-overview">{summary && <p>{snapshot.grading.pending ? `还有${snapshot.grading.pending}页待批改，可在批改结果查看进度。` : snapshot.grading.failed ? "有作业批改未完成，可查看原因并重试。" : snapshot.grading.finished ? `已批改${snapshot.grading.correct + snapshot.grading.wrong + snapshot.grading.blank + snapshot.grading.uncertain + snapshot.grading.feedback}题 · ${snapshot.grading.wrong}道错题${snapshot.grading.uncertain ? ` · ${snapshot.grading.uncertain}题尚未确认` : ""}` : "书面作业上传后会自动批改。"}</p>}<div>{summary && <button className="text-button" onClick={() => showGrading("grading", !!snapshot.grading?.failed)}>{snapshot.grading.failed ? <CircleAlert size={17} aria-hidden="true" /> : <ClipboardList size={17} aria-hidden="true" />}{snapshot.grading.failed ? "查看未完成原因" : "查看批改"}</button>}<button className="text-button" onClick={() => showGrading("mistakes")}><BookOpen size={17} aria-hidden="true" />我的错题本</button></div></div>}
           {(!summary || !summary.rows.length) && <button className="hw-details-link" onClick={() => showDetails(true)}><FolderOpen size={18} />查看详情</button>}
           </div></div>
-          <div className="practice-home-links"><button className="text-button" onClick={() => showGrading("practice")}><Pencil size={18}/>15分钟小练习</button><button className="text-button" onClick={() => showGrading("materials")}><BookOpen size={18}/>课程资料库</button></div>
         </section> : <section className="hw-details-page" aria-label="作业详情">
           <div className="hw-details-heading"><button className="button secondary" onClick={() => showDetails(false)}>返回首页</button><label className="hw-date">作业日期<input type="date" value={date} onChange={(e) => { if (e.target.value) { setDate(e.target.value); setDetailId(null); setMemoEdit(null); setRowStatusId(null); } }} /></label></div>
         <nav className="hw-tabs" aria-label="学习资料导航"><button className={tab === "today" ? "selected" : ""} onClick={() => setTab("today")}><ClipboardList size={19} /> 作业清单</button>{snapshot?.grading?.enabled && <><button className={tab === "grading" ? "selected" : ""} onClick={() => setTab("grading")}>批改结果</button><button className={tab === "mistakes" ? "selected" : ""} onClick={() => setTab("mistakes")}>错题本</button></>}<button className={tab === "archive" ? "selected" : ""} onClick={() => setTab("archive")}><FolderOpen size={19} /> 历史资料</button><button className={tab === "practice" ? "selected" : ""} onClick={() => setTab("practice")}>小练习</button><button className={tab === "materials" ? "selected" : ""} onClick={() => setTab("materials")}>课程资料库</button><button className="hw-refresh" onClick={() => void refresh()} aria-label="刷新作业状态"><RefreshCw size={18} /></button></nav>
