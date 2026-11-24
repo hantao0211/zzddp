@@ -135,14 +135,23 @@ function FlowerSpeech({ progress, remindUpload, onReminderSpeech }: {
     if (reading !== undefined) lines.push(reading ? "今天读过书啦！" : "还没阅读打卡哟，\n一起读几页吧！");
     return [...lines, "慢慢来，加油！", "试一试，你可以！", "嘻嘻！", "哈哈！"];
   }, [completed, earned, reading]);
-  const nextPhrase = useRef(0);
+  const spoken = useRef(new Set<string>());
+  const lastPhrase = useRef("");
   const reminderBeat = useRef(0);
-  useEffect(() => { nextPhrase.current = 0; }, [phrases]);
   useEffect(() => { reminderBeat.current = 0; }, [remindUpload]);
   const play = useCallback((bubble: HTMLSpanElement) => {
     const remind = remindUpload && reminderBeat.current === 0;
-    const phrase = remind ? uploadReminder : phrases[nextPhrase.current];
-    if (!remind) nextPhrase.current = (nextPhrase.current + 1) % phrases.length;
+    let phrase = uploadReminder;
+    if (!remind) {
+      let choices = phrases.filter(line => !spoken.current.has(line));
+      if (choices.length === 0) {
+        spoken.current.clear();
+        choices = phrases.filter(line => line !== lastPhrase.current);
+      }
+      phrase = choices[Math.floor(Math.random() * choices.length)];
+      spoken.current.add(phrase);
+      lastPhrase.current = phrase;
+    }
     if (remindUpload) reminderBeat.current = (reminderBeat.current + 1) % 4;
     bubble.textContent = phrase;
     bubble.toggleAttribute("data-multiline", phrase.includes("\n"));
