@@ -54,7 +54,7 @@ test("mistakes inherit their exact source, while question edits and other assign
   const f = setup();
   try {
     const date = f.store.today();
-    const ids = ["old1", "old2", "old3", "fresh", "neighbor"].map(() => f.seed("数学", "模拟旧标题"));
+    const ids = ["old1", "old2", "old3", "fresh", "neighbor"].map(() => f.seed("数学", "已上传作业"));
     const upload = f.homework.begin({ date, kind: "homework", scope: "extracurricular",
       files: [{ name: "模拟课外.jpg", size: 12, sha256: "b".repeat(64) }] });
     f.homework.setPages(upload.files[0].id, [{ id: "fresh-page", file_id: upload.files[0].id, number: 1 }]);
@@ -77,8 +77,33 @@ test("mistakes inherit their exact source, while question edits and other assign
     assert.deepEqual(getScopes(), ["curricular", "curricular", "curricular", "extracurricular", "extracurricular"]);
     f.store.classify(ids[0], "extracurricular", parent);
     assert.deepEqual(getScopes(), ["extracurricular", "curricular", "curricular", "extracurricular", "extracurricular"]);
+    const items = new PracticeHTTP(f.store).mistakes("数学", "extracurricular", 0).items;
+    const corrected = items.find(item => item.id === ids[0])!;
+    assert.equal(corrected.scopeSource, undefined, "Manual classification stays independent of the source assignment");
+    assert.deepEqual(corrected.provenance, { kind: "assignment", title: "原作业" });
+    assert.equal(corrected.pageId, "old-page");
+    assert.deepEqual(items.find(item => item.id === ids[3])?.provenance, { kind: "unmatched", title: undefined });
     assert.deepEqual(new Set(f.store.selectSources("数学").map(item => item.id)), new Set(ids.slice(1, 3)));
     assert.deepEqual(f.homework.db.prepare("SELECT count(*) AS n FROM jobs").get(), numberOfJobs);
+  } finally { f.close(); }
+});
+
+test("mistake provenance can recover a unique named assignment from historical grading", () => {
+  const f = setup();
+  try {
+    const id = f.seed("数学", "已上传作业");
+    const date = f.store.today();
+    const addRun = (runId: string, taskId: string, title: string) => {
+      f.homework.db.prepare(`INSERT INTO grading_runs(id,date,primary_page_id,source,active,status,created_at,updated_at)
+        VALUES(?,?,?,?,0,'done',?,?)`).run(runId, date, "synthetic-page",
+          JSON.stringify({ subject: "数学", assigned: true, title, taskIds: [taskId] }), date, date);
+      f.homework.db.prepare("INSERT INTO grading_occurrences VALUES(?,?,?)").run(id, runId, "q1");
+    };
+    const http = new PracticeHTTP(f.store);
+    addRun("old-one", "old-task", "模拟校本练习");
+    assert.deepEqual(http.mistakes("数学", undefined, 0).items[0].provenance, { kind: "assignment", title: "模拟校本练习" });
+    addRun("old-two", "another-task", "模拟另一项练习");
+    assert.deepEqual(http.mistakes("数学", undefined, 0).items[0].provenance, { kind: "unmatched", title: undefined });
   } finally { f.close(); }
 });
 function fakeAI(mode:"correct"|"wrong"|"uncertain"|"blank"="correct"){const calls:string[]=[];let passes=0;const ai:StructuredAI={async run(task,schema,metadata:any){calls.push(task);if(task==="generate_practice")return schema.parse({title:"模拟15分钟练习",subject:metadata.subject,questions:[1,2,3].map(n=>({id:"q"+n,sourceMistakeIds:[metadata.mistakes[0].id],knowledgePoint:"整数加法",question:`${n}+0等于几？`,answer:String(n),explanation:"加0不变。",estimatedMinutes:5}))});if(task==="verify_practice")return schema.parse({approved:true,checks:metadata.candidate.questions.map((q:any)=>({questionId:q.id,correct:true,reason:"已独立计算。"}))});if(task==="grade_practice"){passes++;return schema.parse({scopeComplete:true,note:"",answers:metadata.questions.map((q:any,i:number)=>({questionId:q.id,studentAnswer:mode==="blank"?"":String(mode==="wrong"&&i===0?8:mode==="uncertain"&&passes%2===0&&i===0?9:i+1),expectedAnswer:String(i+1),verdict:mode==="blank"?"blank":mode==="wrong"&&i===0?"wrong":"correct",confidence:"high",explanation:"模拟解答依据。",evidenceIds:[metadata.pages[0]]}))});}throw Error("Unexpected AI task "+task);}};return{ai,calls};}

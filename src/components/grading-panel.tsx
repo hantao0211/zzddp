@@ -31,11 +31,11 @@ function Photo({ id, url }: { id: string; url?: string }) {
     </>}
   </div>;
 }
-function QuestionCard({ question, date, subject, title, pageId, imageUrl }: { question: GradedQuestion; date: string; subject: string; title: string; pageId: string; imageUrl?: string }) {
+function QuestionCard({ question, date, subject, title, pageId, imageUrl }: { question: GradedQuestion; date: string; subject: string; title?: string; pageId: string; imageUrl?: string }) {
   const q = gradingDisplayQuestion(question);
   return <article className={`grade-question grade-verdict-${q.verdict}`}>
     <div className="grade-question-heading"><h3>{q.label}</h3><StatusIndicator kind={q.verdict} className="grade-verdict-badge">{verdicts[q.verdict]}</StatusIndicator></div>
-    <p className="grade-source">{date} · {subject} · {title}</p><p className="grade-stem">{q.question}</p>
+    <p className="grade-source">{date} · {subject}{title && ` · ${title}`}</p><p className="grade-stem">{q.question}</p>
     <dl className="grade-answers"><div><dt><PencilLine aria-hidden="true" />{q.verdict === "uncertain" ? "作答待辨清" : "识别到的作答"}</dt><dd>{q.studentAnswer || "未填写或未识别清楚"}</dd></div>{q.expectedAnswer && q.verdict !== "uncertain" && <div><dt><Lightbulb aria-hidden="true" />{q.verdict === "feedback" ? "参考思路" : "参考答案"}</dt><dd>{q.expectedAnswer}</dd></div>}</dl>
     {q.verdict === "correct" ? <details className="grade-explanation"><summary><Lightbulb size={17} aria-hidden="true" />查看解题思路</summary><p>{q.explanation}</p>{!!q.knowledgePoints.length && <p className="grade-source">知识点：{q.knowledgePoints.join("、")}</p>}</details> : <p>{q.explanation}</p>}
     {q.verdict === "wrong" && <div className="grade-cause"><strong>可能的错因 · {q.cause}</strong><p>{q.causeExplanation || "仅凭这一次作答还不能确定原因。"}</p>{q.nextStep && <><strong>下一步怎么做</strong><p>{q.nextStep}</p></>}</div>}
@@ -77,6 +77,13 @@ export function GradingPanel({ date, canManage = true, focusFailures = false }: 
   </section>;
 }
 type MistakePage = { total: number; items: MistakeView[] };
+function mistakeSourceLabel(item: MistakeView) {
+  const source = item.provenance;
+  if (source?.kind === "assignment") return `来自作业 · ${source.title}`;
+  if (source?.kind === "practice") return `来自小练习 · ${source.title}`;
+  if (item.origin === "practice") return `来自小练习 · ${item.title}`;
+  return source?.title ? `未匹配作业 · ${source.title}` : "未匹配具体作业";
+}
 type MistakeFilters = { subject: PracticeSubject | ""; scope: LearningScope | "" };
 
 function readMistakes(filters: MistakeFilters, offset: number, signal: AbortSignal) {
@@ -130,7 +137,8 @@ function MistakeScopeEditor({ item, close, saved }: {
     </header>
     <form className="reading-dialog-body" onSubmit={event => { event.preventDefault(); void save(); }}>
       <p><strong>{item.question.label}</strong></p>
-      <p className="reading-muted">{item.date} · {item.subject} · {item.title}</p>
+      <p className="mistake-origin">{mistakeSourceLabel(item)}</p>
+      <p className="reading-muted">{item.date} · {item.subject}</p>
       <label>本题归属
         <select value={scope} disabled={busy} onChange={event => setScope(LearningScopeSchema.parse(event.target.value))}>
           {LearningScopeSchema.options.map(value => <option key={value} value={value}>{scopeLabels[value]}</option>)}
@@ -229,13 +237,13 @@ export function MistakeBook({ canManage = false }: { canManage?: boolean }) {
     {data?.items.map(item => <section className="mistake-entry" key={item.id}>
       <div className="mistake-scope">
         <strong>{scopeLabels[item.scope || "unknown"]}</strong>
-        <span>{item.origin === "practice" ? "来自小练习" : "来自作业"}</span>
+        <span className="mistake-origin">{mistakeSourceLabel(item)}</span>
         {canManage && <button type="button" className="text-button" onClick={() => setEditing(item)}>
           <PencilLine size={16} aria-hidden="true" />更改本题归属
         </button>}
       </div>
       {item.retest && <p className="mistake-retest">复测{item.retest.rounds}轮 · 已判定{item.retest.attempts}题 · 通过率{item.retest.passRate === null ? "暂无" : `${item.retest.passRate}%`}{item.retest.uncertain ? ` · ${item.retest.uncertain}题待确认` : ""}{item.retest.blank ? ` · ${item.retest.blank}题未作答` : ""}{item.retest.lastDate ? ` · 最近${item.retest.lastDate}` : ""}。通过率只统计已确认的对错。</p>}
-      <QuestionCard question={item.question} date={item.date} subject={item.subject} title={item.title} pageId={item.pageId} imageUrl={item.imageUrl} />
+      <QuestionCard question={item.question} date={item.date} subject={item.subject} pageId={item.pageId} imageUrl={item.imageUrl} />
     </section>)}
     {data && data.items.length < data.total && <button type="button" className="button secondary" disabled={loadingMore} onClick={() => void loadMore()}>
       {loadingMore ? "正在读取…" : "查看更多错题"}

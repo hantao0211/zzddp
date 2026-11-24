@@ -54,7 +54,7 @@ export class PracticeStore{
     const weight = practiceWeight({ occurrences: row.occurrences, lastDate: row.last_date, stats }, this.today());
     out.push({ id: row.id, subject: row.subject, title: row.title, question: question.question,
       answer: question.expectedAnswer, knowledgePoints: question.knowledgePoints ?? [], occurrences: row.occurrences,
-      lastDate: row.last_date, scope, scopeSource, stats, weight, origin: "homework" });
+      lastDate: row.last_date, scope, scopeSource, assignmentTitle: task?.title, stats, weight, origin: "homework" });
   }
   const reviews = this.db.prepare("SELECT * FROM practice_mistakes WHERE active=1 ORDER BY date DESC LIMIT 500")
     .all() as { id: string; subject: PracticeSubject; question: string; answer: string; knowledge: string; date: string; scope: LearningScope }[];

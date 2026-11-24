@@ -2,8 +2,8 @@ import {z} from "zod";
 import {createReadStream} from "node:fs";
 import type {IncomingMessage,ServerResponse} from "node:http";
 import {isParent,type Viewer} from "../../domain/accounts";
-import {PracticeSubjectSchema,LearningScopeSchema,type PracticePaper,type LearningScope,type PracticeSubject} from "../../domain/practice";
-import type {MistakeView,GradedQuestion} from "../../domain/grading";
+import {PracticeSubjectSchema,LearningScopeSchema,type PracticePaper,type LearningScope,type PracticeSubject,type PracticeCandidate} from "../../domain/practice";
+import type {MistakeView,MistakeProvenance,GradedQuestion} from "../../domain/grading";
 import {studentProfile} from "../reading/student-profile";
 import {HomeworkError} from "../homework/store";
 import {PracticeStore} from "./store";
@@ -11,14 +11,67 @@ import {CurriculumStore} from "./materials";
 import {practiceDocument} from "./document";
 const send=(res:ServerResponse,value:unknown)=>{res.writeHead(200,{"Content-Type":"application/json; charset=utf-8"});res.end(JSON.stringify(value));};
 async function body(request:IncomingMessage){if(request.headers["content-type"]?.split(";")[0]!=="application/json")throw new HomeworkError(415,"请求格式无效。");const parts:Buffer[]=[];let total=0;for await(const p of request){total+=p.length;if(total>8600000)throw new HomeworkError(413,"答卷图片太大，请压缩或分开上传。");parts.push(p);}try{return JSON.parse(Buffer.concat(parts).toString("utf8"));}catch{throw new HomeworkError(400,"资料信息不完整，请重试。");}}
+function namedSource(title?: string): title is string {
+  const name = title?.trim();
+  return !!name && !["已上传作业", "作业照片／扫描件", "作业"].includes(name);
+}
+
 export class PracticeHTTP{
  readonly materials:CurriculumStore;
  constructor(readonly store:PracticeStore){this.materials=new CurriculumStore(store);}
- mistakes(subject:PracticeSubject|undefined,scope:LearningScope|undefined,offset:number){const items=this.store.candidates(subject).filter(c=>!scope||c.scope===scope).sort((a,b)=>b.lastDate.localeCompare(a.lastDate));return{total:items.length,items:items.slice(offset,offset+30).map(c=>{let question:GradedQuestion,pageId="",date=c.lastDate,imageUrl:string|undefined;
- if(c.origin==="homework"){const r=this.store.db.prepare("SELECT payload,page_id,first_date FROM grading_mistakes WHERE id=?").get(c.id) as {payload:string;page_id:string;first_date:string};question=JSON.parse(r.payload);pageId=r.page_id;date=r.first_date;}
- else{const r=this.store.db.prepare("SELECT * FROM practice_mistakes WHERE id=?").get(c.id) as {practice_id:string;question_id:string};const result=this.store.db.prepare("SELECT result FROM practice_results WHERE practice_id=? AND question_id=?").get(r.practice_id,r.question_id) as {result:string};const answer=JSON.parse(result.result);pageId=answer.evidenceIds?.[0]||"";imageUrl=pageId?"/assistant-api/learning/practice/photos/"+pageId:undefined;question={id:c.id,kind:"objective",label:"小练习复测题",question:c.question,studentAnswer:answer.studentAnswer,expectedAnswer:c.answer,verdict:"wrong",confidence:"high",explanation:answer.explanation,knowledgePoints:c.knowledgePoints,cause:"原因待确认",causeExplanation:"",nextStep:"先订正这道题，之后用变式练习再核对。",evidence:pageId?[{fileId:pageId,page:null,excerpt:"小练习答卷"}]:[],sourcePartLabels:[],verification:"agreed"};}
- return{id:c.id,date,lastDate:c.lastDate,subject:c.subject,title:c.title,pageId,occurrences:c.occurrences,question,scope:c.scope,scopeSource:c.scopeSource,retest:c.stats,origin:c.origin,imageUrl} satisfies MistakeView;
- })};}
+ private homeworkProvenance(item: PracticeCandidate, pageId: string, date: string): MistakeProvenance {
+  if (namedSource(item.assignmentTitle)) return { kind: "assignment", title: item.assignmentTitle.trim() };
+  // A named historical assignment is still useful after the daily checklist changes.
+  const runs = this.store.db.prepare(`SELECT r.source FROM grading_occurrences o
+    JOIN grading_runs r ON r.id=o.run_id
+    WHERE o.mistake_id=? AND r.primary_page_id=? AND r.date=? AND r.status='done'`)
+    .all(item.id, pageId, date) as { source: string }[];
+  const assignments = new Map<string, string>();
+  for (const row of runs) {
+    const source = JSON.parse(row.source) as { taskIds?: string[]; assigned?: boolean; subject?: string; title?: string };
+    if (source.assigned && source.subject === item.subject && source.taskIds?.length === 1 && namedSource(source.title)) {
+      assignments.set(source.taskIds[0], source.title.trim());
+    }
+  }
+  if (assignments.size === 1) return { kind: "assignment", title: [...assignments.values()][0] };
+  return { kind: "unmatched", title: namedSource(item.title) ? item.title.trim() : undefined };
+ }
+
+ mistakes(subject: PracticeSubject | undefined, scope: LearningScope | undefined, offset: number) {
+  const items = this.store.candidates(subject)
+    .filter(item => !scope || item.scope === scope)
+    .sort((a, b) => b.lastDate.localeCompare(a.lastDate));
+  return { total: items.length, items: items.slice(offset, offset + 30).map(item => this.mistakeView(item)) };
+ }
+
+ private mistakeView(item: PracticeCandidate): MistakeView {
+  const base = {
+    id: item.id, subject: item.subject, title: item.title, lastDate: item.lastDate, occurrences: item.occurrences,
+    scope: item.scope, scopeSource: item.scopeSource, retest: item.stats, origin: item.origin,
+  };
+  if (item.origin === "homework") {
+    const row = this.store.db.prepare("SELECT payload,page_id,first_date FROM grading_mistakes WHERE id=?")
+      .get(item.id) as { payload: string; page_id: string; first_date: string };
+    return { ...base, date: row.first_date, pageId: row.page_id, question: JSON.parse(row.payload),
+      provenance: this.homeworkProvenance(item, row.page_id, row.first_date) };
+  }
+
+  const row = this.store.db.prepare(`SELECT r.result,t.paper FROM practice_mistakes m
+    JOIN practice_results r ON r.practice_id=m.practice_id AND r.question_id=m.question_id
+    JOIN practice_tasks t ON t.id=m.practice_id WHERE m.id=?`).get(item.id) as { result: string; paper: string | null };
+  const answer = JSON.parse(row.result);
+  const pageId = answer.evidenceIds?.[0] || "";
+  const title = row.paper ? (JSON.parse(row.paper) as PracticePaper).title : item.title;
+  const question: GradedQuestion = {
+    id: item.id, kind: "objective", label: "小练习复测题", question: item.question, studentAnswer: answer.studentAnswer,
+    expectedAnswer: item.answer, verdict: "wrong", confidence: "high", explanation: answer.explanation,
+    knowledgePoints: item.knowledgePoints, cause: "原因待确认", causeExplanation: "", nextStep: "先订正这道题，之后用变式练习再核对。",
+    evidence: pageId ? [{ fileId: pageId, page: null, excerpt: "小练习答卷" }] : [], sourcePartLabels: [], verification: "agreed",
+  };
+  return { ...base, date: item.lastDate, pageId, imageUrl: pageId ? "/assistant-api/learning/practice/photos/" + pageId : undefined,
+    question, provenance: { kind: "practice", title } };
+ }
+
  async handle(req:IncomingMessage,res:ServerResponse,viewer:Viewer){const url=new URL(req.url!,"http://internal"),path=url.pathname.replace("/assistant-api/learning/practice","");try{
  if (path === "/state" && req.method === "GET") {
   const today = this.store.today();
