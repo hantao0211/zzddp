@@ -12,45 +12,80 @@ const stickers = [
 ] as const;
 export type JournalSticker = typeof stickers[number]["id"];
 
-const expressions = ["wink", "laugh", "surprised"] as const;
+const expressions = ["wink", "laugh"] as const;
 
-// Matching curve segments let the eyes and mouth move continuously between poses.
-const faces = {
-  smile: {
-    eyes: "M17 35 Q21 28 26 28 Q31 28 35 35 M53 35 Q57 28 62 28 Q67 28 71 35",
-    mouth: "M23 53 Q33 59 44 59 Q55 59 65 53 Q59 65 44 65 Q29 65 23 53 Z",
-  },
-  wink: {
-    eyes: "M17 34 Q21 36 26 36 Q31 36 35 34 M53 34 Q57 26 62 26 Q67 26 71 34",
-    mouth: "M23 54 Q33 59 44 59 Q55 59 65 50 Q59 65 44 65 Q29 65 23 54 Z",
-  },
-  laugh: {
-    eyes: "M16 34 Q20 24 26 24 Q32 24 36 34 M52 34 Q56 24 62 24 Q68 24 72 34",
-    mouth: "M23 51 Q34 53 44 53 Q54 53 65 51 Q61 69 44 69 Q27 69 23 51 Z",
-  },
-  surprised: {
-    eyes: "M18 29 Q21 22 26 22 Q31 22 34 29 M54 29 Q57 22 62 22 Q67 22 70 29",
-    mouth: "M34 57 Q34 48 44 48 Q54 48 54 57 Q54 66 44 66 Q34 66 34 57 Z",
-  },
+// The mouth and its tongue share one animated silhouette.
+const mouths = {
+  smile: "M36 54 Q36 52 38 53 Q44 56 50 53 Q52 52 52 54 Q51 64 44 64 Q37 64 36 54 Z",
+  wink: "M36 55 Q36 53 38 54 Q44 56 50 51 Q52 50 52 53 Q51 63 44 63 Q38 63 36 55 Z",
+  laugh: "M34 53 Q34 51 37 52 Q44 54 51 52 Q54 51 54 53 Q53 67 44 67 Q35 67 34 53 Z",
 } as const;
 
-// Eye reaction first, then the mouth. Hold a surprised look longer than a wink.
+// The eyes lead each expression and the smile follows.
 const expressionTiming = {
-  wink: { eyes: [360, "0;.02;.25;.44;1"], mouth: [665, "0;.08;.31;.48;1"] },
+  wink: { eyes: [640, "0;.02;.23;.57;1"], mouth: [760, "0;.08;.31;.54;1"] },
   laugh: { eyes: [1050, "0;.02;.34;.57;1"], mouth: [1505, "0;.06;.38;.60;1"] },
-  surprised: { eyes: [950, "0;.02;.16;.64;1"], mouth: [1160, "0;.095;.24;.67;1"] },
 } as const;
+
+const faceEasing = "0 0 1 1;.2 0 .35 1;0 0 1 1;.35 0 .55 1";
+type Expression = typeof expressions[number];
+
+function FaceOpacity({ pose, from, to }: { pose: Expression; from: number; to: number }) {
+  const [duration, times] = expressionTiming[pose].eyes;
+  return <animate attributeName="opacity" data-pose={pose} begin="indefinite" dur={duration + "ms"}
+    calcMode="spline" keyTimes={times} keySplines={faceEasing} values={[from, from, to, to, from].join(";")} />;
+}
+
+function FlowerEye({ right = false }: { right?: boolean }) {
+  const gestures = right ? expressions : (["laugh"] as const);
+  return <g transform={right ? "translate(60 41) scale(-1 1)" : "translate(28 41)"}>
+    <path d="M-6 -15 Q-2 -18 2 -16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    <g data-feature="eye">
+      {gestures.map(pose => <FaceOpacity key={pose} pose={pose} from={1} to={0} />)}
+      {gestures.map(pose => <animateTransform key={pose} data-pose={pose} attributeName="transform"
+        type="scale" begin="indefinite" dur={expressionTiming[pose].eyes[0] + "ms"}
+        calcMode="spline" keyTimes={expressionTiming[pose].eyes[1]} keySplines={faceEasing}
+        values={"1 1;1 1;1 .18;1 .18;1 1"} />)}
+      <ellipse cx="-1" cy="0" rx="7.8" ry="8" fill="#fff9ed" />
+      <ellipse cx="0.9" cy="0" rx="6.2" ry="7.6" fill="currentColor" />
+      <path d="M-11 -4 Q-11 -1 -8 0 Q-5 -10 2 -7 Q6 -6 7 -2" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <circle cx="-0.3" cy="-2.8" r="2.45" fill="#fffdf7" />
+      <circle cx="3" cy="2.9" r="1.15" fill="#fffdf7" />
+    </g>
+    {gestures.map(pose => <path key={pose} data-eyelid={pose} opacity="0" fill="none" stroke="currentColor"
+      strokeWidth={pose === "laugh" ? 3.2 : 2.2} strokeLinecap="round" strokeLinejoin="round"
+      d={pose === "laugh" ? "M-8 4 Q-5 -4 0 -4 Q5 -4 8 3" : "M-8 -4 Q1 -4 8 3 Q0 -1 -8 3"}>
+      <FaceOpacity pose={pose} from={0} to={1} />
+    </path>)}
+  </g>;
+}
 
 function FlowerFace() {
-  return <svg className="journal-flower-face" viewBox="0 0 88 82" aria-hidden="true" focusable="false"
-    fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-    {(["eyes", "mouth"] as const).map(part => <path key={part} d={faces.smile[part]}
-      fill={part === "mouth" ? "currentColor" : "none"} stroke={part === "eyes" ? "currentColor" : "none"}>
-      {expressions.map(pose => <animate key={pose} data-pose={pose} attributeName="d" begin="indefinite"
-        dur={expressionTiming[pose][part][0] + "ms"} calcMode="spline" keyTimes={expressionTiming[pose][part][1]}
-        keySplines="0 0 1 1;.2 0 .35 1;0 0 1 1;.35 0 .55 1"
-        values={[faces.smile[part], faces.smile[part], faces[pose][part], faces[pose][part], faces.smile[part]].join(";")} />)}
-    </path>)}
+  const mouthClip = useId();
+  return <svg className="journal-flower-face" viewBox="0 0 88 82" aria-hidden="true" focusable="false">
+    <defs>
+      <clipPath id={mouthClip}>
+        <path data-feature="mouth" d={mouths.smile}>
+          {expressions.map(pose => <animate key={pose} data-pose={pose} attributeName="d" begin="indefinite"
+            dur={expressionTiming[pose].mouth[0] + "ms"} calcMode="spline" keyTimes={expressionTiming[pose].mouth[1]}
+            keySplines={faceEasing} values={[mouths.smile, mouths.smile, mouths[pose], mouths[pose], mouths.smile].join(";")} />)}
+        </path>
+      </clipPath>
+    </defs>
+    <FlowerEye /><FlowerEye right />
+    {[21, 67].map(x => <g key={x} transform={`translate(${x} 55) rotate(-6)`}>
+      <ellipse rx="7.2" ry="3.4" fill="#f5a49a">
+        {expressions.map(pose => <FaceOpacity key={pose} pose={pose} from={1} to={0.15} />)}
+      </ellipse>
+      <path d="M-5 2l2-4 M-.5 2l2-4 M4 2l2-4" fill="none" stroke="#ef7f8a" strokeWidth="1.5" strokeLinecap="round" opacity="0">
+        {expressions.map(pose => <FaceOpacity key={pose} pose={pose} from={0} to={1} />)}
+      </path>
+      <path d="M-3 1l1-2 M0 1l1-2 M3 1l1-2" fill="none" stroke="#d77379" strokeWidth=".8" strokeLinecap="round" />
+    </g>)}
+    <g clipPath={`url(#${mouthClip})`}>
+      <rect x="33" y="47" width="22" height="22" fill="#af405a" />
+      <ellipse cx="44" cy="63.5" rx="7.2" ry="5.8" fill="#ff98a6" />
+    </g>
   </svg>;
 }
 
@@ -58,7 +93,7 @@ function chooseFlowerExpression(flower: HTMLSpanElement) {
   const choices = expressions.filter(face => face !== flower.dataset.expression);
   const pose = choices[Math.floor(Math.random() * choices.length)];
   flower.dataset.expression = pose;
-  const motions = flower.querySelectorAll<SVGAnimateElement>(`animate[data-pose="${pose}"]`);
+  const motions = flower.querySelectorAll<SVGAnimationElement>(`[data-pose="${pose}"]`);
   motions.forEach(motion => motion.beginElement());
   return () => motions.forEach(motion => motion.endElement());
 }

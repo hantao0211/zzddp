@@ -90,7 +90,7 @@
 .journal-petal.p4 { transform: rotate(216deg); }
 .journal-petal.p5 { transform: rotate(288deg); }
 .journal-flower-center { width: 24px; height: 24px; border-radius: 50%; background: var(--journal-yellow); left: 103px; top: 40px; }
-.journal-flower-face { position: absolute; left: 71px; top: 7px; width: 88px; height: 82px; color: color-mix(in srgb, var(--action-bg) 52%, #301f29); }
+.journal-flower-face { position: absolute; left: 71px; top: 7px; width: 88px; height: 82px; color: #4d322d; }
 .journal-leaf { width: 37px; height: 20px; background: var(--journal-green); border-radius: 90% 5% 90% 5%; left: 78px; top: 83px; transform: rotate(18deg); }
 .journal-leaf.l2 { left: 115px; top: 68px; transform: rotate(-28deg); }
 .journal-book-stack { height: 15px; border-radius: 4px; left: 32px; width: 165px; bottom: 30px; transform: rotate(-4deg); background: var(--journal-yellow); border-left: 8px solid var(--journal-pink); }
