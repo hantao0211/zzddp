@@ -1,8 +1,9 @@
 import type { ReactNode } from "react";
-import { CircleCheck, CircleX, CircleMinus, CircleHelp, MessageSquareText, Image, ImageOff, Images, Clock3, Minus } from "lucide-react";
+import { CircleCheck, CircleDashed, CircleDot, CircleX, CircleMinus, CircleHelp, MessageSquareText, Image, ImageOff, Images, Clock3, Minus } from "lucide-react";
 const states = {
   correct: { icon: CircleCheck, label: "正确" }, wrong: { icon: CircleX, label: "错误" },
   blank: { icon: CircleMinus, label: "未作答" }, uncertain: { icon: CircleHelp, label: "未确认" },
+  "not-started": { icon: CircleDashed, label: "待开始" }, "in-progress": { icon: CircleDot, label: "进行中" },
   feedback: { icon: MessageSquareText, label: "点评" }, received: { icon: Image, label: "已收到" },
   missing: { icon: ImageOff, label: "缺照片" }, partial: { icon: Images, label: "照片不全" },
   done: { icon: CircleCheck, label: "已做完" }, pending: { icon: Clock3, label: "处理中" }, neutral: { icon: Minus, label: "暂无" },

@@ -33,7 +33,7 @@ import { TaskCompleteButton } from "./task-complete-button";
 import { HomeworkTaskStatus } from "./homework-task-status";
 import { MemoEditor } from "./memo-editor";
 import type { HomeworkSummaryRow } from "@/domain/homework-summary";
-import { homeworkSummary } from "@/domain/homework-summary";
+import { homeworkProgress, homeworkSummary } from "@/domain/homework-summary";
 import { gardenReminderTiming, homeworkHomeStatus, needsHomeworkUpload } from "@/domain/homework-home";
 import type { Material } from "@/domain/contracts";
 import { BrowserDemoGateway } from "@/services/browser-gateway";
@@ -146,6 +146,8 @@ export function HomeworkApp({ onDemo, onDateChange, active=true }: { onDemo: () 
   const summary = homeworkSummary(snapshot);
   const savedDayPlan = snapshot?.dayPlan || resolveHomeworkDayPlan(date, [1], null, !!snapshot?.uploads.length);
   const dayPlan = dayPlanChoice?.context === dayPlanContext.current ? { ...savedDayPlan, noHomework: dayPlanChoice.noHomework } : savedDayPlan;
+  const progress = homeworkProgress(snapshot, summary, dayPlan.noHomework);
+  const progressTitle = <div className="hw-progress-title"><h2>作业进展</h2><span role="status">{progress && <StatusIndicator kind={progress.kind} className="hw-progress-badge">{progress.text}</StatusIndicator>}</span></div>;
   async function saveDayPlan(value: { date: string; noHomework?: boolean | null; weekdays?: number[] }) {
     if (dayPlanBusy) return;
     const context = dayPlanContext.current;
@@ -203,7 +205,7 @@ export function HomeworkApp({ onDemo, onDateChange, active=true }: { onDemo: () 
           <JournalGarden progress={active && !error && snapshot?.date === shanghaiDay() ? snapshot.gardenProgress : undefined} allowReadingReminder={reminderWindow} remindUpload={reminderWindow && !upload && !busy && !error && needsHomeworkUpload(snapshot, dayPlan.noHomework)} sticker={journal.sticker} onChoose={journal.choose} hint={snapshot && dayPlan.noHomework ? "今天没有作业，留点时间给喜欢的事。" : "今天的作业，小步陪你整理。"} />
           <div className="study-home-grid"><div className="study-home-main">{(!snapshot || !dayPlan.noHomework) && <div className="hw-upload-actions hw-primary-actions"><button onClick={() => chooseUpload("homework")} className="study-primary-upload"><span><Camera size={25} aria-hidden="true"/></span><div><strong>交作业</strong><small>照片、扫描件都可以</small></div></button><button onClick={() => chooseUpload("memo")}><span><ClipboardList size={25} aria-hidden="true"/></span><div><strong>拍备忘录</strong><small>记下今天要做什么</small></div></button></div>}
           {summary && <section className="hw-home-summary" aria-label="作业概况">
-            <div className="hw-summary-heading"><h2>作业进展</h2><div>{summary.rows.length > 0 && <span>共{summary.rows.length}项 · {summary.rows.filter(row => row.activity.tone === "good").length}项已完成</span>}<button className="text-button study-edit-list" onClick={() => setMemoEdit({})}><Pencil size={15} aria-hidden="true" />修改清单</button></div></div>
+            <div className="hw-summary-heading">{progressTitle}<div><button className="text-button study-edit-list" onClick={() => setMemoEdit({})}><Pencil size={15} aria-hidden="true" />修改清单</button></div></div>
             {snapshot?.pending&&snapshot.report&&<p className="hw-summary-processing" role="status"><LoaderCircle size={15} className="spin" aria-hidden="true"/><span>{snapshot.memoEdits?.length ? "清单已更新，小步正在按新要求重新检查。" : `${snapshot.processing?.memo ? "新备忘录" : "新照片"}在后台整理，下面保留上次结果，可继续交作业。`}</span></p>}
             {!!snapshot?.memoEdits?.length && snapshot.status === "failed" && <div className="hw-summary-processing" role="status"><span>清单已更新，AI重新检查未完成。原照片可用于重试。</span>{canManage && <button className="button primary compact" onClick={retryDay}>重新检查</button>}</div>}
             <div className="hw-summary-receipts"><span>备忘录：{summary.memo}</span><span>作业：{summary.homework}</span></div>
@@ -214,7 +216,7 @@ export function HomeworkApp({ onDemo, onDateChange, active=true }: { onDemo: () 
             })}</tbody></table><div className="journal-list-footer">{summary.rows.length > 3 && <button className="text-button journal-expand-tasks" aria-expanded={allTasksVisible} onClick={() => setAllTasksVisible(value => !value)}>{allTasksVisible ? "收起作业" : `展开其余${summary.rows.length - 3}项作业`}</button>}<button className="hw-details-link" onClick={() => showDetails(true)}><FolderOpen size={16} aria-hidden="true" />查看详情</button></div></> : <p className="hw-summary-empty">{summary.empty}</p>}
           </section>}
           {!summary && <section className="hw-home-summary hw-empty-progress" aria-label="作业概况">
-            <div className="hw-summary-heading"><h2>作业进展</h2><label className="hw-day-toggle"><input type="checkbox" aria-label="无作业日" checked={dayPlan.noHomework} disabled={!snapshot || dayPlanBusy} onChange={event => void saveDayPlan({ date, noHomework: event.target.checked })} /><span>无作业日</span>{dayPlanBusy && <LoaderCircle size={14} className="spin" aria-label="保存中" />}</label></div>
+            <div className="hw-summary-heading">{progressTitle}<label className="hw-day-toggle"><input type="checkbox" aria-label="无作业日" checked={dayPlan.noHomework} disabled={!snapshot || dayPlanBusy} onChange={event => void saveDayPlan({ date, noHomework: event.target.checked })} /><span>无作业日</span>{dayPlanBusy && <LoaderCircle size={14} className="spin" aria-label="保存中" />}</label></div>
             <div className={`hw-empty-progress-body ${snapshot && dayPlan.noHomework ? "is-day-off" : ""}`} role="status">
               {!snapshot ? <LoaderCircle size={25} className="spin" aria-hidden="true" /> : dayPlan.noHomework ? <Sprout size={28} aria-hidden="true" /> : <Upload size={26} aria-hidden="true" />}
               <div><h3>{!snapshot ? "正在读取这一天的记录…" : dayPlan.noHomework ? "今天是无作业日" : "作业待上传"}</h3><p>{!snapshot ? "稍等一下，马上就好。" : dayPlan.noHomework ? "好好休息，也可以读一段喜欢的故事。" : "还没有收到这一天的资料，可以先拍备忘录，或直接交作业。"}</p>

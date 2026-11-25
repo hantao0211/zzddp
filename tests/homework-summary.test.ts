@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { DailyReportSchema, type HomeworkSnapshot } from "../src/domain/homework";
 import { gardenReminderTiming, needsHomeworkUpload } from "../src/domain/homework-home";
-import { homeworkSummary } from "../src/domain/homework-summary";
+import { homeworkProgress, homeworkSummary } from "../src/domain/homework-summary";
 import { readReviewPolicy } from "../src/domain/review-policy";
 function snapshot(): HomeworkSnapshot {
   return { date: "2026-11-17", status: "processed", pending: false, note: "", dates: [], quota: { calls: 0, limit: 60 }, reviewPolicy: readReviewPolicy({ ASSISTANT_REVIEW_TRACE_POLICY: "1" }), uploads: [
@@ -13,6 +13,32 @@ function snapshot(): HomeworkSnapshot {
     { id: "written", subject: "数学", title: "练习第12页", requirement: "完成第12页练习", format: "written", memoEvidence: [], evidence: [], coverage: "complete", missing: [] },
   ] }) };
 }
+test("daily heading counts activity across the full list and distinguishes missing records from incomplete work", () => {
+  const s=snapshot();
+  const badge=(off=false)=>homeworkProgress(s,homeworkSummary(s),off);
+  assert.equal(homeworkProgress(null,null,false),null);
+  assert.deepEqual(badge(),{kind:"in-progress",text:"已完成 1/2"});
+  s.report!.tasks.pop();
+  assert.deepEqual(badge(),{kind:"done",text:"全部完成 1/1"});
+  s.pending=true;
+  assert.equal(badge()?.text,"正在整理");
+  s.pending=false;
+  s.report!.tasks[0].reviewActivity=null;
+  assert.deepEqual(badge(),{kind:"in-progress",text:"已完成 0/1"});
+  const [memo,homework]=s.uploads;
+  s.uploads=[memo];
+  assert.deepEqual(badge(),{kind:"not-started",text:"已完成 0/1"});
+  s.report=null;
+  assert.equal(badge()?.text,"清单待确认");
+  memo.files[0].stored=false;
+  assert.equal(badge()?.text,"备忘录待传完");
+  s.uploads=[homework];
+  assert.deepEqual(badge(),{kind:"in-progress",text:"备忘录未上传"});
+  s.uploads=[];
+  assert.equal(badge(true)?.text,"无作业日");
+  assert.equal(badge()?.text,"备忘录未上传");
+});
+
 test("overview distinguishes receipt from completion, counts only stored files and includes unclassified assignments", () => {
   const s = snapshot(); s.report!.unclassified.push({ title: "模拟简称", requirement: "", evidence: [] });
   const summary = homeworkSummary(s)!;

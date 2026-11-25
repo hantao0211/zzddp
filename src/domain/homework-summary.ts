@@ -59,3 +59,24 @@ export function homeworkSummary(snapshot: HomeworkSnapshot | null) {
   for (const [index, task] of (snapshot.report?.unclassified || []).entries()) rows.push({ id: `unclassified-${index}`, title: task.title, subject: "待识别", photo: { text: "未对应好", tone: "attention" }, activity: { text: "先确认科目", tone: "muted" }, photoDetail: "这项备忘录的科目还没识别清楚，因此还没对应照片。可以直接修改科目和作业要求。", activityDetail: "先把这项作业的科目和要求说清楚，系统才能对应照片并检查。" });
   return { memo: receipt("memo"), homework: receipt("homework"), rows, empty: snapshot.pending ? "AI正在整理，完成后会显示每项作业。" : !snapshot.uploads.some(u => u.kind === "memo") ? "补一张备忘录，就能列出各项作业。" : "AI还没整理出清单，已上传的照片会保留。" };
 }
+
+/** The badge summarizes completed activities across the full list, including collapsed rows. */
+export function homeworkProgress(snapshot: HomeworkSnapshot | null, summary: ReturnType<typeof homeworkSummary>, noHomework: boolean) {
+  if (!snapshot) return null;
+  if (!summary && noHomework) return { kind: "neutral", text: "无作业日" } as const;
+  if (snapshot.pending) return { kind: "pending", text: "正在整理" } as const;
+  if (snapshot.status === "failed") return { kind: "in-progress", text: "整理待重试" } as const;
+  const hasHomework = snapshot.uploads.some(u => u.kind === "homework" && u.files.some(f => f.stored));
+  const rows = summary?.rows ?? [];
+  if (rows.length) {
+    const done = rows.filter(row => row.activity.tone === "good").length;
+    const count = done + "/" + rows.length;
+    if (done === rows.length) return { kind: "done", text: "全部完成 " + count } as const;
+    const started = done > 0 || hasHomework;
+    return { kind: started ? "in-progress" : "not-started", text: "已完成 " + count } as const;
+  }
+  const memos = snapshot.uploads.filter(u => u.kind === "memo");
+  if (!memos.length) return { kind: hasHomework ? "in-progress" : "not-started", text: "备忘录未上传" } as const;
+  if (!memos.some(u => u.files.some(f => f.stored))) return { kind: "in-progress", text: "备忘录待传完" } as const;
+  return { kind: "in-progress", text: "清单待确认" } as const;
+}

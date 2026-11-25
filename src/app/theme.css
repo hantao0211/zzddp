@@ -116,8 +116,8 @@ input:is([type=checkbox], [type=radio]), progress { accent-color: var(--accent);
 
   .status-indicator { --status-color: #c9b9c6; --status-bg: #352c34; --status-border: #65515e; }
   .status-correct, .status-done, .status-received { --status-color: #a9d8b8; --status-bg: #253b30; --status-border: #476a53; }
-  .status-wrong { --status-color: #ffb1be; --status-bg: #442931; --status-border: #82505e; }
-  .status-blank, .status-missing, .status-partial { --status-color: #e9c58d; --status-bg: #403325; --status-border: #7e6441; }
+  .status-wrong, .status-not-started { --status-color: #ffb1be; --status-bg: #442931; --status-border: #82505e; }
+  .status-in-progress,.status-blank, .status-missing, .status-partial { --status-color: #e9c58d; --status-bg: #403325; --status-border: #7e6441; }
   .status-uncertain { --status-color: #b2d0ed; --status-bg: #29394b; --status-border: #526e8b; }
   .status-feedback, .status-pending { --status-color: #d9bce1; --status-bg: #3c2e43; --status-border: #755c7f; }
 }

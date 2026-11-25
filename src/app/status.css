@@ -1,8 +1,8 @@
 .status-indicator{--status-color:#796b78;--status-bg:#f3eef2;--status-border:#e1d7df;display:inline-flex;align-items:center;gap:7px;color:var(--status-color);line-height:1.5;max-width:100%;vertical-align:middle}
 .status-indicator>svg{width:19px;height:19px;flex-shrink:0;stroke-width:2.2}.status-indicator>span{min-width:0}
 .status-correct,.status-done,.status-received{--status-color:#346548;--status-bg:#edf5ef;--status-border:#c6ddcc}
-.status-wrong{--status-color:#a33e53;--status-bg:#fbeef1;--status-border:#e7bdc7}
-.status-blank,.status-missing,.status-partial{--status-color:#8b602b;--status-bg:#fcf4e8;--status-border:#e8d2af}
+.status-wrong,.status-not-started{--status-color:#a33e53;--status-bg:#fbeef1;--status-border:#e7bdc7}
+.status-in-progress,.status-blank,.status-missing,.status-partial{--status-color:#8b602b;--status-bg:#fcf4e8;--status-border:#e8d2af}
 .status-uncertain{--status-color:#496b8a;--status-bg:#eef3f8;--status-border:#c5d4e3}
 .status-feedback,.status-pending{--status-color:#7b597a;--status-bg:#f5eff7;--status-border:#ddcce2}
 .grade-verdict-badge{padding:8px 12px;border:1px solid var(--status-border);border-radius:12px;background:var(--status-bg);font-size:14px;font-weight:600;flex-shrink:0}.grade-verdict-badge>svg{width:30px;height:30px;stroke-width:2.5}
