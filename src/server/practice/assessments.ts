@@ -175,11 +175,22 @@ export class Assessments {
       this.store.db.prepare("UPDATE exam_pages SET note=? WHERE id=? AND status='running'")
         .run(`正在分组识读，已读 ${offset}/${outline.targets.length} 道题。`,image.fileId);
       const group=await execution.cached(pageKey+":"+digest(JSON.stringify(targets)),async()=>{
-        const result=await ai.run("read_marked_exam",markedPage,{...context,targets},[image]);
-        const byLabel=new Map(result.questions.map(q=>[q.label,q]));
-        if(result.questions.length!==targets.length || targets.some(t=>!byLabel.has(t.label)))
-          throw new AIServiceError("EXAM_GROUP_MISMATCH",true,"本组回复的题号与卷面目录未对齐。");
-        return {...result,questions:targets.map(t=>byLabel.get(t.label)!)};
+        const indexed=targets.map((t,i)=>({...t,targetId:offset+i+1}));
+        const part=observation.omit({label:true}).extend({part:z.string().trim().max(70)});
+        const groupSchema=markedPage.omit({questions:true}).extend({
+          groups:z.array(z.object({targetId:z.number().int(),questions:z.array(part).min(1).max(80)})).max(5)
+        });
+        const result=await ai.run("read_marked_exam",groupSchema,{...context,targets:indexed},[image]);
+        const byId=new Map(result.groups.map(g=>[g.targetId,g.questions]));
+        if(result.groups.length!==indexed.length || indexed.some(t=>!byId.has(t.targetId)))
+          throw new AIServiceError("EXAM_GROUP_MISMATCH",true,"本组回复缺少对应题号，尚未合并。");
+        const questions=indexed.flatMap(t=>{
+          const parts=byId.get(t.targetId)!;
+          return parts.map(({part,...answer},i)=>({
+            ...answer,label:parts.length===1?t.label:t.label.slice(0,100)+" · "+(part||`小问 ${i+1}`)
+          }));
+        });
+        return {coverage:result.coverage,note:result.note,metadata:result.metadata,questions};
       });
       questions.push(...group.questions);
       metadata??=group.metadata;

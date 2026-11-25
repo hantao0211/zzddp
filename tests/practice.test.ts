@@ -238,7 +238,7 @@ test("a truncated exam page retries once while page and archive status follow re
         calls.push("index");
         return schema.parse({targets,coverage:"complete",note:""});
       }
-      const group=(metadata as {targets?:typeof targets}).targets;
+      const group=(metadata as {targets?:Array<{label:string,targetId:number}>}).targets;
       if(!group){
         calls.push("full");
         throw new AIServiceError("INCOMPLETE_RESPONSE",true,"legacy incomplete");
@@ -248,7 +248,9 @@ test("a truncated exam page retries once while page and archive status follow re
       const questions=group.map(({label})=>({label,question:"模拟题"+label,studentAnswer:"1",teacherMark:"勾",
         expectedAnswer:"",correction:"",verdict:"correct",confident:true,knowledgePoints:[],cause:"原因待确认",causeExplanation:""}));
       if(start==="6" && calls.length===4)questions.pop();
-      return schema.parse({...result,questions});
+      const groups=questions.map(({label,...q})=>({targetId:Number(label),questions:[{...q,part:""}]}));
+      if(start==="6" && groups.length===2)groups[1].questions=[{...groups[1].questions[0],part:"(1)"},{...groups[1].questions[0],part:"(2)"}];
+      return schema.parse({...result,groups});
     }}));
     function check(status:string){
       assert.equal(exams.detail(paper.exam.id).exam.status,status);
@@ -262,7 +264,7 @@ test("a truncated exam page retries once while page and archive status follow re
     exams.retry(one.id);check("等待识读");
     await worker.tick();check("已整理");
     assert.deepEqual(calls,["full","index","1","6","6"]);
-    assert.deepEqual(exams.detail(paper.exam.id).questions.map(q=>q.label),targets.map(t=>t.label));
+    assert.deepEqual(exams.detail(paper.exam.id).questions.map(q=>q.label),[...targets.slice(0,6).map(t=>t.label),"7 · (1)","7 · (2)"]);
     assert.equal(exams.page(two.id).attempts,0);
   }finally{f.close();}
 });
