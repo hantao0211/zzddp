@@ -47,6 +47,10 @@ export function homeworkSummary(snapshot: HomeworkSnapshot | null) {
       activity = { text: hasPhotos ? "等匹配" : "等照片", tone: "muted" };
       activityDetail = hasPhotos ? "还没有对应到可检查的照片，所以暂时不能判断有没有做完。先检查清单是否识别正确；正确的照片可能已经上传，无需一律重传。" : "对应的作业照片还没收到，所以系统暂时不能检查是否做完；不是要求家长来核对。";
     }
+    if (snapshot.completionFeedback?.[task.id]?.latest?.status === "confirmed") {
+      activity = {text:"已做完（家长确认）",tone:"good"};
+      activityDetail = "家长已核对这项作业并确认写完。";
+    }
     const updating=!!snapshot.pending&&!snapshot.processing?.memo&&(!!snapshot.processing?.taskIds?.includes(task.id)||!!snapshot.processing?.subjects.includes(task.subject));
     return { id: task.id, title: task.title, displayTitle:task.inferredMeaning?.displayTitle, subject: task.subject, inferred:!!task.inferredScope||!!task.inferredMeaning, photo, activity, photoDetail:photoDetail+(task.missing.some(text=>text.startsWith("这张照片交给"))?" "+task.missing.filter(text=>text.startsWith("这张照片交给")).join(" "):"")+(updating?" 新照片还在整理，当前显示上次结果。":""), activityDetail:activityDetail+(updating?" 新照片还在整理，当前显示上次结果。":""), updating };
   });

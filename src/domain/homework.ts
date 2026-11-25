@@ -23,6 +23,8 @@ export const ExtractedHomeworkSchema = z.object({
   })).min(1).max(10),
 });
 export const HomeworkTaskSchema = z.object({
+  feedbackFinding: z.string().max(1500).optional(),
+  reviewedFeedbackId: z.string().uuid().optional(),
   selectedSubmission:z.object({version:z.literal("selected-destination-v1"),pageIds:z.array(z.string()).max(120),note:z.string().max(1000)}).optional(),
   inferredMeaning:z.object({version:z.literal("lesson-heading-v1"),abbreviation:z.string().max(30),number:z.number().int().min(1).max(999),title:z.string().max(80),displayTitle:z.string().max(200),description:z.string().max(500),evidence:z.array(EvidenceSchema).min(1).max(12)}).optional(),
   inferredScope: z.object({version:z.literal("submitted-work-v1"),description:z.string().max(1500),note:z.string().max(1500),pageIds:z.array(z.string()).max(120)}).optional(),
@@ -55,6 +57,7 @@ export type UploadView = {
 };
 export type GardenProgress = { homeworkComplete: boolean; readingLogged: boolean; earnedSteps: number };
 export type HomeworkSnapshot = {
+  completionFeedback?: Record<string, import("./completion-feedback").CompletionFeedback>;
   gardenProgress?: GardenProgress;
   taskScopeSources?: Record<string, HomeworkScopeSource>;
   dayPlan?: import("./homework-calendar").HomeworkDayPlan;

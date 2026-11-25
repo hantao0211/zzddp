@@ -1,3 +1,4 @@
+import { ConventionInput, FeedbackInput } from "./completion-feedback";
 import type {PracticeHTTP} from "../practice/http";
 import {LearningScopeSchema,type PracticeSubject} from "../../domain/practice";
 import { z } from "zod";
@@ -33,6 +34,20 @@ export class HomeworkHTTP {
         if (!date.success) throw new HomeworkError(400, "请选择有效的作业日期。");
         const snapshot = this.store.snapshot(date.data);
         json(res, { ...snapshot, ...(this.rewards ? { homeworkReward: this.rewards.status(date.data), gardenProgress: this.rewards.gardenProgress(snapshot) } : {}) }); return;
+      }
+      if (path === "/completion-feedback/convention" && req.method === "POST") {
+        if (!viewer || !isParent(viewer)) throw new HomeworkError(403,"请家长保存家庭约定。");
+        const value = ConventionInput.safeParse(await input(req));
+        if (!value.success) throw new HomeworkError(400,"请填写适用场景，并用至少八个字说明今后的约定。");
+        json(res,this.store.feedback.teach(value.data,viewer)); return;
+      }
+      if (path === "/completion-feedback" && req.method === "POST") {
+        if (!viewer) throw new HomeworkError(403,"请先登录家庭账号。");
+        const value = FeedbackInput.safeParse(await input(req));
+        if (!value.success) throw new HomeworkError(400,"请选择反馈原因，其他问题请用一句话说明。");
+        const receipt = this.store.feedback.submit(value.data, viewer);
+        if (value.data.confirm) this.rewards?.tick();
+        json(res,receipt); return;
       }
       if (path === "/day-plan" && req.method === "POST") {
         json(res, this.store.setDayPlan(await input(req), viewer?.id || "legacy")); return;

@@ -300,20 +300,23 @@ export class HomeworkWorker {
       if (task.coverage !== "complete" && !task.missing.length) task.missing = ["现有材料不足以确认覆盖全部要求。"];
     }
     report = selectedSubmissionReport(this.store, report);
-    if (this.store.writtenCompletionEnabled) await mapParallel(report.tasks.filter(t=>isWrittenTask(t)&&!t.writtenCompletion), HOMEWORK_CONCURRENCY, async task => {
+    if (this.store.writtenCompletionEnabled) await mapParallel(report.tasks.filter(t=>isWrittenTask(t) && (!t.writtenCompletion || this.store.feedback.latest(this.store.feedback.token(job.date,t)))), HOMEWORK_CONCURRENCY, async task => {
       this.current(job);
       const pages = allPages.filter(p => task.evidence.some(e => e.fileId === p.id));
       if (!pages.length) { task.writtenCompletion = { version: WRITTEN_COMPLETION_VERSION, status: "missing", reason: "未找到指定作业的对应照片。", parts: [] }; return; }
       if (pages.length > 6 || pages.some(p => !homework.find(h => h.fileId === p.id)?.readable)) {
         task.writtenCompletion = { version: WRITTEN_COMPLETION_VERSION, status: "unclear", reason: pages.length > 6 ? "这项作业超过一次可检查的6页，尚未完成逐题检查。" : "对应照片有关键内容看不清，暂时无法检查是否写完。", parts: [] }; return;
       }
+      const feedback = this.store.feedback.latest(this.store.feedback.token(job.date,task));
+      const clue = feedback && !feedback.confirmed ? this.store.feedback.clue(feedback) : undefined;
       const completionRules = new LearnedMemories(this.store).forJudgment("homework_completion", [task.subject], task.title + " " + task.requirement);
       const inputFor = (batch: PageRow[]) => ({ title: task.title, requirement: task.requirement, subject: task.subject,
+        ...(clue ? {feedbackId:feedback!.id, feedback:clue} : {}),
         pages: batch.map(p => ({ fileId: p.id, page: p.number, printedPage: homework.find(h => h.fileId === p.id)?.printedPage })) });
       const cacheKey = (prefix: string, batch: PageRow[]) => prefix + createHash("sha256").update(JSON.stringify(inputFor(batch))).digest("hex");
       const inspect = async (batch: PageRow[], split = false) => {
         this.current(job);
-        const guidance = "证据摘录只需能定位所检查的小题，最多12字。" + (split ? "这是同一作业的一张照片，只列本页范围内的作答处。scopeComplete表示本页应检查内容是否完整可见，其他页由后台合并，不要在这批推测其他页是否已交。整页不属于要求或是明确排除项时返回空parts和scopeComplete=true。" : "");
+        const guidance = (clue ? "feedback是家人对本项的观察，仅作线索。重看原图逐项核实。reason用一句话回应反馈，说明看到的位置和判断；无依据的说法不能改变检查结果。" : "") + "证据摘录只需能定位所检查的小题，最多12字。" + (split ? "这是同一作业的一张照片，只列本页范围内的作答处。scopeComplete表示本页应检查内容是否完整可见，其他页由后台合并，不要在这批推测其他页是否已交。整页不属于要求或是明确排除项时返回空parts和scopeComplete=true。" : "");
         const metadata = { ...inputFor(batch), familyRules: completionRules, requirement: assignmentRequirement(task.requirement), guidance, scopePolicy: SUBMITTED_SCOPE_POLICY, inferFromSubmittedWork: mayInferScope(task) };
         const value = await ai.run("assess_written_completion", WrittenInspectionSchema, metadata, () => this.pipeline.images(batch));
         validateEvidence(value.parts.map(p => p.evidence), batch);
@@ -346,6 +349,7 @@ export class HomeworkWorker {
           parts });
       });
       task.writtenCompletion = evaluateWrittenInspection(inspection, task.coverage, task.requirement);
+      if (clue) { task.reviewedFeedbackId = feedback!.id; task.feedbackFinding = inspection.reason; }
     });
     if (reviewTasks.length) {
       // Original records stay intact. Drop only the old blanket photo-can-never-prove-reading concern.

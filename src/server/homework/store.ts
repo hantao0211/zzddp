@@ -1,6 +1,7 @@
 import { HomeworkDayPlanInputSchema, HomeworkWeekdaysSchema, resolveHomeworkDayPlan } from "../../domain/homework-calendar";
 import { selectedSubmissionReport } from "./selected-submission";
 import { HomeworkUsageLog } from "./usage";
+import { CompletionFeedbackStore } from "./completion-feedback";
 import { TaskCompletions } from "./task-completions";
 import { HomeworkScopes } from "./scopes";
 import { PagePreviews } from "./page-previews";
@@ -27,6 +28,7 @@ const hash = (v: unknown) => createHash("sha256").update(JSON.stringify(v)).dige
 export class HomeworkStore {
   readonly db: DatabaseSync;
   readonly grading: GradingStore;
+  readonly feedback: CompletionFeedbackStore;
   readonly completions: TaskCompletions;
   readonly scopes: HomeworkScopes;
   readonly previews: PagePreviews;
@@ -60,6 +62,7 @@ export class HomeworkStore {
       PRAGMA user_version=1;`);
     this.usage = new HomeworkUsageLog(this);
     this.grading = new GradingStore(this);
+    this.feedback = new CompletionFeedbackStore(this);
     this.completions = new TaskCompletions(this);
     this.scopes = new HomeworkScopes(this);
     this.previews = new PagePreviews(directory);
@@ -291,7 +294,13 @@ export class HomeworkStore {
     const scoped=pendingUploads.filter(u=>u.kind==="homework").map(u=>({upload:u,target:resolveUploadTarget(this,u.id)}));
     const processing=pending?{taskIds:[...new Set(scoped.flatMap(s=>s.target?[s.target.taskId]:[]))],memo:pendingUploads.some(u=>u.kind==="memo"),subjects:[...new Set(scoped.filter(s=>!s.target).flatMap(s=>JSON.parse(s.upload.subjects)))],unclassified:scoped.some(s=>!s.target&&(!s.upload.result||!JSON.parse(s.upload.subjects).length)),retrying:day?.status==="retrying"}:undefined;
     const taskScopeSources = report ? Object.fromEntries(this.scopes.tasks(date, report.tasks)) : undefined;
-    return { date, dayPlan: this.dayPlan(date), processing, taskScopeSources, ...(memoEdits.length ? { memoEdits } : {}), grading: this.grading.summary(date), writtenCompletionEnabled: this.writtenCompletionEnabled, reviewPolicy: this.reviewPolicy, status: day?.status || "empty", note: day?.note || "先上传当天的作业备忘录，再把作业照片交给AI整理。", report, uploads: all.map((u) => this.view(u.id)), dates, quota: this.quota(), pending };
+    const completionFeedback: NonNullable<HomeworkSnapshot["completionFeedback"]> = {};
+    for (const task of report?.tasks || []) {
+      if (memoEdits.includes(task.id)) continue;
+      const feedback = this.feedback.view(date, task, pending);
+      if (feedback) completionFeedback[task.id] = feedback;
+    }
+    return { date, completionFeedback, dayPlan: this.dayPlan(date), processing, taskScopeSources, ...(memoEdits.length ? { memoEdits } : {}), grading: this.grading.summary(date), writtenCompletionEnabled: this.writtenCompletionEnabled, reviewPolicy: this.reviewPolicy, status: day?.status || "empty", note: day?.note || "先上传当天的作业备忘录，再把作业照片交给AI整理。", report, uploads: all.map((u) => this.view(u.id)), dates, quota: this.quota(), pending };
   }
   close() { this.db.close(); }
 }

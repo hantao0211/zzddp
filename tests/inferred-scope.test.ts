@@ -1,3 +1,4 @@
+import { LearnedMemories } from "../src/server/homework/memory";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -41,10 +42,44 @@ test("new organization and read-time old results apply the same scope policy, wi
  const worker=new HomeworkWorker(store,()=>({async run(name,schema,input){calls++;const data=input as any;if(name==="organize_homework"){assert.equal(data.candidates[0].inferFromSubmittedWork,true);assert.match(data.scopePolicy,/推断/);return schema.parse({readable:true,subjects:["语文"],matches:[{taskId:data.candidates[0].id,coverage:"partial",missing:[concern],evidence:[{fileId:work.page,page:1,excerpt:"已有默写作答"}]}],unassigned:[],uncertainties:[]});}assert.equal(name,"assess_written_completion");assert.equal(data.inferFromSubmittedWork,true);return schema.parse({scopeComplete:false,reason:"词语总数未写明",parts:[{label:"词语1",status:"answered",evidence:{fileId:work.page,page:1,excerpt:"已填写"}}]});}}),{async convert(){return[];},images(){return[{fileId:work.page,mimeType:"image/png",base64:"synthetic"}];}});
  try{
   store.bump(date);await worker.tick();assert.equal(calls,2);const fresh=store.snapshot(date);assert.equal(fresh.report!.tasks[0].writtenCompletion?.status,"done");assert.ok(fresh.report!.tasks[0].inferredScope);assert.equal(store.upload(work.upload.id)!.result,rawExtraction);
-  const oldTask=task();oldTask.id=memo.upload.id+":task:0";oldTask.evidence=oldTask.evidence.map(e=>({...e,fileId:work.page}));oldTask.writtenCompletion!.parts=oldTask.writtenCompletion!.parts.map(p=>({...p,evidence:{...p.evidence,fileId:work.page}}));
+  const oldTask=task();oldTask.requirement=fresh.report!.tasks[0].requirement;oldTask.id=memo.upload.id+":task:0";oldTask.evidence=oldTask.evidence.map(e=>({...e,fileId:work.page}));oldTask.writtenCompletion!.parts=oldTask.writtenCompletion!.parts.map(p=>({...p,evidence:{...p.evidence,fileId:work.page}}));
   const old={...fresh.report!,tasks:[oldTask]};store.db.prepare("UPDATE days SET report=? WHERE date=?").run(JSON.stringify(old),date);const raw=store.db.prepare("SELECT report FROM days WHERE date=?").get(date),quota=store.quota(),jobs=store.db.prepare("SELECT * FROM jobs").all();
   const projected=store.snapshot(date),row=homeworkSummary(projected)!.rows[0];assert.equal(row.activity.text,"已做完");assert.equal(row.photo.text,"已收到");assert.equal(row.inferred,true);assert.equal(homeworkTaskDetail(projected,projected.report!.tasks[0]).concerns.length,0);assert.equal(isHomeworkDayComplete(projected),true);
   assert.deepEqual(store.db.prepare("SELECT report FROM days WHERE date=?").get(date),raw);assert.deepEqual(store.quota(),quota);assert.deepEqual(store.db.prepare("SELECT * FROM jobs").all(),jobs);assert.equal(calls,2);
+  const id = projected.report!.tasks[0].id, token = projected.completionFeedback![id].token;
+  const child = {id:"child",username:"child",name:"孩子",role:"child" as const};
+  const parent = {...child,id:"parent",role:"parent" as const};
+  const input = {date,taskId:id,token,previousId:null,confirm:false,reason:"correction" as const,note:"底下一行是订正"};
+  assert.throws(()=>store.feedback.submit({...input,confirm:true},child),/家长/);
+  const posted = store.feedback.submit(input,child);
+  assert.deepEqual(store.feedback.submit(input,child),posted);
+  assert.equal(store.snapshot(date).completionFeedback![id].latest?.status,"pending");
+  assert.equal(new LearnedMemories(store).list().length,0);
+  let inspected = 0;
+  const recheck = new HomeworkWorker(store,()=>({async run(name,schema,value){
+    assert.equal(name,"assess_written_completion");
+    const data = value as any;assert.deepEqual(data.feedback,{reason:"这是订正练习",note:input.note});
+    inspected++;
+    return schema.parse({scopeComplete:true,reason:"末行是订正，首行已作答。",parts:[{label:"首行",status:"answered",evidence:{fileId:work.page,page:1,excerpt:"写有词语"}}]});
+  }}),{async convert(){return[];},images(){return [];}});
+  try {await recheck.tick();} finally {recheck.stop();}
+  const reviewed = store.snapshot(date);
+  assert.equal(inspected,1);assert.equal(reviewed.completionFeedback![id].latest?.status,"reviewed");
+  assert.match(reviewed.report!.tasks[0].feedbackFinding!,/末行是订正/);
+  assert.equal(reviewed.report!.tasks[0].reviewedFeedbackId,posted.id);
+  assert.throws(()=>store.feedback.submit({...input,confirm:true},parent),/刷新/);
+  store.feedback.submit({...input,previousId:posted.id,confirm:true},parent);
+  assert.equal(homeworkSummary(store.snapshot(date))!.rows[0].activity.text,"已做完（家长确认）");
+  const convention = {date,taskId:id,token,trigger:"听写订正",quote:"我们家听写订正通常写在本页最后一行。"};
+  assert.throws(()=>store.feedback.teach(convention,child),/家长/);
+  assert.throws(()=>store.feedback.teach({...convention,quote:"这张照片上的两个词写在最后一行。"},parent));
+  store.feedback.teach(convention,parent);store.feedback.teach(convention,parent);
+  assert.deepEqual(new LearnedMemories(store).forJudgment("homework_completion",["语文"],"新的听写订正"),[{convention:convention.quote,subject:"语文"}]);
+  assert.equal(new LearnedMemories(store).list().length,1);
+  const changed=structuredClone(old);changed.tasks[0].requirement="另一份作业";
+  store.db.prepare("UPDATE days SET report=? WHERE date=?").run(JSON.stringify(changed),date);
+  assert.notEqual(store.snapshot(date).completionFeedback![id]?.token,token);
+  assert.throws(()=>store.feedback.submit(input,child),/更新/);
  }finally{worker.stop();store.close();rmSync(directory,{recursive:true,force:true});}
 });
 
@@ -54,9 +89,24 @@ test("a missing handwritten number alone does not establish that an assigned dic
   part.label = "编号7默写词（页面未出现编号7）";
   part.status = "blank";
   const result = inferTaskScope(reportTask, pages);
-  assert.equal(result.writtenCompletion?.status, "unclear");
-  assert.match(result.writtenCompletion!.reason, /跳号/);
+  assert.equal(result.writtenCompletion?.status, "done");
+  assert.equal(result.writtenCompletion!.parts.length,12);
+  assert.equal(inferTaskScope({...reportTask,requirement:"对照老师给的词表"},pages).writtenCompletion?.status,"unclear");
+  const noAnswers = {...reportTask,writtenCompletion:{...reportTask.writtenCompletion!,parts:[part]}};
+  assert.equal(inferTaskScope(noAnswers,pages).writtenCompletion?.status,"unclear");
+  part.label="默写编号跳号，无法确认是否漏词";part.status="unclear";
+  assert.equal(inferTaskScope(reportTask,pages).writtenCompletion?.status,"done");
+  part.status="blank";
   assert.deepEqual(inferTaskScope(result, pages), result);
   part.label = "印刷词表第7题作答处";
   assert.equal(inferTaskScope(reportTask, pages).writtenCompletion?.status, "incomplete");
+});
+
+test("a marked first attempt and two separate unnumbered rewrites on the same page explain completion without changing correctness",()=>{
+  const t = task();
+  t.writtenCompletion!.parts[4].label = "编号5默写词（旁有×标记）";
+  t.evidence.push({...t.evidence[0],excerpt:"另起一行写有两处“测试”，无编号"});
+  assert.match(inferTaskScope(t,pages).writtenCompletion!.reason,/第5项旁有叉，另起一行写了两遍“测试”，与订正练习相符/);
+  t.writtenCompletion!.parts[4].label = "编号5默写词";
+  assert.doesNotMatch(inferTaskScope(t,pages).writtenCompletion!.reason,/与订正练习相符/);
 });

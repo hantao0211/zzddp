@@ -56,3 +56,9 @@
 .task-photo-downloads,.grade-photo-actions{display:flex;gap:14px;flex-wrap:wrap;align-items:center}.task-photo-downloads .text-button,.grade-photo-actions .text-button{min-height:44px;display:inline-flex;align-items:center;gap:5px}.hw-original figcaption{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
 
 .study-inferred-mark{display:inline-flex!important;align-items:center;gap:4px;color:var(--theme-muted, #84637a)!important;font-size:11px!important}.task-inferred-scope{border:1px solid var(--theme-border, #eadce5);background:var(--theme-surface, #fcf7fa);border-radius:12px;padding:12px 14px;margin:12px 0}.task-inferred-scope strong{display:flex;align-items:center;gap:6px;color:var(--theme-muted, #805a72);font-size:14px}.task-inferred-scope p{font-size:14px;line-height:1.7;margin:8px 0}.task-inferred-scope summary{font-size:13px;color:var(--theme-muted, #856d7b);cursor:pointer;min-height:36px;align-content:center}
+
+.task-feedback{margin:12px 0 18px}
+.task-feedback .hw-upload-form{display:grid;gap:12px;margin-top:12px}
+.task-feedback .hw-upload-form label{display:grid;gap:4px}
+.task-feedback .hw-upload-form details label{margin:8px 0}
+.task-feedback p{margin:4px 0 8px;overflow-wrap:anywhere}
