@@ -6,7 +6,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import type { IncomingMessage } from "node:http";
 import { z } from "zod";
-import { emptyExam, readExamHints, examMeta, examManifest, markedPage, observation, type ExamMeta, type ExamRecord, type ExamPage, type ExamDetail, type Observation } from "../../domain/assessment";
+import { examReadingChecks, examReread, emptyExam, readExamHints, examMeta, examManifest, markedPage, observation, type ExamMeta, type ExamRecord, type ExamPage, type ExamDetail, type Observation } from "../../domain/assessment";
 import { detectMime } from "../homework/images";
 import { HomeworkError } from "../homework/store";
 import type { HomeworkExecution } from "../homework/execution";
@@ -27,6 +27,12 @@ export class Assessments {
       CREATE TABLE IF NOT EXISTS exam_questions(id TEXT PRIMARY KEY,page_id TEXT NOT NULL REFERENCES exam_pages(id),payload TEXT NOT NULL,verdict TEXT NOT NULL,revision INTEGER NOT NULL);
       CREATE INDEX IF NOT EXISTS exam_questions_page ON exam_questions(page_id);
       CREATE TABLE IF NOT EXISTS exam_reviews(id INTEGER PRIMARY KEY,question_id TEXT NOT NULL,before_data TEXT,after_data TEXT NOT NULL,actor TEXT NOT NULL,created_at TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS exam_explanations (
+        id TEXT PRIMARY KEY, question_id TEXT NOT NULL REFERENCES exam_questions(id), revision INTEGER NOT NULL,
+        note TEXT NOT NULL, actor TEXT NOT NULL, status TEXT NOT NULL, result TEXT, learned_subject TEXT);
+      CREATE INDEX IF NOT EXISTS exam_explanation_question ON exam_explanations(question_id);
+      CREATE INDEX IF NOT EXISTS exam_explanation_work ON exam_explanations(status);
+      UPDATE exam_explanations SET status='failed' WHERE status='running';
       UPDATE exam_pages SET status='failed',note='整理被中断，可从原照片重试。' WHERE status='running';`);
   }
   page(id:string) {
@@ -47,8 +53,11 @@ export class Assessments {
     const pages=this.store.db.prepare("SELECT id,number,status,note,coverage FROM exam_pages WHERE exam_id=? ORDER BY number").all(id) as ExamPage[];
     const done=pages.filter(p=>p.status==="done").length;
     const exam:ExamRecord={...JSON.parse(String(row.metadata)),id,pages:pages.length,done,status:done===pages.length?"已整理":"待整理"};
-    const questions=this.store.db.prepare("SELECT q.id,q.page_id,q.revision,q.payload FROM exam_questions q JOIN exam_pages p ON q.page_id=p.id WHERE p.exam_id=? ORDER BY p.number,q.rowid").all(id);
-    return {exam,pages,questions:questions.map(q=>({...JSON.parse(String(q.payload)),id:q.id,pageId:q.page_id,revision:q.revision}))};
+    const questions=this.store.db.prepare("SELECT q.id,q.page_id,q.revision,q.payload,f.id feedback_id,f.revision feedback_revision,f.note,f.status,f.result,f.learned_subject FROM exam_questions q JOIN exam_pages p ON q.page_id=p.id LEFT JOIN exam_explanations f ON f.rowid=(SELECT max(rowid) FROM exam_explanations WHERE question_id=q.id) WHERE p.exam_id=? ORDER BY p.number,q.rowid").all(id);
+    const savedChecks=this.store.db.prepare("SELECT f.id,q.page_id pageId,f.learned_subject subject,json_extract(f.result,'$.check') AS method FROM exam_explanations f JOIN exam_questions q ON q.id=f.question_id JOIN exam_pages p ON p.id=q.page_id WHERE p.exam_id=? AND f.learned_subject IS NOT NULL ORDER BY f.rowid").all(id).map(row=>({id:String(row.id),pageId:String(row.pageId),subject:String(row.subject),check:row.method as keyof typeof examReadingChecks}));
+    return {exam,pages,savedChecks,questions:questions.map(q=>({...JSON.parse(String(q.payload)),id:q.id,pageId:q.page_id,revision:q.revision,feedback:q.feedback_id?{
+      id:q.feedback_id,revision:q.feedback_revision,note:q.note,status:q.status,result:q.result?JSON.parse(String(q.result)):null,learned:!!q.learned_subject
+    }:undefined}))};
   }
   reserve(input:unknown) {
     const {meta: supplied,pages}=examManifest.parse(input);
@@ -106,18 +115,71 @@ export class Assessments {
   async tick(execution:HomeworkExecution) {
     const db=this.store.db;
     const p=db.prepare("SELECT * FROM exam_pages WHERE status='queued' ORDER BY rowid LIMIT 1").get() as StoredPage|undefined;
-    if(!p)return false;
+    if(!p)return this.processExplanation(execution);
     db.prepare("UPDATE exam_pages SET status='running',attempts=attempts+1 WHERE id=?").run(p.id);
     try {
       const meta=JSON.parse(String(db.prepare("SELECT metadata FROM exams WHERE id=?").get(p.exam_id)!.metadata)) as ExamMeta;
-      const {stdout}=await convert("/usr/bin/convert",["-limit","memory","64MiB","-limit","map","128MiB","-limit","disk","512MiB",join(this.directory,p.id)+"[0]","-auto-orient","-resize","1800x2400>","-background","white","-alpha","remove","-strip","-quality","85","jpeg:-"],{encoding:"buffer",timeout:60000,maxBuffer:3*1024*1024});
+      const image=await this.aiImage(p.id);
       const ai=execution.forJob(undefined,undefined,{date:meta.date??this.store.today(),title:"试卷整理："+(meta.title??"已批试卷"),pageId:p.id,attempt:p.attempts+1});
-      const result=await execution.cached("marked-page-v2:"+digest(JSON.stringify([p.sha,meta.subject])),()=>ai.run("read_marked_exam",markedPage,{subject:meta.subject},[{fileId:p.id,mimeType:"image/jpeg",base64:stdout.toString("base64")}]));
+      const readingChecks=this.readingChecks(meta.subject);
+      const result=await execution.cached("marked-page-v3:"+digest(JSON.stringify([p.sha,meta.subject,readingChecks])),()=>ai.run("read_marked_exam",markedPage,{subject:meta.subject,readingChecks},[image]));
       this.savePage(p.id,result);
       record({ event: "exam.process", ref: p.id.slice(0, 8), attempt: p.attempts + 1 });
     } catch(e) {
       record({ event: "exam.process", error: true, attempt: p.attempts + 1, ref: p.id.slice(0, 8), code: failureCode(e) });
       db.prepare("UPDATE exam_pages SET status='failed',note=? WHERE id=?").run(e instanceof HomeworkError?e.message:"识读未完成，原图已保存，可重试或手动补题。",p.id);
+    }
+    return true;
+  }
+  private async aiImage(pageId:string) {
+    const {stdout}=await convert("/usr/bin/convert",["-limit","memory","64MiB","-limit","map","128MiB","-limit","disk","512MiB",join(this.directory,pageId)+"[0]","-auto-orient","-resize","1800x2400>","-background","white","-alpha","remove","-strip","-quality","85","jpeg:-"],{encoding:"buffer",timeout:60000,maxBuffer:3*1024*1024});
+    return {fileId:pageId,mimeType:"image/jpeg" as const,base64:stdout.toString("base64")};
+  }
+  readingChecks(subject:ExamMeta["subject"]){
+    if(!subject)return [];
+    const rows=this.store.db.prepare("SELECT DISTINCT json_extract(result,'$.check') AS method FROM exam_explanations WHERE learned_subject=? ORDER BY method").all(subject);
+    return rows.map(row=>examReadingChecks[row.method as keyof typeof examReadingChecks]).filter(Boolean);
+  }
+  explain(pageId:string,raw:unknown,actor:string){
+    const input=z.object({requestId:z.string().uuid(),questionId:z.string().max(64),revision:z.number().int().positive(),note:z.string().trim().min(1).max(500)}).parse(raw);
+    const db=this.store.db;
+    const q=db.prepare("SELECT revision FROM exam_questions WHERE id=? AND page_id=?").get(input.questionId,pageId);
+    if(!q)throw new HomeworkError(404,"找不到要解释的题目。");
+    const old=db.prepare("SELECT * FROM exam_explanations WHERE id=?").get(input.requestId);
+    if(old?.question_id===input.questionId && old.note===input.note && old.actor===actor)return {saved:true};
+    if(old||q.revision!==input.revision)throw new HomeworkError(409,"题目记录已更新，请重新打开。");
+    if(db.prepare("SELECT 1 FROM exam_explanations WHERE question_id=? AND status IN ('queued','running')").get(input.questionId))throw new HomeworkError(409,"小步正在看这道题的原卷。");
+    db.prepare("INSERT INTO exam_explanations(id,question_id,revision,note,actor,status) VALUES(?,?,?,?,?,'queued')").run(input.requestId,input.questionId,input.revision,input.note,actor);
+    return {saved:true};
+  }
+  learn(pageId:string,raw:unknown){
+    const {id,enabled}=z.object({id:z.string().uuid(),enabled:z.boolean()}).parse(raw);
+    const db=this.store.db;
+    const row=db.prepare("SELECT f.result,e.metadata FROM exam_explanations f JOIN exam_questions q ON q.id=f.question_id JOIN exam_pages p ON p.id=q.page_id JOIN exams e ON e.id=p.exam_id WHERE f.id=? AND p.id=?").get(id,pageId);
+    if(!row)throw new HomeworkError(404,"找不到这次说明。");
+    const subject=(JSON.parse(String(row.metadata)) as ExamMeta).subject;
+    const result=row.result?examReread.parse(JSON.parse(String(row.result))):null;
+    if(enabled&&(!subject||!result?.located||!result.check||!result.evidence))throw new HomeworkError(400,"请先补充科目，并核实原卷依据。");
+    db.prepare("UPDATE exam_explanations SET learned_subject=? WHERE id=?").run(enabled?subject:null,id);
+    return {saved:true};
+  }
+  private async processExplanation(execution:HomeworkExecution){
+    const db=this.store.db;
+    const row=db.prepare("SELECT f.id,f.question_id,f.note,f.revision,q.payload,q.revision current_revision,p.id page_id,e.metadata FROM exam_explanations f JOIN exam_questions q ON q.id=f.question_id JOIN exam_pages p ON p.id=q.page_id JOIN exams e ON e.id=p.exam_id WHERE f.status='queued' ORDER BY f.rowid LIMIT 1").get() as {id:string;question_id:string;note:string;revision:number;current_revision:number;payload:string;page_id:string;metadata:string}|undefined;
+    if(!row)return false;
+    db.prepare("UPDATE exam_explanations SET status='running' WHERE id=?").run(row.id);
+    try{
+      if(row.current_revision!==row.revision)throw new HomeworkError(409,"题目已更新。");
+      const meta=JSON.parse(row.metadata) as ExamMeta;
+      const ai=execution.forJob(undefined,undefined,{date:meta.date??this.store.today(),title:"试卷说明复读",pageId:row.page_id,runId:row.id});
+      const result=await ai.run("explain_exam_reading",examReread,{subject:meta.subject,questionId:row.question_id,original:JSON.parse(row.payload),familyNote:row.note,readingChecks:this.readingChecks(meta.subject)},[await this.aiImage(row.page_id)]);
+      if(result.questionId!==row.question_id)throw new HomeworkError(422,"原图定位未对应。");
+      if(!result.located||!result.evidence){result.check=null;result.change=null;}
+      if(result.change&&!result.change.teacherMark.trim())result.change.verdict="uncertain";
+      db.prepare("UPDATE exam_explanations SET status='done',result=? WHERE id=?").run(JSON.stringify(result),row.id);
+    }catch(e){
+      record({event:"exam.explain",error:true,code:failureCode(e)});
+      db.prepare("UPDATE exam_explanations SET status='failed' WHERE id=?").run(row.id);
     }
     return true;
   }

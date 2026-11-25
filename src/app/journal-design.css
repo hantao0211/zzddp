@@ -566,3 +566,32 @@
   outline: 2px solid currentColor;
   outline-offset: 2px;
 }
+
+.exam-workspace { display:grid; gap:16px; min-width:0; overflow-wrap:anywhere; }
+.exam-workspace :is(p,h3,h4,blockquote,dl,dd) { margin:0; }
+.exam-tools,.exam-overview,.exam-reply h4 { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; }
+.exam-overview,.exam-reply { padding:14px; background:var(--journal-sage); border-radius:12px; }
+.exam-overview small,.exam-qrow small { display:block; color:var(--muted); }
+.exam-meta-panel,.exam-sheet { border-bottom:1px solid var(--border); padding-bottom:10px; }
+.exam-workspace summary { cursor:pointer; padding:6px 0; }
+.exam-filters { display:flex; gap:6px; flex-wrap:wrap; }
+.exam-filters button,.exam-verdict { padding:5px 9px; border-radius:8px; font:inherit; font-size:.86em; }
+.exam-filters button { background:var(--journal-paper); color:var(--ink); border:1px solid var(--border); min-height:38px; cursor:pointer; }
+.exam-filters button[aria-pressed=true] { background:var(--action-hover-bg,#963a50); color:white; }
+.exam-qrow { display:grid; grid-template-columns:minmax(0,1fr) auto auto; align-items:center; gap:8px; width:100%; padding:11px 0; text-align:start; color:inherit; background:transparent; border:0; border-top:1px solid var(--border); cursor:pointer; }
+.exam-qrow small { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.exam-sheet h3 small { color:var(--muted); font-size:.75em; font-weight:400; }
+.exam-verdict { display:inline-block; background:var(--journal-yellow); }
+.exam-verdict.v-correct { background:var(--journal-sage); }
+.exam-verdict.v-wrong,.exam-verdict.v-blank { background:var(--journal-pink); }
+.exam-question-text p { margin-top:8px; white-space:pre-wrap; }
+.exam-evidence { display:grid; grid-template-columns:5em minmax(0,1fr); gap:8px; }
+.exam-evidence div { display:contents; }
+.exam-evidence dt,.exam-check small,.exam-reply small { color:var(--muted); }
+.exam-evidence dd,.exam-reply blockquote { white-space:pre-wrap; }
+.exam-reply { display:grid; gap:8px; background:var(--journal-sage); }
+.exam-reply h4 { justify-content:flex-start; }
+.exam-reply blockquote { padding-inline-start:10px; border-inline-start:2px solid var(--journal-green); }
+.exam-check { border-top:1px solid var(--border); padding-top:8px; }
+.exam-workspace textarea { box-sizing:border-box; width:100%; resize:vertical; }
+.exam-notice { padding:8px 12px; background:var(--journal-sage); border-radius:8px; }

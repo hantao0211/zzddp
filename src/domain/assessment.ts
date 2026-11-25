@@ -42,8 +42,8 @@ export const markedPage = z.object({ metadata: z.unknown().optional(), coverage:
 export type Observation = z.infer<typeof observation>;
 export type ExamRecord = ExamMeta & {id:string; pages:number; done:number; status:string};
 export type ExamPage = {id:string; number:number; status:string; note:string; coverage:string};
-export type ExamQuestion = Observation & {id:string; pageId:string; revision:number};
-export type ExamDetail = {exam:ExamRecord; pages:ExamPage[]; questions:ExamQuestion[]};
+export type ExamQuestion = Observation & {id:string; pageId:string; revision:number; feedback?:ExamFeedback};
+export type ExamDetail = {exam:ExamRecord; pages:ExamPage[]; questions:ExamQuestion[];savedChecks?:{id:string;pageId:string;subject:string;check:keyof typeof examReadingChecks}[]};
 export const dimensionNames = {stage:"年级学期",source:"来源",form:"作答形式",scene:"任务场景",knowledge:"知识点",skill:"能力",cause:"可能错因",unit:"单元",state:"复测状态",difficulty:"难度"} as const;
 export type Dimension = keyof typeof dimensionNames;
 export type Tags = Record<Dimension,string[]>;
@@ -70,3 +70,18 @@ export function classifyQuestion(label:string, question:string, points:string[],
   }
   return {form:[form],scene:[scene],skill:[skill],knowledge:knowledge.length?knowledge:["待分类"],cause:[cause||"原因待确认"],stage:[stage||"待确认"],source:[source],unit:[unit||"待确认"],state:["暂无复测"],difficulty:["待确认"]};
 }
+
+export const examReadingChecks = {
+  marks: "核对批注指向的题号和作答位置",
+  answers: "区分孩子的初答、订正和老师的笔迹",
+  layout: "按题号及版面核对题干和对应作答",
+} as const;
+export const examReread = z.object({
+  questionId: z.string(), located: z.boolean(), reply: z.string().trim().min(1).max(200),
+  evidence: z.string().trim().max(200), check: z.enum(["marks","answers","layout"]).nullable(),
+  change: observation.pick({question:true,studentAnswer:true,teacherMark:true,correction:true,verdict:true}).nullable(),
+});
+export type ExamFeedback = {
+  id:string; revision:number; note:string; status:"queued"|"running"|"done"|"failed";
+  result:z.infer<typeof examReread>|null; learned:boolean;
+};

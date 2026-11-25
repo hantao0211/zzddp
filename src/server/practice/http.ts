@@ -100,12 +100,14 @@ export class PracticeHTTP{
  }
  const exam=path.match(/^\/exams\/([a-f0-9]{64})$/);
  if(exam&&req.method==="GET"){send(res,this.store.exams.detail(exam[1]));return;}
- const examPage=path.match(/^\/exam-pages\/([a-f0-9-]{36})\/(photo|retry|review)$/);
+ const examPage=path.match(/^\/exam-pages\/([a-f0-9-]{36})\/(photo|retry|review|explain|learn)$/);
  if(examPage&&examPage[2]==="photo"&&req.method==="GET"){
    const photo=this.store.exams.photo(examPage[1]);res.writeHead(200,{"Content-Type":photo.mime,"Cache-Control":"private, no-store","X-Content-Type-Options":"nosniff"});res.end(photo.bytes);return;
  }
  if(path==="/exams"&&req.method==="POST"){send(res,this.store.exams.reserve(await body(req)));return;}
  if(examPage&&examPage[2]==="photo"&&req.method==="PUT"){send(res,await this.store.exams.receive(examPage[1],req));return;}
+ if(examPage&&req.method==="POST"&&examPage[2]==="explain"){send(res,this.store.exams.explain(examPage[1],await body(req),viewer.id));return;}
+ if(examPage&&req.method==="POST"&&examPage[2]==="learn"&&isParent(viewer)){send(res,this.store.exams.learn(examPage[1],await body(req)));return;}
  if(examPage&&req.method==="POST"&&isParent(viewer)){
    send(res,examPage[2]==="review"?this.store.exams.review(examPage[1],await body(req),viewer.id):examPage[2]==="retry"?this.store.exams.retry(examPage[1]):(()=>{throw new HomeworkError(404,"未知操作");})());return;
  }

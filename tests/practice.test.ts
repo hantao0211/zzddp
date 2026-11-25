@@ -269,3 +269,43 @@ test("homework classification preserves the original stage, skips duplicate atte
     f.seed("英语","课外历史");assert.equal(slice().analysis.wrongRate,null);
   }finally{f.close();}
 });
+
+test("exam explanations use the selected photo, keep the verdict independent and scope learned checks to future papers",async t=>{
+  const f=setup();
+  try{
+    const exams=f.store.exams;
+    const meta={title:"模拟卷",subject:"数学",date:f.store.today(),unit:"",kind:null,scope:null,grade:null,semester:null,score:null,maximum:null};
+    const paper=(sha:string,subject:string)=>exams.reserve({meta:{...meta,subject},pages:[{sha:sha.repeat(64),bytes:100}]});
+    const first=paper("a","数学"),pageId=first.pages[0].id;
+    const value={label:"三（2）",question:"模拟题",studentAnswer:"两种写法",teacherMark:"题号旁有红字",expectedAnswer:"",correction:"",verdict:"uncertain",confident:false,knowledgePoints:[],cause:"原因待确认",causeExplanation:""};
+    exams.savePage(pageId,{coverage:"partial",note:"",questions:[value]});
+    const question=()=>exams.detail(first.exam.id).questions[0];
+    const q=question(),cmd={requestId:randomUUID(),questionId:q.id,revision:q.revision,note:"看看答案下边的勾。"};
+    exams.explain(pageId,cmd,child.id);exams.explain(pageId,cmd,child.id);
+    assert.throws(()=>exams.explain(pageId,{...cmd,requestId:randomUUID()},child.id),/正在看/);
+    t.mock.method(exams as unknown as {aiImage:(id:string)=>unknown},"aiImage",async(id:string)=>({fileId:id,mimeType:"image/jpeg",base64:jpeg()}));
+    const seen:string[][]=[];
+    const ai:StructuredAI={async run(task,schema,raw,images){
+      const input=raw as {questionId:string;familyNote:string;readingChecks:string[]};
+      if(task==="explain_exam_reading"){
+        assert.equal(input.familyNote,cmd.note);assert.equal(images?.[0].fileId,pageId);
+        return schema.parse({questionId:q.id,located:true,reply:"红勾在这题作答下方。",evidence:"第2小题答案下方有勾。",check:"marks",change:{...value,verdict:"correct",teacherMark:"作答下方有勾"}});
+      }
+      assert.equal(task,"read_marked_exam");seen.push(input.readingChecks);
+      assert.ok(!JSON.stringify(input).includes(cmd.note));
+      return schema.parse({coverage:"partial",note:"",questions:[]});
+    }};
+    const worker=new PracticeWorker(f.store,()=>ai);await worker.tick();
+    const feedback=question().feedback!;
+    assert.equal(feedback.status,"done");assert.equal(question().verdict,"uncertain");
+    assert.deepEqual(exams.readingChecks("数学"),[]);
+    exams.learn(pageId,{id:feedback.id,enabled:true});
+    const next=async(sha:string,subject:string)=>{const page=paper(sha,subject).pages[0];f.store.db.prepare("UPDATE exam_pages SET status='queued' WHERE id=?").run(page.id);await worker.tick();};
+    await next("b","数学");await next("c","语文");
+    exams.learn(pageId,{id:feedback.id,enabled:false});await next("d","数学");
+    assert.deepEqual(seen,[["核对批注指向的题号和作答位置"],[],[]]);
+    exams.review(pageId,{id:q.id,revision:1,value:{...value,...feedback.result!.change,confident:true}},parent.id);
+    assert.equal(question().verdict,"correct");
+    assert.throws(()=>exams.explain(pageId,{...cmd,requestId:randomUUID()},child.id),/已更新/);
+  }finally{f.close();}
+});

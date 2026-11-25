@@ -1,16 +1,13 @@
 "use client";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ChevronRight, CircleAlert, CircleCheck, ClipboardCheck, Clock3, FileText, Upload, X, type LucideIcon } from "lucide-react";
-import { examKinds, type ExamRecord, type ExamDetail, type ExamMeta, type ExamQuestion, type Observation } from "@/domain/assessment";
+import { type ExamRecord, type ExamDetail } from "@/domain/assessment";
 import { homeworkPost, homeworkRequest } from "@/services/homework-gateway";
-import { PhotoPreviewButton } from "./photo-preview";
+import { ExamWorkspace } from "./exam-detail";
 
 const endpoint="/practice/exams";
 type Archive={items:ExamRecord[];total:number;stage:{grade:number;semester:number}|null};
-const choices=["语文","数学","英语"];
 const pagePath=(id:string)=>"/practice/exam-pages/"+id;
-const resultLabels={correct:"正确",wrong:"错误",uncertain:"待核对",blank:"未作答"};
-const pageStatus:Record<string,string>={awaiting:"待补传",queued:"等待识读",running:"正在识读",done:"已整理",failed:"识读未完成"};
 const message=(e:unknown)=>e instanceof Error?e.message:"操作未完成，请重试。";
 async function fileSha(file:File){return Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",await file.arrayBuffer())),b=>b.toString(16).padStart(2,"0")).join("");}
 async function putPhoto(id:string,file:File){await homeworkRequest(pagePath(id)+"/photo",{method:"PUT",headers:{"Content-Type":"application/octet-stream"},body:file});}
@@ -34,9 +31,7 @@ export function ExamShelf({canManage,openMistakes}:{canManage:boolean;openMistak
   const [mode,setMode]=useState<"new"|"list"|"detail"|null>(null),[latest,setLatest]=useState<Archive|null>(null),[archive,setArchive]=useState<Archive|null>(null);
   const [offset,setOffset]=useState(0),[selected,select]=useState(""),[detail,setDetail]=useState<ExamDetail|null>(null),[version,refresh]=useState(0);
   const [error,setError]=useState(""),[busy,setBusy]=useState(""),[notice,setNotice]=useState("");
-  const [editingMeta,setEditingMeta]=useState<ExamRecord|null>(null);
   const submitting=useRef(false),dialog=useRef<HTMLDialogElement>(null);
-  const [edit,setEdit]=useState<{pageId:string;q?:ExamQuestion}|null>(null);
   useEffect(()=>{const el=dialog.current;if(mode&&!el?.open)el?.showModal();if(!mode)el?.close();},[mode]);
   useEffect(()=>{
     const controller=new AbortController();let timer:ReturnType<typeof setTimeout>;
@@ -50,13 +45,13 @@ export function ExamShelf({canManage,openMistakes}:{canManage:boolean;openMistak
       }
       if(mode==="detail"){const data=await homeworkRequest<ExamDetail>(endpoint+"/"+selected,{signal:controller.signal});
         if(controller.signal.aborted)return;setDetail(data);
-        if(data.pages.some(p=>["queued","running"].includes(p.status)))timer=setTimeout(load,3500);
+        if(data.pages.some(p=>["queued","running"].includes(p.status)) || data.questions.some(q=>q.feedback && ["queued","running"].includes(q.feedback.status)))timer=setTimeout(load,3500);
       }
     }catch(e){if(!controller.signal.aborted)setError(message(e));}}
     void load();return ()=>{controller.abort();clearTimeout(timer);};
   },[mode,selected,offset,version]);
-  function openDetail(id:string){select(id);setEditingMeta(null);setDetail(null);setEdit(null);setError("");setMode("detail");}
-  function close(){if(!submitting.current){setMode(null);setEdit(null);refresh(n=>n+1);}}
+  function openDetail(id:string){select(id);setNotice("");setDetail(null);setError("");setMode("detail");}
+  function close(){if(!submitting.current){setMode(null);refresh(n=>n+1);}}
   async function act(fn:()=>Promise<void>){if(submitting.current)return;submitting.current=true;setBusy("正在保存…");setError("");setNotice("");
     try{await fn();refresh(n=>n+1);}catch(e){setError(message(e));}finally{submitting.current=false;setBusy("");}}
   function upload(event:FormEvent<HTMLFormElement>){
@@ -70,15 +65,6 @@ export function ExamShelf({canManage,openMistakes}:{canManage:boolean;openMistak
       openDetail(paper.exam.id);setNotice("照片已保存，小步会在后台整理错题。");
     });
   }
-  const wrongQuestions=detail?.questions.filter(q=>q.verdict==="wrong")??[];
-  const wrongCount=wrongQuestions.length;
-  function revealQuestion(id:string){
-    const row=document.getElementById("exam-question-"+id) as HTMLDetailsElement|null;
-    if(!row)return;
-    row.open=true;
-    row.querySelector("summary")?.focus();
-    row.scrollIntoView({block:"center"});
-  }
   const latestPaper=latest?.items[0];
   return <section className="exam-shelf" aria-label="测验与考试">
     <div className="reading-section-heading"><h2><ClipboardCheck aria-hidden="true"/>测验与考试</h2><button className="button primary compact" onClick={()=>{setError("");setNotice("");setMode("new");}}><Upload size={16}/>上传试卷</button></div>
@@ -88,54 +74,14 @@ export function ExamShelf({canManage,openMistakes}:{canManage:boolean;openMistak
     <dialog ref={dialog} className="reading-dialog exam-dialog" aria-label="试卷档案" onCancel={e=>{e.preventDefault();close();}}>
       <header><h2>{mode==="new"?"上传已批试卷":mode==="list"?"全部试卷":detail?.exam.title||"试卷详情"}</h2><button className="icon-button" disabled={!!busy} aria-label="关闭试卷档案" onClick={close}><X/></button></header>
       <div className="reading-dialog-body">
+      {notice&&<p className="exam-notice" role="status">{notice}</p>}{error&&<p className="form-error" role="alert">{error}</p>}
       {mode==="new"&&<form onSubmit={upload} className="exam-form"><label>选择已批试卷照片<input required name="photos" type="file" multiple accept="image/jpeg,image/png,image/webp"/></label>
         <small>按页序选 1～12 张。小步会识别老师标出的错题，试卷资料可稍后补充。</small><button className="button primary" disabled={!!busy}>{busy||"上传并整理错题"}</button></form>}
       {mode==="list"&&<>{archive?.items.map(e=><ExamRow key={e.id} exam={e} open={openDetail}/>)}<div className="reading-record-actions"><button className="text-button" disabled={!offset} onClick={()=>setOffset(n=>n-10)}>上一页</button><button className="text-button" disabled={offset+10>=(archive?.total??0)} onClick={()=>setOffset(n=>n+10)}>下一页</button></div></>}
-      {mode==="detail"&&detail&&<><div className="reading-section-heading"><h3>{wrongCount ? `已收录 ${wrongCount} 道错题` : detail.exam.done===detail.exam.pages ? "尚未识别到明确判错的题" : detail.pages.some(p=>p.status==="awaiting"||p.status==="failed") ? "有试卷页待处理" : "正在整理试卷"}</h3>
-        {wrongCount>0&&<button className="button secondary compact" onClick={()=>{close();openMistakes();}}>打开错题本</button>}</div>
-        {wrongQuestions.length>0&&<ul className="exam-wrong-list">{wrongQuestions.map(q=><li key={q.id}><button className="text-button" onClick={()=>revealQuestion(q.id)}>第 {detail.pages.find(p=>p.id===q.pageId)?.number} 页 · {q.label}</button></li>)}</ul>}
-        <p>{[detail.exam.subject,detail.exam.grade&&detail.exam.grade+"年级",detail.exam.semester&&(detail.exam.semester===1?"上学期":"下学期"),detail.exam.date,detail.exam.kind,detail.exam.scope&&(detail.exam.scope==="curricular"?"课内":"课外"),detail.exam.unit,detail.exam.score!==null&&"得分 "+detail.exam.score,detail.exam.maximum!==null&&"满分 "+detail.exam.maximum].filter(Boolean).join(" · ")}</p>
-        {detail.exam.done===detail.exam.pages&&(!detail.exam.title||!detail.exam.subject||!detail.exam.date)&&<small className="reading-muted">{[!detail.exam.title&&"卷名",!detail.exam.subject&&"科目",!detail.exam.date&&"测验日期"].filter(Boolean).join("、")}待补充。</small>}
-        {canManage&&<button className="text-button" onClick={()=>setEditingMeta(editingMeta?null:detail.exam)}>{editingMeta?"收起资料编辑":"补充或修改试卷资料"}</button>}
-        {editingMeta&&<form className="exam-form" onSubmit={e=>{e.preventDefault();const meta=readMeta(new FormData(e.currentTarget));void act(async()=>{
-          const {id,pages,done,status,...previous}=editingMeta;
-          await homeworkRequest(endpoint+"/"+id,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({previous,meta})});setEditingMeta(null);setNotice("已保存试卷资料。");
-        });}}><PaperFields meta={editingMeta}/><button className="button primary compact" disabled={!!busy}>保存试卷资料</button></form>}
-        {detail.pages.map(p=><section key={p.id} className="exam-page"><h3>第 {p.number} 页 · {pageStatus[p.status]}</h3>
-          {p.status!=="awaiting"?<PhotoPreviewButton src={"/assistant-api/learning"+pagePath(p.id)+"/photo"} alt={"试卷第"+p.number+"页"}>查看原卷</PhotoPreviewButton>:<label>补传本页原照片<input type="file" accept="image/jpeg,image/png,image/webp" disabled={!!busy} onChange={e=>{const f=e.target.files?.[0];if(f)void act(async()=>{await putPhoto(p.id,f);});}}/></label>}
-          {p.note&&<p>{p.note}</p>}{canManage&&p.status==="failed"&&<button disabled={!!busy} className="button secondary compact" onClick={()=>void act(async()=>{await homeworkPost(pagePath(p.id)+"/retry");})}>重试识读</button>}
-          {detail.questions.filter(q=>q.pageId===p.id).map(q=><details key={q.id} id={"exam-question-"+q.id}><summary>{q.label} · {resultLabels[q.verdict]}</summary><p>{q.question}</p><p>孩子原答：{q.studentAnswer||"未辨清"}</p><p>老师批注：{q.teacherMark||"待核对"}</p>{q.correction&&<p>卷面订正：{q.correction}</p>}{canManage&&<button className="text-button" onClick={()=>setEdit({pageId:p.id,q})}>核对这道题</button>}</details>)}
-          {canManage&&["done","failed"].includes(p.status)&&<button className="text-button" onClick={()=>setEdit({pageId:p.id})}>补录漏识别的题</button>}
-          {edit?.pageId===p.id&&<ReviewForm key={edit.q?.id??p.id} question={edit.q} busy={!!busy} cancel={()=>setEdit(null)} save={(value,id)=>void act(async()=>{await homeworkPost(pagePath(p.id)+"/review",{id,revision:edit.q?.revision??0,value});setEdit(null);setNotice("已保存核对结果，错题本同步更新。");})}/>}
-        </section>)}</>}
-      {busy&&<p role="status">{busy}</p>}{notice&&<p role="status">{notice}</p>}{error&&<p className="form-error" role="alert">{error}</p>}
+      {mode==="detail"&&detail&&<ExamWorkspace key={detail.exam.id} detail={detail} canManage={canManage} busy={!!busy} act={act} notify={setNotice}
+        openMistakes={()=>{close();openMistakes();}} putPhoto={putPhoto}/>}
+      {mode==="detail"&&!detail&&!error&&<p role="status">正在读取试卷…</p>}
+      {busy&&<p role="status">{busy}</p>}
       </div></dialog>
   </section>;
-}
-function choicesGrade(){return [1,2,3,4,5,6].map(g=><option key={g} value={g}>{g}年级</option>);}
-function ReviewForm({question:q,busy,cancel,save}:{question?:ExamQuestion;busy:boolean;cancel:()=>void;save:(v:Observation,id:string)=>void}){
-  const [id]=useState(()=>q?.id??crypto.randomUUID());
-  const fields={label:"题号",question:"题干",studentAnswer:"孩子原答",teacherMark:"老师批注或核对依据",expectedAnswer:"参考答案（选填）",correction:"卷面订正（选填）"} as const;
-  return <form className="exam-form" onSubmit={e=>{e.preventDefault();const f=new FormData(e.currentTarget);
-    const text=(k:string)=>String(f.get(k)??"").trim();
-    save({label:text("label"),question:text("question"),studentAnswer:text("studentAnswer"),teacherMark:text("teacherMark"),expectedAnswer:text("expectedAnswer"),correction:text("correction"),verdict:text("verdict") as Observation["verdict"],confident:true,knowledgePoints:q?.knowledgePoints??[],cause:q?.cause??"原因待确认",causeExplanation:q?.causeExplanation??""},id);
-  }}>{(Object.keys(fields) as (keyof typeof fields)[]).map(k=><label key={k}>{fields[k]}<input name={k} defaultValue={q?.[k]??""} required={["label","question","teacherMark"].includes(k)}/></label>)}
-  <label>核对结果<select name="verdict" defaultValue={q?.verdict??"uncertain"}>{Object.entries(resultLabels).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select></label>
-  <div className="reading-record-actions"><button type="button" className="text-button" onClick={cancel}>取消</button><button className="button primary compact" disabled={busy}>保存核对结果</button></div></form>;
-}
-
-function readMeta(data:FormData){
-  const text=(key:string)=>String(data.get(key)??"").trim()||null;
-  const num=(key:string)=>text(key)===null?null:Number(text(key));
-  return {title:text("title"),date:text("date"),subject:text("subject"),kind:text("kind"),scope:text("scope"),unit:text("unit")??"",
-    grade:num("grade"),semester:num("semester"),score:num("score"),maximum:num("maximum")};
-}
-function PaperFields({meta}:{meta:ExamMeta}){
-  return <><label>试卷名称<input name="title" defaultValue={meta.title??""} maxLength={120} placeholder="例如：数学第三单元测验"/></label>
-        <div className="exam-fields"><label>科目<select name="subject" defaultValue={meta.subject??""}><option value="">待补充</option>{choices.map(s=><option key={s}>{s}</option>)}</select></label><label>类型<select name="kind" defaultValue={meta.kind??""}><option value="">待补充</option>{examKinds.map(s=><option key={s}>{s}</option>)}</select></label>
-        <label>测验日期<input type="date" name="date" defaultValue={meta.date??""}/></label><label>归属<select name="scope" defaultValue={meta.scope??""}><option value="">待补充</option><option value="curricular">课内</option><option value="extracurricular">课外</option></select></label>
-        <label>年级<select name="grade" defaultValue={meta.grade??""}><option value="">请选择</option>{choicesGrade()}</select></label>
-        <label>学期<select name="semester" defaultValue={meta.semester??""}><option value="">请选择</option><option value="1">上学期</option><option value="2">下学期</option></select></label>
-        <label>得分（选填）<input type="number" min="0" max="1000" step="any" name="score" defaultValue={meta?.score??""}/></label><label>满分（选填）<input type="number" min="0.01" max="1000" step="any" name="maximum" defaultValue={meta?.maximum??""}/></label></div>
-        <label>单元（选填）<input name="unit" defaultValue={meta?.unit} maxLength={100}/></label></>;
 }

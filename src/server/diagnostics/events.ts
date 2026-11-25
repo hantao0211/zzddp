@@ -41,7 +41,7 @@ const routes: [RegExp, string][] = [
   [/^learning\/completion-feedback(?:\/convention)?$/, "homework.feedback"],
   [/^memo-entries\/update$|^learning\/day-plan$/, "homework.plan"],
   [/^learning\/practice\/exams$/, "exam.upload"],
-  [/^learning\/practice\/exam-pages\/[\da-f-]+\/(retry|review|photo)$/, "exam.page"],
+  [/^learning\/practice\/exam-pages\/[\da-f-]+\/(retry|review|photo|explain|learn)$/, "exam.page"],
   [/^learning\/practice\/(items\/|generate$)/, "practice.task"],
   [/^reading\/logs(?:\/|$)/, "reading.checkin"],
   [/^reading\/activities(?:\/|$)/, "activity.record"],
