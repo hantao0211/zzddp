@@ -4,16 +4,32 @@ import { CauseSchema } from "./grading";
 import { PracticeSubjectSchema } from "./practice";
 
 export const examKinds = ["随堂小测", "单元测验", "考试"] as const;
-export const examMeta = z.object({
+const examFields = {
   title: z.string().trim().min(1).max(120), kind: z.enum(examKinds), date: DaySchema,
   subject: PracticeSubjectSchema, scope: z.enum(["curricular", "extracurricular"]),
   grade: z.number().int().min(1).max(6), semester: z.union([z.literal(1), z.literal(2)]),
-  score: z.number().min(0).max(1000).nullable(), maximum: z.number().positive().max(1000).nullable(),
-  unit: z.string().trim().max(100).default(""),
+  score: z.number().min(0).max(1000), maximum: z.number().positive().max(1000),
+  unit: z.string().trim().max(100),
+};
+export const examMeta = z.object({
+  title: examFields.title.nullable(), kind: examFields.kind.nullable(), date: DaySchema.nullable(),
+  subject: examFields.subject.nullable(), scope: examFields.scope.nullable(), grade: examFields.grade.nullable(),
+  semester: examFields.semester.nullable(), score: examFields.score.nullable(), maximum: examFields.maximum.nullable(),
+  unit: examFields.unit.default(""),
 }).strict().refine(v => v.score === null || v.maximum === null || v.score <= v.maximum);
 export type ExamMeta = z.infer<typeof examMeta>;
+export const emptyExam: ExamMeta = {title:null,kind:null,date:null,subject:null,scope:null,grade:null,semester:null,score:null,maximum:null,unit:""};
+export function readExamHints(raw: unknown, today: string): Partial<ExamMeta> {
+  if (!raw || typeof raw !== "object") return {};
+  const hints = Object.entries(examFields).flatMap(([key, schema]) => {
+    const parsed = schema.safeParse(Reflect.get(raw, key));
+    return parsed.success && parsed.data !== "" && !(key === "date" && String(parsed.data) > today)
+      ? [[key, parsed.data]] : [];
+  });
+  return Object.fromEntries(hints);
+}
 export const examManifest = z.object({
-  meta: examMeta, pages: z.array(z.object({sha: z.string().regex(/^[0-9a-f]{64}$/), bytes: z.number().int().min(4).max(20*1024*1024)})).min(1).max(12),
+  meta: examMeta.optional(), pages: z.array(z.object({sha: z.string().regex(/^[0-9a-f]{64}$/), bytes: z.number().int().min(4).max(20*1024*1024)})).min(1).max(12),
 }).refine(v => new Set(v.pages.map(p => p.sha)).size === v.pages.length, "同一页照片重复");
 export const observation = z.object({
   label: z.string().trim().min(1).max(180), question: z.string().trim().min(1).max(3500),
@@ -22,7 +38,7 @@ export const observation = z.object({
   confident: z.boolean(), knowledgePoints: z.array(z.string().min(1).max(100)).max(8),
   cause: CauseSchema, causeExplanation: z.string().max(600),
 });
-export const markedPage = z.object({ coverage: z.enum(["complete","partial"]), note: z.string().max(500), questions: z.array(observation).max(80) });
+export const markedPage = z.object({ metadata: z.unknown().optional(), coverage: z.enum(["complete","partial"]), note: z.string().max(500), questions: z.array(observation).max(80) });
 export type Observation = z.infer<typeof observation>;
 export type ExamRecord = ExamMeta & {id:string; pages:number; done:number; status:string};
 export type ExamPage = {id:string; number:number; status:string; note:string; coverage:string};

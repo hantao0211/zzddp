@@ -75,9 +75,9 @@ export class PracticeStore{
     WHERE q.verdict='wrong' AND (? IS NULL OR json_extract(e.metadata,'$.subject')=?)`).all(subject??null,subject??null);
   for(const row of exams){
     const meta=JSON.parse(String(row.metadata)) as ExamMeta, q=JSON.parse(String(row.payload)) as Observation;
-    const scope=(row.scope??meta.scope) as LearningScope,id=String(row.id);
+    const scope=(row.scope??meta.scope??"unknown") as LearningScope,id=String(row.id);
     const stats=retests.get(scope+":"+id)??emptyRetestStats();
-    out.push({id,pageId:String(row.pageId),origin:"exam",subject:meta.subject,title:meta.title,question:q.question,answer:q.expectedAnswer,knowledgePoints:q.knowledgePoints,occurrences:1,lastDate:meta.date,scope,stats,weight:practiceWeight({occurrences:1,lastDate:meta.date,stats},this.today())});
+    out.push({id,pageId:String(row.pageId),origin:"exam",subject:meta.subject??"科目待补充",title:meta.title??"已批试卷",question:q.question,answer:q.expectedAnswer,knowledgePoints:q.knowledgePoints,occurrences:1,lastDate:meta.date??"",scope,stats,weight:practiceWeight({occurrences:1,lastDate:meta.date??this.today(),stats},this.today())});
   }
   return out;
  }

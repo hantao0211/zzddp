@@ -5,7 +5,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import type { IncomingMessage } from "node:http";
 import { z } from "zod";
-import { examMeta, examManifest, markedPage, observation, type ExamMeta, type ExamRecord, type ExamPage, type ExamDetail, type Observation } from "../../domain/assessment";
+import { emptyExam, readExamHints, examMeta, examManifest, markedPage, observation, type ExamMeta, type ExamRecord, type ExamPage, type ExamDetail, type Observation } from "../../domain/assessment";
 import { detectMime } from "../homework/images";
 import { HomeworkError } from "../homework/store";
 import type { HomeworkExecution } from "../homework/execution";
@@ -19,6 +19,8 @@ export class Assessments {
   constructor(readonly store:PracticeStore) {
     this.directory=join(store.directory,"assessments"); mkdirSync(this.directory,{recursive:true,mode:0o700});
     store.db.exec(`CREATE TABLE IF NOT EXISTS exams(id TEXT PRIMARY KEY,metadata TEXT NOT NULL,date TEXT NOT NULL,created_at TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS exam_photo_intakes(exam_id TEXT PRIMARY KEY REFERENCES exams(id), upload_day TEXT NOT NULL, locked TEXT NOT NULL DEFAULT '[]');
+      CREATE TABLE IF NOT EXISTS exam_page_hints(page_id TEXT PRIMARY KEY REFERENCES exam_pages(id), hints TEXT NOT NULL);
       CREATE INDEX IF NOT EXISTS exam_dates ON exams(date DESC);
       CREATE TABLE IF NOT EXISTS exam_pages(id TEXT PRIMARY KEY,exam_id TEXT NOT NULL REFERENCES exams(id),number INTEGER NOT NULL,sha TEXT NOT NULL,bytes INTEGER NOT NULL,mime TEXT NOT NULL DEFAULT '',status TEXT NOT NULL DEFAULT 'awaiting',coverage TEXT NOT NULL DEFAULT 'partial',note TEXT NOT NULL DEFAULT '',attempts INTEGER NOT NULL DEFAULT 0,UNIQUE(exam_id,number));
       CREATE TABLE IF NOT EXISTS exam_questions(id TEXT PRIMARY KEY,page_id TEXT NOT NULL REFERENCES exam_pages(id),payload TEXT NOT NULL,verdict TEXT NOT NULL,revision INTEGER NOT NULL);
@@ -48,16 +50,18 @@ export class Assessments {
     return {exam,pages,questions:questions.map(q=>({...JSON.parse(String(q.payload)),id:q.id,pageId:q.page_id,revision:q.revision}))};
   }
   reserve(input:unknown) {
-    const {meta,pages}=examManifest.parse(input);
-    if(meta.date>this.store.today())throw new HomeworkError(400,"请填写已经发生的测验日期。");
+    const {meta: supplied,pages}=examManifest.parse(input);
+    const meta=supplied??emptyExam;
+    if(meta.date && meta.date>this.store.today())throw new HomeworkError(400,"请填写已经发生的测验日期。");
     const id=digest(JSON.stringify(pages.map(p=>p.sha)));
     return this.store.homework.transaction(()=>{
       const prior=this.store.db.prepare("SELECT metadata FROM exams WHERE id=?").get(id);
-      if(prior&&prior.metadata!==JSON.stringify(meta))throw new HomeworkError(409,"这些原图已有档案，请在全部试卷中打开并修改资料。");
+      if(prior&&supplied&&prior.metadata!==JSON.stringify(meta))throw new HomeworkError(409,"这些原图已有档案，请在全部试卷中打开并修改资料。");
       if(!prior){
         const used=Number(this.store.db.prepare("SELECT COALESCE(sum(bytes),0) n FROM exam_pages").get()!.n);
         if(used+pages.reduce((sum,p)=>sum+p.bytes,0)>4*1024**3)throw new HomeworkError(507,"试卷原件空间不足，请联系家长。");
-        this.store.db.prepare("INSERT INTO exams VALUES(?,?,?,?)").run(id,JSON.stringify(meta),meta.date,this.store.time());
+        this.store.db.prepare("INSERT INTO exams VALUES(?,?,?,?)").run(id,JSON.stringify(meta),meta.date??this.store.today(),this.store.time());
+        if(!supplied)this.store.db.prepare("INSERT INTO exam_photo_intakes(exam_id,upload_day) VALUES(?,?)").run(id,this.store.today());
         pages.forEach((p,i)=>this.store.db.prepare("INSERT INTO exam_pages(id,exam_id,number,sha,bytes) VALUES(?,?,?,?,?)").run(randomUUID(),id,i+1,p.sha,p.bytes));
       }
       return this.detail(id);
@@ -65,13 +69,19 @@ export class Assessments {
   }
   editMeta(id:string,raw:unknown,actor:string){
     const {previous,meta}=z.object({previous:examMeta,meta:examMeta}).parse(raw);
-    if(meta.date>this.store.today())throw new HomeworkError(400,"请核对测验日期。");
+    if(meta.date && meta.date>this.store.today())throw new HomeworkError(400,"请核对测验日期。");
     return this.store.homework.transaction(()=>{
       const row=this.store.db.prepare("SELECT metadata FROM exams WHERE id=?").get(id);
       if(!row)throw new HomeworkError(404,"找不到这份试卷。");
       if(row.metadata===JSON.stringify(meta))return {saved:true};
       if(row.metadata!==JSON.stringify(previous))throw new HomeworkError(409,"资料刚被修改，请重新打开。");
-      this.store.db.prepare("UPDATE exams SET metadata=?,date=? WHERE id=?").run(JSON.stringify(meta),meta.date,id);
+      const intake=this.store.db.prepare("SELECT locked,upload_day FROM exam_photo_intakes WHERE exam_id=?").get(id);
+      if(intake){
+        const locked=new Set<string>(JSON.parse(String(intake.locked)));
+        for(const key of Object.keys(previous) as (keyof ExamMeta)[])if(previous[key]!==meta[key])locked.add(key);
+        this.store.db.prepare("UPDATE exam_photo_intakes SET locked=? WHERE exam_id=?").run(JSON.stringify([...locked]),id);
+      }
+      this.store.db.prepare("UPDATE exams SET metadata=?,date=COALESCE(?,date) WHERE id=?").run(JSON.stringify(meta),meta.date??intake?.upload_day??null,id);
       this.store.db.prepare("INSERT INTO exam_reviews(question_id,before_data,after_data,actor,created_at) VALUES(?,?,?,?,?)").run(id,String(row.metadata),JSON.stringify(meta),actor,this.store.time());
       return {saved:true};
     });
@@ -100,17 +110,37 @@ export class Assessments {
     try {
       const meta=JSON.parse(String(db.prepare("SELECT metadata FROM exams WHERE id=?").get(p.exam_id)!.metadata)) as ExamMeta;
       const {stdout}=await convert("/usr/bin/convert",["-limit","memory","64MiB","-limit","map","128MiB","-limit","disk","512MiB",join(this.directory,p.id)+"[0]","-auto-orient","-resize","1800x2400>","-background","white","-alpha","remove","-strip","-quality","85","jpeg:-"],{encoding:"buffer",timeout:60000,maxBuffer:3*1024*1024});
-      const ai=execution.forJob(undefined,undefined,{date:meta.date,title:"试卷整理："+meta.title,pageId:p.id,attempt:p.attempts+1});
-      const result=await execution.cached("marked-page-v1:"+digest(JSON.stringify([p.sha,meta.subject])),()=>ai.run("read_marked_exam",markedPage,{subject:meta.subject},[{fileId:p.id,mimeType:"image/jpeg",base64:stdout.toString("base64")}]));
+      const ai=execution.forJob(undefined,undefined,{date:meta.date??this.store.today(),title:"试卷整理："+(meta.title??"已批试卷"),pageId:p.id,attempt:p.attempts+1});
+      const result=await execution.cached("marked-page-v2:"+digest(JSON.stringify([p.sha,meta.subject])),()=>ai.run("read_marked_exam",markedPage,{subject:meta.subject},[{fileId:p.id,mimeType:"image/jpeg",base64:stdout.toString("base64")}]));
       this.savePage(p.id,result);
     } catch(e) {
       db.prepare("UPDATE exam_pages SET status='failed',note=? WHERE id=?").run(e instanceof HomeworkError?e.message:"识读未完成，原图已保存，可重试或手动补题。",p.id);
     }
     return true;
   }
+  private mergePageHints(pageId:string,raw:unknown){
+    const db=this.store.db,examId=this.page(pageId).exam_id;
+    const intake=db.prepare("SELECT i.locked,i.upload_day,e.metadata FROM exam_photo_intakes i JOIN exams e ON e.id=i.exam_id WHERE i.exam_id=?").get(examId);
+    if(!intake)return;
+    db.prepare("INSERT OR REPLACE INTO exam_page_hints VALUES(?,?)").run(pageId,JSON.stringify(readExamHints(raw,this.store.today())));
+    const pages=db.prepare("SELECT hints FROM exam_page_hints h JOIN exam_pages p ON p.id=h.page_id WHERE p.exam_id=?").all(examId).map(r=>JSON.parse(String(r.hints)) as Partial<ExamMeta>);
+    const locked=new Set<string>(JSON.parse(String(intake.locked)));
+    const merged=JSON.parse(String(intake.metadata)) as ExamMeta;
+    for(const key of Object.keys(emptyExam) as (keyof ExamMeta)[]){
+      if(locked.has(key))continue;
+      const values=new Set(pages.map(p=>p[key]).filter(v=>v!=null));
+      Object.assign(merged,{[key]:values.size===1?[...values][0]:emptyExam[key]});
+    }
+    if(merged.score!==null && merged.maximum!==null && merged.score>merged.maximum){
+      if(!locked.has("score"))merged.score=null;
+      if(!locked.has("maximum"))merged.maximum=null;
+    }
+    db.prepare("UPDATE exams SET metadata=?,date=COALESCE(?,date) WHERE id=?").run(JSON.stringify(examMeta.parse(merged)),merged.date??intake.upload_day,examId);
+  }
   savePage(id:string,raw:unknown) {
     const result=markedPage.parse(raw);
     this.store.homework.transaction(()=>{
+      this.mergePageHints(id,result.metadata);
       const seen=new Set<string>();
       const manual=this.store.db.prepare("SELECT payload FROM exam_questions WHERE page_id=?").all(id).map(r=>JSON.parse(String(r.payload)) as Observation);
       result.questions.forEach((item,i)=>{

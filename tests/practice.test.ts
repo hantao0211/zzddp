@@ -218,6 +218,33 @@ test("marked exams retain independent pages, scoped mistakes, teacher evidence a
   } finally {f.close();}
 });
 
+test("photos alone admit marked mistakes before metadata and preserve edits as later pages arrive",()=>{
+  const f=setup();
+  try {
+    const {store}=f, exams=store.exams, http=new PracticeHTTP(store);
+    const manifest={pages:["1","2","3"].map(c=>({sha:c.repeat(64),bytes:100}))};
+    const {exam,pages}=exams.reserve(manifest);
+    assert.equal(exam.subject,null);
+    const marked={label:"添括号 第3题",question:"给算式添上括号",studentAnswer:"",teacherMark:"该题右侧有叉",expectedAnswer:"",correction:"",verdict:"wrong",confident:true,knowledgePoints:["运算顺序"],cause:"原因待确认",causeExplanation:""};
+    const page={coverage:"complete",note:"",questions:[marked]};
+    exams.savePage(pages[1].id,{...page,metadata:{date:"无日期",grade:17,score:"不详"}});
+    const book=http.mistakes(undefined,undefined,0);
+    assert.equal(book.total,1);assert.equal(book.items[0].subject,"科目待补充");
+    assert.equal(book.items[0].scope,"unknown");assert.equal(book.items[0].date,"");
+    assert.equal(http.mistakes("语文",undefined,0).total,0);
+    assert.equal(http.mistakes(undefined,undefined,0,10,new URLSearchParams("grain=week")).analysis.trends[0].period,"测验日期待补充");
+    exams.savePage(pages[0].id,{...page,questions:[],metadata:{title:"小练习",subject:"数学",grade:4}});
+    assert.equal(http.mistakes("数学",undefined,0).total,1);
+    const {id,pages:_count,done,status,...previous}=exams.detail(exam.id).exam;
+    assert.equal(previous.maximum,null);assert.equal(previous.semester,null);
+    exams.editMeta(id,{previous,meta:{...previous,title:"家长核对的名称"}},parent.id);
+    exams.savePage(pages[2].id,{...page,questions:[],metadata:{title:"另一个标题",grade:5}});
+    const saved=exams.reserve(manifest);
+    assert.equal(saved.exam.title,"家长核对的名称");assert.equal(saved.exam.grade,null);
+    assert.equal(saved.questions.length,1);assert.equal(saved.questions[0].pageId,pages[1].id);
+  }finally{f.close();}
+});
+
 test("homework classification preserves the original stage, skips duplicate attempts and keeps old wrong-only evidence out of rates",()=>{
   const f=setup();
   try{

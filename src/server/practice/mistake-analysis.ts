@@ -14,6 +14,7 @@ type Event={id:string;date:string;subject:string;scope:LearningScope;origin:stri
 type Edited={revision:number; tags:Partial<Tags>};
 const editSchema=z.object({revision:z.number().int().min(0),tags:z.partialRecord(z.enum(["stage","form","scene","knowledge","skill","cause","unit","difficulty"]),z.array(z.string().trim().min(1).max(100)).min(1).max(8))}).strict();
 function period(date:string,grain:string,stage:string) {
+  if(!date)return "测验日期待补充";
   if(grain==="term")return term(date).split("/")[0]+" · "+stage;
   if(grain!=="week")return date.slice(0,7);
   const d=new Date(date+"T00:00:00Z");d.setUTCDate(d.getUTCDate()-(d.getUTCDay()+6)%7);return d.toISOString().slice(0,10);
@@ -101,7 +102,7 @@ export class MistakeAnalysis {
     }
     for(const r of db.prepare("SELECT q.id,q.payload,p.exam_id,CASE WHEN NOT EXISTS(SELECT 1 FROM exam_pages other WHERE other.exam_id=p.exam_id AND (other.coverage!='complete' OR other.status!='done')) THEN 'complete' ELSE 'partial' END coverage,e.metadata FROM exam_questions q JOIN exam_pages p ON p.id=q.page_id JOIN exams e ON e.id=p.exam_id").all()){
       const q=JSON.parse(String(r.payload)) as Observation,m=JSON.parse(String(r.metadata)) as ExamMeta;
-      add({id:String(r.id),date:m.date,subject:m.subject,scope:m.scope,origin:m.kind,tags:classifyQuestion(q.label,q.question,q.knowledgePoints,q.cause,stageLabel(m.grade,m.semester),m.kind,m.unit),verdict:q.verdict,full:r.coverage==="complete",document:String(r.exam_id)});
+      add({id:String(r.id),date:m.date??"",subject:m.subject??"科目待补充",scope:m.scope??"unknown",origin:m.kind??"已批试卷",tags:classifyQuestion(q.label,q.question,q.knowledgePoints,q.cause,m.grade&&m.semester?stageLabel(m.grade,m.semester):m.grade?m.grade+"年级":"待确认",m.kind??"已批试卷",m.unit),verdict:q.verdict,full:r.coverage==="complete",document:String(r.exam_id)});
     }
     const retests:{id:string;date:string;subject:string;verdict:string;parents:string[];tags:Tags}[]=[];
     for(const r of db.prepare("SELECT r.*,t.paper,t.profile FROM practice_results r JOIN practice_tasks t ON t.id=r.practice_id").all()){
@@ -138,7 +139,7 @@ export class MistakeAnalysis {
     });
     const selected=dimensions.map(d=>[d,params.getAll(d)] as const).filter(([,v])=>v.length);
     const from=params.get("from"),to=params.get("to");
-    const inRange=(date:string)=>(!from||date>=from)&&(!to||date<=to);
+    const inRange=(date:string)=>(!!date||(!from&&!to))&&(!from||date>=from)&&(!to||date<=to);
     const matchesTags=(e:Event)=>(!subject||e.subject===subject)&&(!scope||e.scope===scope)&&selected.every(([d,v])=>e.tags[d].some(t=>v.includes(t)));
     const list=candidates.filter(c=>{const e=byId.get(c.id);return e&&matchesTags(e)&&inRange(e.date);});
     const options={} as Record<Dimension,string[]>;

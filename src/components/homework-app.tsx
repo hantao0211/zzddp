@@ -221,7 +221,7 @@ export function HomeworkApp({ onDemo, onDateChange, active=true }: { onDemo: () 
               </div>
             </div>
           </section>}
-          {active && viewer && <ExamShelf key={viewer.id} date={date} canManage={canManage}/>}
+          {active && viewer && <ExamShelf key={viewer.id} openMistakes={()=>showGrading("mistakes")} canManage={canManage}/>}
           <HomeStudyTools grading={snapshot?.grading} homeworkReward={dayPlan.noHomework ? undefined : snapshot?.homeworkReward} onNavigate={showGrading} />
           <div className="hw-day-plan-line"><span>{snapshot && dayPlan.noHomework ? dayPlan.source === "date" ? "这一天设为无作业日" : "按每周安排休息" : ""}</span><button className="text-button" disabled={!snapshot || dayPlanBusy} onClick={() => { setDayPlanError(""); setDaySettingsOpen(true); }}><CalendarDays size={16} aria-hidden="true" />无作业日设置</button></div>
           {dayPlanError && !daySettingsOpen && <p className="error-text" role="alert">{dayPlanError}</p>}
