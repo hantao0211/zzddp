@@ -7,6 +7,7 @@ import { promisify } from "node:util";
 import type { IncomingMessage } from "node:http";
 import { z } from "zod";
 import { examReadingChecks, examReread, emptyExam, readExamHints, examMeta, examManifest, markedPage, observation, type ExamMeta, type ExamRecord, type ExamPage, type ExamDetail, type Observation } from "../../domain/assessment";
+import { AIServiceError } from "../ai/provider";
 import { detectMime } from "../homework/images";
 import { HomeworkError } from "../homework/store";
 import type { HomeworkExecution } from "../homework/execution";
@@ -15,6 +16,13 @@ import type { PracticeStore } from "./store";
 const convert = promisify(execFile);
 const digest = (v: string|Buffer) => createHash("sha256").update(v).digest("hex");
 type StoredPage = ExamPage & {exam_id:string; sha:string; bytes:number; mime:string; attempts:number};
+function examStatus(states:string[]){
+  if(states.some(s=>s==="queued"||s==="running"))return "整理中";
+  if(states.includes("awaiting"))return "待补传";
+  if(states.includes("failed"))return "识读未完成";
+  return "已整理";
+}
+
 export class Assessments {
   readonly directory:string;
   constructor(readonly store:PracticeStore) {
@@ -42,17 +50,16 @@ export class Assessments {
   list(offset:number,limit:number) {
     const db=this.store.db;
     const rows=db.prepare(`SELECT e.id,e.metadata,count(*) pages,sum(p.status='done') done,
-      CASE WHEN sum(p.status='awaiting')>0 THEN '待补传' WHEN sum(p.status='failed')>0 THEN '需核对'
-      WHEN sum(p.status!='done')>0 THEN '整理中' ELSE '已整理' END status FROM (SELECT * FROM exams ORDER BY date DESC,created_at DESC,id LIMIT ? OFFSET ?) e JOIN exam_pages p ON p.exam_id=e.id
-      GROUP BY e.id ORDER BY e.date DESC,e.created_at DESC,e.id`).all(limit,offset) as {id:string;metadata:string;pages:number;done:number;status:string}[];
-    return {items:rows.map(({metadata,...row})=>({...JSON.parse(metadata) as ExamMeta,...row})),total:Number(db.prepare("SELECT COUNT(*) n FROM exams").get()!.n)};
+      group_concat(p.status) states FROM (SELECT * FROM exams ORDER BY date DESC,created_at DESC,id LIMIT ? OFFSET ?) e JOIN exam_pages p ON p.exam_id=e.id
+      GROUP BY e.id ORDER BY e.date DESC,e.created_at DESC,e.id`).all(limit,offset) as {id:string;metadata:string;pages:number;done:number;states:string}[];
+    return {items:rows.map(({metadata,states,...row})=>({...JSON.parse(metadata) as ExamMeta,...row,status:examStatus(states.split(","))})),total:Number(db.prepare("SELECT COUNT(*) n FROM exams").get()!.n)};
   }
   detail(id:string):ExamDetail {
     const row=this.store.db.prepare("SELECT metadata FROM exams WHERE id=?").get(id);
     if(!row)throw new HomeworkError(404,"找不到这份试卷。");
     const pages=this.store.db.prepare("SELECT id,number,status,note,coverage FROM exam_pages WHERE exam_id=? ORDER BY number").all(id) as ExamPage[];
     const done=pages.filter(p=>p.status==="done").length;
-    const exam:ExamRecord={...JSON.parse(String(row.metadata)),id,pages:pages.length,done,status:done===pages.length?"已整理":"待整理"};
+    const exam:ExamRecord={...JSON.parse(String(row.metadata)),id,pages:pages.length,done,status:examStatus(pages.map(p=>p.status))};
     const questions=this.store.db.prepare("SELECT q.id,q.page_id,q.revision,q.payload,f.id feedback_id,f.revision feedback_revision,f.note,f.status,f.result,f.learned_subject FROM exam_questions q JOIN exam_pages p ON q.page_id=p.id LEFT JOIN exam_explanations f ON f.rowid=(SELECT max(rowid) FROM exam_explanations WHERE question_id=q.id) WHERE p.exam_id=? ORDER BY p.number,q.rowid").all(id);
     const savedChecks=this.store.db.prepare("SELECT f.id,q.page_id pageId,f.learned_subject subject,json_extract(f.result,'$.check') AS method FROM exam_explanations f JOIN exam_questions q ON q.id=f.question_id JOIN exam_pages p ON p.id=q.page_id WHERE p.exam_id=? AND f.learned_subject IS NOT NULL ORDER BY f.rowid").all(id).map(row=>({id:String(row.id),pageId:String(row.pageId),subject:String(row.subject),check:row.method as keyof typeof examReadingChecks}));
     return {exam,pages,savedChecks,questions:questions.map(q=>({...JSON.parse(String(q.payload)),id:q.id,pageId:q.page_id,revision:q.revision,feedback:q.feedback_id?{
@@ -128,12 +135,16 @@ export class Assessments {
       const image=await this.aiImage(p.id);
       const ai=execution.forJob(undefined,undefined,{date:meta.date??this.store.today(),title:"试卷整理："+(meta.title??"已批试卷"),pageId:p.id,attempt:p.attempts+1});
       const readingChecks=this.readingChecks(meta.subject);
-      const result=await execution.cached("marked-page-v4:"+digest(JSON.stringify([p.sha,meta.subject,readingChecks])),()=>ai.run("read_marked_exam",markedPage,{subject:meta.subject,readingChecks},[image]));
+      const retryInstructions=p.attempts>0?{instructions:"逐小题识读原卷，已打勾的题简要转录，批注简写，未知字段按要求留空，确保完整输出所有题目及 JSON。"}:{};
+      const result=await execution.cached("marked-page-v4:"+digest(JSON.stringify([p.sha,meta.subject,readingChecks])),()=>ai.run("read_marked_exam",markedPage,{subject:meta.subject,readingChecks,...retryInstructions},[image]));
       this.savePage(p.id,result);
       record({ event: "exam.process", ref: p.id.slice(0, 8), attempt: p.attempts + 1 });
     } catch(e) {
       record({ event: "exam.process", error: true, attempt: p.attempts + 1, ref: p.id.slice(0, 8), code: failureCode(e) });
-      db.prepare("UPDATE exam_pages SET status='failed',note=? WHERE id=?").run(e instanceof HomeworkError?e.message:"识读未完成，原图已保存，可重试或手动补题。",p.id);
+      const again=p.attempts===0 && e instanceof AIServiceError && e.retryable;
+      const reason=e instanceof AIServiceError && e.code==="INCOMPLETE_RESPONSE"?"小步上次只读完了部分内容。":"";
+      const note=again?"正在用原图重新识读本页。":e instanceof HomeworkError?e.message:reason+"原图已保存，可由家长重试本页。";
+      db.prepare("UPDATE exam_pages SET status=?,note=? WHERE id=?").run(again?"queued":"failed",note,p.id);
     }
     return true;
   }

@@ -6,7 +6,7 @@ const base=process.env.SMOKE_BASE_URL;
 assert.equal(base,"https://127.0.0.1:3443");
 const date="2026-11-20";
 const viewer={id:"11111111-1111-4111-8111-111111111111",name:"模拟孩子",role:"child",username:"qa"};
-const states=["整理中","已整理","待补传","需核对"];
+const states=["整理中","已整理","待补传","识读未完成"];
 const icons=["clock-3","circle-check","upload","circle-alert"];
 const exams=states.map((status,i)=>({id:String(i),date,subject:"数学",title:i?"模拟试卷"+i:"第一单元 运算关系与运算律",status,pages:1,done:i===1?1:0}));
 const engine=process.env.SMOKE_BROWSER==="webkit"?webkit:chromium;
@@ -44,6 +44,8 @@ try{
   exams[0].status="已整理";
   await list.first().getByText("已整理",{exact:true}).waitFor({timeout:12000});
   assert.equal(await list.first().evaluate(el=>getComputedStyle(el).backgroundColor),colors[1]);
+  exams[3].status="已整理";exams[3].done=1;
+  await list.nth(3).getByText("已整理",{exact:true}).waitFor({timeout:22000});
   await page.getByRole("button",{name:"关闭试卷档案"}).click();
   await latest.getByText("已整理").waitFor();
   assert.deepEqual(errors,[]);

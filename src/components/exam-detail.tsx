@@ -72,8 +72,8 @@ export function ExamWorkspace({detail,canManage,busy,act,notify,openMistakes,put
       if(filter!=="all"&&!rows.length)return null;
       return <section key={p.id} className="exam-sheet"><div className="exam-tools"><h3>第 {p.number} 页 <small>{pageStatus[p.status]}</small></h3>{p.status!=="awaiting"&&<Original pageId={p.id} number={p.number}/>}</div>
         {p.status==="awaiting"&&<label>补传本页原照片<input type="file" accept="image/jpeg,image/png,image/webp" disabled={busy} onChange={e=>{const f=e.target.files?.[0];if(f)act(()=>putPhoto(p.id,f));}}/></label>}
-        {p.note&&<details><summary>识读说明</summary><p>{p.note}</p></details>}
-        {canManage&&p.status==="failed"&&<button className="button secondary compact" disabled={busy} onClick={()=>act(async()=>{await homeworkPost(pagePath(p.id)+"/retry");notify("已重新排队识读。");})}>重试识读</button>}
+        {p.note&&(p.status==="done"?<details><summary>识读说明</summary><p>{p.note}</p></details>:<p className="reading-muted" role="status">{p.note}</p>)}
+        {canManage&&p.status==="failed"&&<button className="button secondary compact" disabled={busy} onClick={()=>act(async()=>{await homeworkPost(pagePath(p.id)+"/retry");notify("");})}>重试识读</button>}
         {rows.map(q=><button className="exam-qrow" id={"exam-open-"+q.id} key={q.id} onClick={()=>open(p.id,q.id)}><span><strong>{q.label}</strong><small>{q.feedback?(q.feedback.status==="done"?"小步已回复":q.feedback.status==="failed"?"复读未完成":"小步正在看原卷"):q.question}</small></span><span className={"exam-verdict v-"+q.verdict}>{resultLabels[q.verdict]}</span><ChevronRight size={15}/></button>)}
         {canManage&&["done","failed"].includes(p.status)&&<button className="text-button" id={"exam-open-"+p.id} onClick={()=>open(p.id)}><Plus size={15}/>补录漏识别的题</button>}
       </section>;

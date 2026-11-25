@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { AIServiceError } from "../src/server/ai/provider";
 import {inferLearningScope,emptyRetestStats,practiceWeight,PracticePaperSchema} from "../src/domain/practice";
 test("course scope requires explicit evidence and keeps ambiguous tasks out of both pools",()=>{assert.equal(inferLearningScope("课外英语练习"),"extracurricular");assert.equal(inferLearningScope("课堂练习"),"curricular");assert.equal(inferLearningScope("英语U7练习"),"unknown");assert.equal(inferLearningScope("课内外综合练习"),"unknown");assert.equal(inferLearningScope("课内和课外"),"unknown");});
 test("practice weighting balances repeated errors, spaced review and successful retests",()=>{const candidate={occurrences:1,lastDate:"2026-11-22",stats:emptyRetestStats()},today="2026-11-23",base=practiceWeight(candidate,today);assert.ok(practiceWeight({...candidate,occurrences:5},today)>base);assert.ok(practiceWeight({...candidate,lastDate:"2026-10-01"},today)>base);assert.ok(practiceWeight({...candidate,stats:{...candidate.stats,attempts:4,correct:4,consecutivePasses:2}},today)<base);});
@@ -216,6 +217,35 @@ test("marked exams retain independent pages, scoped mistakes, teacher evidence a
     assert.equal(store.db.prepare("SELECT count(*) n FROM exam_reviews").get()?.n,2);
     assert.equal(store.db.prepare("SELECT count(*) n FROM uploads").get()?.n,0);
   } finally {f.close();}
+});
+
+test("a truncated exam page retries once while page and archive status follow real work",async t=>{
+  const f=setup();
+  try{
+    const exams=f.store.exams;
+    const paper=exams.reserve({pages:["a","b"].map(c=>({sha:c.repeat(64),bytes:100}))});
+    const [one,two]=paper.pages;
+    const result={coverage:"complete",note:"",questions:[]};
+    exams.savePage(two.id,result);
+    f.store.db.prepare("UPDATE exam_pages SET status='queued' WHERE id=?").run(one.id);
+    t.mock.method(exams as unknown as {aiImage:(id:string)=>unknown},"aiImage",async(id:string)=>({fileId:id,mimeType:"image/jpeg",base64:jpeg()}));
+    let calls=0;
+    const worker=new PracticeWorker(f.store,()=>({async run(task,schema,metadata,images){
+      assert.equal(images?.[0].fileId,one.id);
+      if(++calls<=2)throw new AIServiceError("INCOMPLETE_RESPONSE",true,"incomplete");
+      return schema.parse(result);
+    }}));
+    function check(status:string){
+      assert.equal(exams.detail(paper.exam.id).exam.status,status);
+      assert.equal(exams.list(0,10).items[0].status,status);
+    }
+    await worker.tick();check("整理中");
+    await worker.tick();check("识读未完成");
+    await worker.tick();assert.equal(calls,2);
+    exams.retry(one.id);check("整理中");
+    await worker.tick();check("已整理");
+    assert.equal(exams.page(two.id).attempts,0);
+  }finally{f.close();}
 });
 
 test("photos alone admit marked mistakes before metadata and preserve edits as later pages arrive",()=>{

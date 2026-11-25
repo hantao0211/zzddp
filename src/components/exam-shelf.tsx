@@ -19,11 +19,11 @@ const examStates: Record<string,{tone:string;icon:LucideIcon}> = {
   "整理中": {tone:"in-progress",icon:Clock3},
   "已整理": {tone:"done",icon:CircleCheck},
   "待补传": {tone:"uncertain",icon:Upload},
-  "需核对": {tone:"wrong",icon:CircleAlert},
+  "识读未完成": {tone:"wrong",icon:CircleAlert},
 };
 function ExamRow({exam,open}:{exam:ExamRecord;open:(id:string)=>void}){
   const {tone,icon:Icon}=examStates[exam.status]??{tone:"neutral",icon:FileText};
-  const info=[exam.date,exam.subject].filter(Boolean).join(" · ");
+  const info=[exam.date,exam.subject,exam.status!=="已整理" && exam.pages>1 && ("已整理 "+exam.done+"/"+exam.pages+" 页")].filter(Boolean).join(" · ");
   return <button className={`exam-line exam-status-row status-${tone}`} onClick={()=>open(exam.id)}>
     <span className="exam-row-info"><strong>{exam.title||"已批试卷"}</strong>{info&&<small>{info}</small>}</span>
     <span className="exam-row-state"><Icon size={16} aria-hidden="true"/>{exam.status}<ChevronRight size={14} aria-hidden="true"/></span>
@@ -47,13 +47,16 @@ export function ExamShelf({canManage,openMistakes}:{canManage:boolean;openMistak
         if(controller.signal.aborted)return;
         if(mode==="list")setArchive(data);else setLatest(data);
         if(data.items.some(exam=>exam.status==="整理中"))timer=setTimeout(load,3500);
+        else if(data.items.some(exam=>exam.status!=="已整理"))timer=setTimeout(load,15000);
       }
       if(mode==="milestones"){const data=await homeworkRequest<MilestoneData>("/practice/milestones",{signal:controller.signal});if(!controller.signal.aborted)setMilestones(data);}
       if(mode==="detail"){const data=await homeworkRequest<ExamDetail>(endpoint+"/"+selected,{signal:controller.signal});
         if(controller.signal.aborted)return;setDetail(data);
         if(data.pages.some(p=>["queued","running"].includes(p.status)) || data.questions.some(q=>q.feedback && ["queued","running"].includes(q.feedback.status)))timer=setTimeout(load,3500);
+        else if(data.pages.some(p=>p.status!=="done"))timer=setTimeout(load,15000);
       }
-    }catch(e){if(!controller.signal.aborted)setError(message(e));}}
+      if(!controller.signal.aborted)setError("");
+    }catch(e){if(!controller.signal.aborted){setError(message(e));if(mode==="list"||!mode||mode==="detail")timer=setTimeout(load,15000);}}}
     void load();return ()=>{controller.abort();clearTimeout(timer);};
   },[mode,selected,offset,version]);
   function openDetail(id:string){setFromMilestones(mode==="milestones");select(id);setNotice("");setDetail(null);setError("");setMode("detail");}
