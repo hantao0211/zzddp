@@ -4,11 +4,16 @@ import { reviewReportConclusion } from "./review-conclusion";
 import type { HomeworkSnapshot } from "./homework";
 import { needsReviewTraceUpdate } from "./review-policy";
 
-export function shouldRemindHomeworkUpload(snapshot: HomeworkSnapshot | null, noHomework: boolean, now = Date.now()) {
+export function gardenReminderTiming(date: string, now = Date.now()) {
+  const start = Date.parse(`${date}T20:30:00+08:00`);
+  const end = Date.parse(`${date}T22:00:00+08:00`);
+  if (now < start) return { open: false, nextChange: start };
+  if (now < end) return { open: true, nextChange: end };
+  return { open: false, nextChange: null };
+}
+
+export function needsHomeworkUpload(snapshot: HomeworkSnapshot | null, noHomework: boolean) {
   if (!snapshot || noHomework || snapshot.homeworkReward?.earned) return false;
-  const evening = Date.parse(`${snapshot.date}T20:00:00+08:00`);
-  const midnight = evening + 4 * 60 * 60 * 1000;
-  if (!(now >= evening && now < midnight)) return false;
   if (snapshot.uploads.some(upload => upload.kind === "homework" && upload.files.some(file => file.stored))) return false;
   const report = snapshot.report;
   return !(report?.tasks.length && !report.unclassified.length && report.tasks.every(task => taskSubmission(task) === "self"));

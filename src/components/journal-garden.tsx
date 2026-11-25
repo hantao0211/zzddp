@@ -122,8 +122,8 @@ function FlowerFace({ reminder }: { reminder?: "waiting" | "speaking" }) {
 }
 
 const uploadReminder = "记得交作业哦";
-function FlowerSpeech({ progress, remindUpload, onReminderSpeech }: {
-  progress?: GardenProgress; remindUpload: boolean; onReminderSpeech: (speaking: boolean) => void;
+function FlowerSpeech({ progress, allowReadingReminder, remindUpload, onReminderSpeech }: {
+  progress?: GardenProgress; allowReadingReminder: boolean; remindUpload: boolean; onReminderSpeech: (speaking: boolean) => void;
 }) {
   const completed = progress?.homeworkComplete;
   const earned = progress?.earnedSteps;
@@ -132,9 +132,10 @@ function FlowerSpeech({ progress, remindUpload, onReminderSpeech }: {
     const lines = [];
     if (completed) lines.push("今天作业完成了，\n真棒！");
     if (earned && earned > 0) lines.push(`今日小脚步 +${earned}`);
-    if (reading !== undefined) lines.push(reading ? "今天读过书啦！" : "还没阅读打卡哟，\n一起读几页吧！");
+    if (reading) lines.push("今天读过书啦！");
+    else if (reading === false && allowReadingReminder) lines.push("一起读几页书吧！");
     return [...lines, "慢慢来，加油！", "试一试，你可以！", "嘻嘻！", "哈哈！"];
-  }, [completed, earned, reading]);
+  }, [completed, earned, reading, allowReadingReminder]);
   const spoken = useRef(new Set<string>());
   const lastPhrase = useRef("");
   const reminderBeat = useRef(0);
@@ -238,7 +239,7 @@ const mottoLines = [
   [["开", 5, "open"], ["出", -4, "open"], ["自", -7, "own"], ["己", 8, "own"], ["的", -3, "own"], ["花", 13, "flower"]],
 ] as const;
 
-export function JournalGarden({ hint, sticker, onChoose, remindUpload, progress }: { progress?: GardenProgress; remindUpload: boolean; hint: string; sticker: JournalSticker; onChoose: (next: JournalSticker) => void }) {
+export function JournalGarden({ hint, sticker, onChoose, allowReadingReminder, remindUpload, progress }: { progress?: GardenProgress; allowReadingReminder: boolean; remindUpload: boolean; hint: string; sticker: JournalSticker; onChoose: (next: JournalSticker) => void }) {
   const [open, setOpen] = useState(false);
   const [speakingReminder, setSpeakingReminder] = useState(false);
   const tools = useRef<HTMLDivElement>(null);
@@ -282,7 +283,7 @@ export function JournalGarden({ hint, sticker, onChoose, remindUpload, progress 
         <span className="journal-garden-decoration" role="img" aria-label={`花盆贴着${selected.label}贴纸`}>
           <span ref={flower} className="journal-flower" aria-hidden="true">
             <span className="journal-ground" />
-            <FlowerSpeech progress={progress} remindUpload={remindUpload} onReminderSpeech={setSpeakingReminder}/>
+            <FlowerSpeech progress={progress} allowReadingReminder={allowReadingReminder} remindUpload={remindUpload} onReminderSpeech={setSpeakingReminder}/>
             <span className="journal-flower-stalk">
               <span className="journal-stem" />
               {[1, 2, 3, 4, 5].map(n => <span className={`journal-petal p${n}`} key={n} />)}
