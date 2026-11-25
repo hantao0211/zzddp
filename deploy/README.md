@@ -45,3 +45,5 @@ HOST=0.0.0.0 PORT=3080 node server.cjs public
 公开仓库不含真实服务器维护日志。可复制 `DEPLOYMENT.example.md` 为被Git忽略的 `DEPLOYMENT.md`，在维护环境记录实际发布及回退信息，不将真实学习结果或私有备份位置发布到仓库。
 
 首次启动账号服务后，家长用服务器私有状态目录中的一次性开通码在 `/admin/` 建立管理员，再创建孩子账号。旧访问码只保留孩子权限。备份时同时保留新增 `accounts.sqlite`（含WAL文件）和原有学习数据库、原件及state.json。详见 [家庭账号与管理](../docs/accounts.md)。
+
+运行日志的部署、容量预算及查询方法见 [小步运行日志](../docs/diagnostics.md)。

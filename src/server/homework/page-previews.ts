@@ -1,3 +1,4 @@
+import { record } from "../diagnostics/events";
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { copyFile, mkdir, mkdtemp, rename, rm, stat } from "node:fs/promises";
@@ -52,7 +53,7 @@ export class PagePreviews {
     try { await work; return selected; }
     catch {
       // A failed optional optimization must not hide an otherwise readable page.
-      if (!this.failures.has(key)) console.warn("Page preview optimization unavailable; retaining the existing page.");
+      if (!this.failures.has(key)) record({ event: "image.preview", error: true });
       if (this.failures.size >= 128) this.failures.delete(this.failures.keys().next().value!);
       this.failures.set(key, Date.now() + 60000);
       return source;

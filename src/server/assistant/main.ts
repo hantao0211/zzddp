@@ -1,3 +1,4 @@
+import { enableDiagnostics, record } from "../diagnostics/events";
 import {PracticeStore} from "../practice/store";
 import {PracticeHTTP} from "../practice/http";
 import {PracticeWorker} from "../practice/worker";
@@ -20,6 +21,7 @@ import { AssistantStore, readAssistantLimits } from "./store";
 import { DeepSeekSpeech } from "./speech";
 import { createAssistantServer } from "./server";
 
+enableDiagnostics();
 try {
   const [major, minor] = process.versions.node.split(".").map(Number);
   if (major < 22 || (major === 22 && minor < 13)) throw new Error("Node 22.13 or newer required");
@@ -47,7 +49,7 @@ try {
     speech: config.provider === "deepseek" ? new DeepSeekSpeech(config.apiKey) : undefined,
   });
   worker.start(); readingWorker.start(); homeworkRewards.start();practiceWorker.start();
-  server.listen(port, "127.0.0.1", () => console.log("Xiaobu assistant ready on loopback"));
-  server.on("error", () => { console.error("Assistant listener unavailable"); process.exitCode = 1; });
+  server.listen(port, "127.0.0.1", () => record({ event: "service.ready" }));
+  server.on("error", () => { record({ event: "service.listen", error: true }); process.exitCode = 1; });
   for (const signal of ["SIGTERM", "SIGINT"] as const) process.on(signal, () => { worker.stop(); readingWorker.stop(); homeworkRewards.stop();practiceWorker.stop(); server.close(() => process.exit(0)); setTimeout(() => process.exit(0), 5000).unref(); });
-} catch { console.error("Assistant configuration or private state unavailable"); process.exitCode = 1; }
+} catch { record({ event: "service.start", error: true }); console.error("Assistant configuration or private state unavailable"); process.exitCode = 1; }

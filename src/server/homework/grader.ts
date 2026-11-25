@@ -1,3 +1,4 @@
+import { record } from "../diagnostics/events";
 import { assignmentRequirement, isMemoTrackingPart } from "../../domain/memo-assignment";
 import { blindGradingQuestions, reconcileFocusedQuestion } from "../../domain/grading-verification";
 import type { GradingStage } from "../../domain/grading-failure";
@@ -70,10 +71,11 @@ export class HomeworkGrader {
       if (!source.assigned) result.questions = result.questions.map(q => q.verdict === "blank" ? { ...q, verdict: "uncertain", verification: "uncertain", explanation: "尚未明确布置范围，不将空白题认定为漏做。" } : q);
       stage = "saving";
       this.store.grading.save(run, result);
+      record({ event: "homework.grade", ref: run.id.slice(0, 8), attempt: run.attempts });
     } catch (error) {
       const budget = error instanceof HomeworkError && error.status === 429;
       const code = error instanceof AIServiceError ? error.code : budget ? "BUDGET_LIMIT" : error instanceof HomeworkError && error.status === 409 ? "SUPERSEDED" : "LOCAL_ERROR";
-      console.warn("Grading did not finish:", code, "run=" + run.id, "stage=" + stage);
+      record({ event: "homework.grade", error: true, ref: run.id.slice(0, 8), code, stage, attempt: run.attempts });
       this.store.grading.fail(run, error instanceof AIServiceError && error.retryable, budget, { code, stage });
     }
     return true;

@@ -22,8 +22,12 @@ try {
   cpSync(join(root, "out"), join(release, "public"), { recursive: true });
   copyFileSync(join(root, "scripts/serve-preview.cjs"), join(release, "server.cjs"));
   copyFileSync(join(root, "dist/assistant/server.cjs"), join(release, "assistant.cjs"));
+  copyFileSync(join(root, "dist/assistant/diagnostics.cjs"), join(release, "diagnostics.cjs"));
+  copyFileSync(join(root, "deploy/xiaobu-diagnostics.service"), join(release, "xiaobu-diagnostics.service"));
   copyFileSync(join(root, "deploy/xiaobu-assistant.service"), join(release, "xiaobu-assistant.service"));
   copyFileSync(join(root, "deploy/nginx/xiaobu-assistant.conf"), join(release, "xiaobu-assistant.conf"));
+  copyFileSync(join(root, "deploy/nginx/xiaobu.conf"), join(release, "xiaobu.conf"));
+  copyFileSync(join(root, "docs/diagnostics.md"), join(release, "docs/diagnostics.md"));
   copyFileSync(join(root, "docs/homework.md"), join(release, "HOMEWORK.md"));
   copyFileSync(join(root, "docs/accounts.md"), join(release, "ACCOUNTS.md"));
   copyFileSync(join(root, "docs/reading.md"), join(release, "READING.md"));

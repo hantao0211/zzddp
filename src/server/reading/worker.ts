@@ -1,3 +1,4 @@
+import { record, failureCode } from "../diagnostics/events";
 import {ReadingReviewSchema,type ReadingReview} from "../../domain/reading";
 import {AIServiceError,type StructuredAI} from "../ai/provider";
 import type {ReadingStore} from "./store";
@@ -10,5 +11,6 @@ export class ReadingWorker{
  const basis:ReadingReview["basis"]=result.evidenceReadable&&result.evidenceQuote?(row.excerpt.includes(result.evidenceQuote)?"provided_excerpt":image?"provided_image":"none"):"none";
  const supported=basis!=="none";
  this.store.complete(job,{...result,...(!supported?{comparison:"insufficient_evidence",comparisonReason:"没有可核对的对应原文，暂无法判断概括的内容准确性；这不表示你没有读懂。",evidenceQuote:"",evidenceReadable:false}:{}),basis,timingNote:"时长和页数只记录阅读投入，不能单独判断理解质量；本次反馈只针对概括及已提供片段。"});
- }catch(e){if(job)this.store.fail(job,e instanceof AIServiceError&&e.retryable);}finally{this.busy=false;}}
+ record({ event: "reading.review" });
+ }catch(e){record({ event: "reading.review", error: true, code: failureCode(e) });if(job)this.store.fail(job,e instanceof AIServiceError&&e.retryable);}finally{this.busy=false;}}
 }

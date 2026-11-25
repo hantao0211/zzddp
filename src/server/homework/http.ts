@@ -1,3 +1,4 @@
+import { noteFailure } from "../diagnostics/events";
 import { ConventionInput, FeedbackInput } from "./completion-feedback";
 import type {PracticeHTTP} from "../practice/http";
 import {LearningScopeSchema,type PracticeSubject} from "../../domain/practice";
@@ -147,6 +148,7 @@ export class HomeworkHTTP {
       }
       throw new HomeworkError(404, "没有找到这个资料功能。");
     } catch (e) {
+      noteFailure(res, e);
       if (res.destroyed || res.writableEnded) return;
       if (res.headersSent) { res.destroy(); return; }
       json(res, { error: e instanceof HomeworkError ? e.message : "资料处理暂时不可用，原件不会被自动删除。请稍后再试。" }, e instanceof HomeworkError ? e.status : 503);

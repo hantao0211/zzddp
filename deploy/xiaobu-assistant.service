@@ -1,6 +1,6 @@
 [Unit]
 Description=Xiaobu learning assistant
-Wants=network-online.target
+Wants=network-online.target xiaobu-diagnostics.service
 After=network-online.target
 StartLimitIntervalSec=120
 StartLimitBurst=3

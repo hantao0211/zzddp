@@ -1,3 +1,4 @@
+import { record, failureCode } from "../diagnostics/events";
 import { FeedbackInspectionSchema, verifiedClues, type VerifiedClue } from "./feedback-lessons";
 import { selectedSubmissionReport } from "./selected-submission";
 import { automaticAttemptLimit } from "../../domain/homework-usage";
@@ -61,9 +62,10 @@ export class HomeworkWorker {
     }
     try {
       if (job.kind === "recognize") await this.recognize(job); else await this.organize(job);
+      record({ event: "homework." + job.kind, attempt: job.attempts });
     } catch (error) {
       if (job.kind === "organize" && job.revision !== this.store.revision(job.date)) { this.store.done(job); return true; }
-      console.warn("Homework job did not finish:", job.kind, error instanceof AIServiceError ? error.code : error instanceof HomeworkError ? `LOCAL_${error.status}` : "UNEXPECTED");
+      record({ event: "homework." + job.kind, error: true, code: failureCode(error), attempt: job.attempts });
       const budget = error instanceof HomeworkError && error.status === 429;
       const retry = (error instanceof AIServiceError && error.retryable) || (error instanceof HomeworkError && error.status === 503);
       const note = budget ? error.message : error instanceof HomeworkError ? error.message : retry ? "AI整理暂未完成，原件已保留，后台会有限重试。" : "AI未能完成整理，原件已保留，可稍后重试或补拍清晰照片。";
@@ -72,8 +74,7 @@ export class HomeworkWorker {
     return true;
   }
   private async cached<T>(key: string, work: () => Promise<T>): Promise<T> {
-    try { return await this.execution.cached(key, work); }
-    catch (error) { console.warn("Homework analysis did not finish:", key.split(":")[0], error instanceof AIServiceError ? error.code : error instanceof HomeworkError ? `LOCAL_${error.status}` : "UNEXPECTED"); throw error; }
+    return this.execution.cached(key, work);
   }
   private async recognize(job: Job) {
     const ai = this.execution.forJob(job);

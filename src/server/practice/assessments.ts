@@ -1,3 +1,4 @@
+import { record, failureCode } from "../diagnostics/events";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync, renameSync } from "node:fs";
 import { join } from "node:path";
@@ -113,7 +114,9 @@ export class Assessments {
       const ai=execution.forJob(undefined,undefined,{date:meta.date??this.store.today(),title:"试卷整理："+(meta.title??"已批试卷"),pageId:p.id,attempt:p.attempts+1});
       const result=await execution.cached("marked-page-v2:"+digest(JSON.stringify([p.sha,meta.subject])),()=>ai.run("read_marked_exam",markedPage,{subject:meta.subject},[{fileId:p.id,mimeType:"image/jpeg",base64:stdout.toString("base64")}]));
       this.savePage(p.id,result);
+      record({ event: "exam.process", ref: p.id.slice(0, 8), attempt: p.attempts + 1 });
     } catch(e) {
+      record({ event: "exam.process", error: true, attempt: p.attempts + 1, ref: p.id.slice(0, 8), code: failureCode(e) });
       db.prepare("UPDATE exam_pages SET status='failed',note=? WHERE id=?").run(e instanceof HomeworkError?e.message:"识读未完成，原图已保存，可重试或手动补题。",p.id);
     }
     return true;

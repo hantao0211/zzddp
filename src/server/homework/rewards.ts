@@ -1,3 +1,4 @@
+import { record } from "../diagnostics/events";
 import { isHomeworkDayComplete } from "../../domain/homework-reward";
 import type { HomeworkSnapshot } from "../../domain/homework";
 import type { HomeworkStore } from "./store";
@@ -26,7 +27,7 @@ export class HomeworkRewards {
     }
   }
   start() {
-    const run = () => { try { this.tick(); } catch { console.warn("Homework reward delivery will retry"); } };
+    const run = () => { try { this.tick(); } catch { record({ event: "reward.delivery", error: true }); } };
     run(); this.timer = setInterval(run, 5000); this.timer.unref();
   }
   stop() { if (this.timer) clearInterval(this.timer); }

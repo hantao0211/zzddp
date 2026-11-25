@@ -1,3 +1,4 @@
+import { noteFailure } from "../diagnostics/events";
 import {z} from "zod";
 import {createReadStream} from "node:fs";
 import type {IncomingMessage,ServerResponse} from "node:http";
@@ -163,5 +164,5 @@ export class PracticeHTTP{
  const index=path.match(/^\/files\/([a-f0-9-]{36})\/index$/);if(index&&req.method==="POST"){send(res,this.materials.index(index[1],await body(req)));return;}
  const retry=path.match(/^\/index-jobs\/([a-f0-9-]{36})\/retry$/);if(retry&&req.method==="POST"){z.object({}).strict().parse(await body(req));send(res,this.materials.retry(retry[1]));return;}
  throw new HomeworkError(404,"没有找到这个小练习功能。");
- }catch(e){if(res.headersSent){res.destroy();return;}res.writeHead(e instanceof HomeworkError?e.status:e instanceof z.ZodError?400:503,{"Content-Type":"application/json; charset=utf-8"});res.end(JSON.stringify({error:e instanceof HomeworkError?e.message:e instanceof z.ZodError?"请检查学科、分类、页码范围和必填内容。":"小练习暂时未完成，已有题目和原件保留，请稍后再试。"}));}}
+ }catch(e){noteFailure(res, e);if(res.headersSent){res.destroy();return;}res.writeHead(e instanceof HomeworkError?e.status:e instanceof z.ZodError?400:503,{"Content-Type":"application/json; charset=utf-8"});res.end(JSON.stringify({error:e instanceof HomeworkError?e.message:e instanceof z.ZodError?"请检查学科、分类、页码范围和必填内容。":"小练习暂时未完成，已有题目和原件保留，请稍后再试。"}));}}
 }

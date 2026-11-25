@@ -1,3 +1,4 @@
+import { record, failureCode } from "../diagnostics/events";
 import {createHash} from "node:crypto";
 import {execFile} from "node:child_process";
 import {promisify} from "node:util";
@@ -30,6 +31,6 @@ export class CurriculumWorker{
  return value;});
  if(this.materials.material(material.id).revision!==material.revision)throw new HomeworkError(409,"资料分类刚更新，请按当前分类重试，本次未发布旧内容。");
  s.homework.transaction(()=>{for(const p of value.pages)s.db.prepare("INSERT INTO curriculum_pages VALUES(?,?,?,?,?,?) ON CONFLICT(file_id,page) DO UPDATE SET text=excluded.text,unit=excluded.unit,knowledge=excluded.knowledge WHERE NOT EXISTS(SELECT 1 FROM curriculum_page_edits e WHERE e.file_id=excluded.file_id AND e.page=excluded.page)").run(material.id,file.id,p.page,p.text,value.unit||material.unit,JSON.stringify(value.knowledgePoints));s.db.prepare("UPDATE curriculum_index_jobs SET status='done',note=? WHERE id=?").run(value.uncertainties.join("；"),job!.id);});return true;
- }catch(e){if(job)s.db.prepare("UPDATE curriculum_index_jobs SET status='failed',note=? WHERE id=?").run(e instanceof HomeworkError?e.message:"所选页面尚未整理完成，原件已保存，可以重试或选择更清晰的页面。",job.id);return !!job;}
+ }catch(e){record({ event: "curriculum.index", error: true, code: failureCode(e) });if(job)s.db.prepare("UPDATE curriculum_index_jobs SET status='failed',note=? WHERE id=?").run(e instanceof HomeworkError?e.message:"所选页面尚未整理完成，原件已保存，可以重试或选择更清晰的页面。",job.id);return !!job;}
  finally{if(temporary)await rm(temporary,{recursive:true,force:true});this.running=false;}}
 }

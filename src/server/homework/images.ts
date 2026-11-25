@@ -1,3 +1,4 @@
+import { record } from "../diagnostics/events";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
@@ -24,7 +25,7 @@ export class ServerImages implements ImagePipeline {
       const exhausted = /cache resources exhausted|memory allocation failed|unable to extend cache|No space left on device/i.test(failure.stderr || "");
       const category = exhausted ? "RESOURCE_LIMIT" : failure.killed ? "TIMEOUT" : "DECODE_ERROR";
       // Never log document contents, filenames or raw decoder diagnostics.
-      console.warn("Image conversion did not finish:", command.split("/").pop(), category);
+      record({ event: "image.convert", error: true, code: category });
       if (exhausted || failure.killed) throw new HomeworkError(503, "服务器暂未完成图片转换，原件已保存，后台会有限重试；无需重新上传。");
       throw new HomeworkError(422, "这份文件暂时无法解码，原件已保存。若重试仍失败，请上传清晰照片或未加密PDF。");
     }

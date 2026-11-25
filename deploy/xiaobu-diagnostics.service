@@ -1,0 +1,25 @@
+[Unit]
+Description=Xiaobu bounded diagnostic log collector
+After=local-fs.target
+Before=xiaobu-assistant.service nginx.service
+StartLimitIntervalSec=120
+StartLimitBurst=3
+
+[Service]
+Type=simple
+DynamicUser=yes
+LogsDirectory=xiaobu-diagnostics
+LogsDirectoryMode=0700
+ExecStart=/opt/xiaobu-node/bin/node /home/hantao/work/zzddp/xiaobu-prototype/current/diagnostics.cjs
+Restart=on-failure
+RestartSec=2
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=yes
+PrivateDevices=yes
+RestrictAddressFamilies=AF_INET AF_UNIX
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

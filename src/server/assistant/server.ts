@@ -1,3 +1,4 @@
+import { observeRequest } from "../diagnostics/events";
 import { AvatarUpdateSchema } from "../../domain/avatars";
 import type { ReadingHTTP } from "../reading/http";
 import { HomeworkError } from "../homework/store";
@@ -53,6 +54,7 @@ export function createAssistantServer(options: Options) {
   let active = 0, logins = 0;
   const server = createServer(async (request, response) => {
     response.setHeader("Cache-Control", "no-store"); response.setHeader("X-Content-Type-Options", "nosniff");
+    const trace = observeRequest(response, request.method, (request.url || "/").split("?", 1)[0]);
     const abort = new AbortController(); response.once("close", () => abort.abort());
     const token = (request.headers.cookie || "").split(";").map((item) => item.trim()).find((item) => item.startsWith(COOKIE + "="))?.slice(COOKIE.length + 1) || "";
     let operation = "other";
@@ -178,10 +180,10 @@ export function createAssistantServer(options: Options) {
       if (error instanceof HttpError || error instanceof HomeworkError) json(response, error.status, { error: error.message });
       else if (error instanceof AssistantLimitError) json(response, 429, { error: error.message });
       else {
-        const requestId = randomUUID().slice(0, 8);
+        const requestId = trace.ref;
         const code = error instanceof AIServiceError && /^[A-Z0-9_]{1,48}$/.test(error.code) ? error.code : "UNEXPECTED";
         // Never log questions, model responses, document IDs, audio, cookies, or credentials.
-        console.warn("Assistant request failed", JSON.stringify({ operation, code, requestId }));
+        trace.code = code;
         json(response, 503, { error: error instanceof AIServiceError ? aiErrorMessage(error, operation) : "小助手暂时不可用，请稍后重试。", code, requestId });
       }
     }
