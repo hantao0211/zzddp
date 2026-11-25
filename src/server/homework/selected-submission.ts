@@ -23,7 +23,7 @@ export function selectedSubmissionReport(store: HomeworkStore, report: DailyRepo
   const projected = selectedReportConclusion(report, pages, store.writtenCompletionEnabled);
   if (!store.writtenCompletionEnabled) return projected;
   return {...projected,tasks:projected.tasks.map(task => {
-    if (task.reviewedFeedbackId && task.writtenCompletion) return task;
+    if ((task.reviewedFeedbackId || task.referencedChecks?.length) && task.writtenCompletion) return task;
     const prior = task.writtenCompletion;
     const hasMemoParts = prior?.parts.some(p => isMemoTrackingPart(p.label, task.requirement));
     if (!hasMemoParts && (!task.selectedSubmission || !isWrittenTask(task) || isCorrectionSignTask(task) || task.writtenCompletion && task.writtenCompletion.status !== "unclear")) return task;

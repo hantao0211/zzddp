@@ -12,6 +12,7 @@ export type CompletionFeedback = {
     id: string;
     reason: FeedbackReason;
     note: string;
+    learned?: string[];
     status: "pending" | "reviewed" | "interrupted" | "confirmed";
   };
 };

@@ -1,3 +1,4 @@
+import { FeedbackLessons } from "./feedback-lessons";
 import { LearnedMemories } from "./memory";
 import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
@@ -21,8 +22,10 @@ export const ConventionInput = z.object({
 }).strict();
 
 export class CompletionFeedbackStore {
+  readonly lessons: FeedbackLessons;
   constructor(private store:HomeworkStore) {
     store.db.exec("CREATE TABLE IF NOT EXISTS completion_feedback(id TEXT PRIMARY KEY, token TEXT NOT NULL, date TEXT NOT NULL, task_id TEXT NOT NULL, reason TEXT NOT NULL, note TEXT NOT NULL, confirmed INTEGER NOT NULL, actor_id TEXT NOT NULL, created_at TEXT NOT NULL); CREATE INDEX IF NOT EXISTS feedback_by_source ON completion_feedback(token)");
+    this.lessons = new FeedbackLessons(store.db);
   }
   token(date:string, task:Task) {
     const pages = [...new Set(task.evidence.map(e => e.fileId))].sort();
@@ -36,7 +39,7 @@ export class CompletionFeedbackStore {
     const token = this.token(date, task), row = this.latest(token);
     if (!row) return {token};
     const status = row.confirmed ? "confirmed" : task.reviewedFeedbackId === row.id ? "reviewed" : pending ? "pending" : "interrupted";
-    return {token, latest:{id:row.id,reason:row.reason,note:row.note,status}};
+    return {token, latest:{id:row.id,reason:row.reason,note:row.note,status,...(status === "reviewed" ? {learned:this.lessons.learned(row.id)} : {})}};
   }
   submit(input:z.infer<typeof FeedbackInput>, viewer:Viewer) {
     if (input.confirm && !isParent(viewer)) throw new HomeworkError(403,"请家长确认这项作业的完成情况。");
@@ -54,7 +57,7 @@ export class CompletionFeedbackStore {
       const id = randomUUID();
       this.store.db.prepare("INSERT INTO completion_feedback(id,token,date,task_id,reason,note,confirmed,actor_id,created_at) VALUES(?,?,?,?,?,?,?,?,?)")
         .run(id,input.token,input.date,task.id,input.reason,input.note,Number(input.confirm),viewer.id,new Date(this.store.now()).toISOString());
-      if (!input.confirm) this.store.bump(input.date);
+      if (!input.confirm) { this.lessons.retire(input.token); this.store.bump(input.date); }
       else this.store.db.prepare("INSERT INTO task_completion_versions(date,revision) VALUES(?,1) ON CONFLICT(date) DO UPDATE SET revision=revision+1").run(input.date);
       return {id};
     });

@@ -4,8 +4,8 @@ import {MessageSquareText} from "lucide-react";
 import {feedbackReasons, type FeedbackReason, type CompletionFeedback} from "@/domain/completion-feedback";
 import {homeworkPost} from "@/services/homework-gateway";
 
-export function CompletionFeedbackForm({date,taskId,feedback,finding,canManage,pending,saved}:{
-  date:string; taskId:string; feedback:CompletionFeedback; finding?:string; canManage:boolean; pending:boolean; saved:()=>Promise<void>;
+export function CompletionFeedbackForm({date,taskId,feedback,finding,checks,canManage,pending,saved}:{
+  date:string; taskId:string; feedback:CompletionFeedback; finding?:string; checks?:string[]; canManage:boolean; pending:boolean; saved:()=>Promise<void>;
 }) {
   const latest = feedback.latest;
   const [open,setOpen] = useState(false);
@@ -32,13 +32,16 @@ export function CompletionFeedbackForm({date,taskId,feedback,finding,canManage,p
   }
   const label = latest?.status === "confirmed" ? "家长已确认写完" : latest?.status === "pending" ? "小步正在重看原图" : latest?.status === "reviewed" ? "已按反馈复查" : "复查未完成";
   return <section className="task-feedback">
+    {!!checks?.length && <details><summary>这次检查参考了哪些经验</summary><ul>{checks.map(check=><li key={check}>{check}</li>)}</ul></details>}
     {latest && <div role="status"><strong>{label}</strong><p>{feedbackReasons[latest.reason]}{latest.note && " · " + latest.note}</p>
       {latest.status === "reviewed" && finding && <p>{finding}</p>}
+      {!!latest.learned?.length && <div><strong>小步学到了</strong><ul>{latest.learned.map(check=><li key={check}>{check}</li>)}</ul></div>}
       {latest.status === "interrupted" && <p>反馈已保存，可以重新复查。</p>}</div>}
     <button type="button" className="button secondary compact" aria-expanded={open} onClick={()=>setOpen(!open)}><MessageSquareText size={16}/>{open ? "收起反馈" : latest ? "补充或更正" : "这里判错了"}</button>
     {open && <div className="hw-upload-form"><label>哪里看错了？<select value={reason} onChange={e=>setReason(e.target.value as FeedbackReason)}>
       <option value="">选一个原因</option>{Object.entries(feedbackReasons).map(([key,value])=><option key={key} value={key}>{value}</option>)}</select></label>
       <label>{reason === "other" ? "说说哪处要再看看" : "补充一句（选填）"}<input value={note} maxLength={240} onChange={e=>setNote(e.target.value)} placeholder="例如：最后一行是改错后又写了两遍"/></label>
+      <small>小步会核对照片，记住下次遇到同类作业时该看哪里。</small>
       <div className="study-status-actions"><button type="button" className="button primary compact" disabled={pending || busy || !reason || (reason==="other" && !note.trim())} onClick={()=>void submit(false)}>请小步重看原图</button>
       {canManage && <button type="button" className="button secondary compact" disabled={pending || busy || !reason || (reason==="other" && !note.trim())} onClick={()=>void submit(true)}>我已核对，确认写完</button>}</div>
       {canManage && <details><summary>让小步记住今后的约定</summary><label>适用场景<input value={trigger} maxLength={80} onChange={e=>setTrigger(e.target.value)} placeholder="例如：听写订正"/></label>

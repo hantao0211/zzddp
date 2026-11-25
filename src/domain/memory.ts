@@ -33,4 +33,4 @@ export type ConfirmedKnowledgeExample = {
   explanation: string;
 };
 export type MemoryHistory = LearnedMemory & { status: "revoked" | "superseded" | "excluded"; reason: string };
-export type KnowledgeCatalog = { rules: LearnedMemory[]; corrections: ConfirmedKnowledgeExample[]; history: MemoryHistory[] };
+export type KnowledgeCatalog = { photoChecks?: {id:string;subject:string;family:string;description:string;date:string;page:number;excerpt:string}[]; rules: LearnedMemory[]; corrections: ConfirmedKnowledgeExample[]; history: MemoryHistory[] };

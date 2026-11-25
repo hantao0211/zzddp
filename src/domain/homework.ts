@@ -23,6 +23,7 @@ export const ExtractedHomeworkSchema = z.object({
   })).min(1).max(10),
 });
 export const HomeworkTaskSchema = z.object({
+  referencedChecks: z.array(z.string().max(180)).max(4).optional(),
   feedbackFinding: z.string().max(1500).optional(),
   reviewedFeedbackId: z.string().uuid().optional(),
   selectedSubmission:z.object({version:z.literal("selected-destination-v1"),pageIds:z.array(z.string()).max(120),note:z.string().max(1000)}).optional(),

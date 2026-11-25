@@ -46,6 +46,13 @@ try {
   await dialog.getByRole("button",{name:role==="parent"?"我已核对，确认写完":"请小步重看原图"}).click();
   await dialog.getByText(role==="parent"?"家长已确认写完":"小步正在重看原图",{exact:true}).waitFor();
   assert.equal(submitted.taskId,"t");assert.equal(submitted.reason,"correction");assert.equal(submitted.confirm,role==="parent");
+  if(role==="child") {
+    latest={...latest,status:"reviewed",learned:["看到另起一行重写时，核对原答和订正。"]};
+    await page.reload();
+    await page.getByRole("button",{name:"查看模拟听写的完成情况",exact:true}).click();
+    await dialog.getByText("小步学到了",{exact:true}).waitFor();
+    await dialog.getByText(latest.learned[0],{exact:true}).waitFor();
+  }
   assert.ok(await dialog.evaluate(el=>el.scrollWidth<=el.clientWidth+1));assert.deepEqual(errors,[]);
   await page.close();
  }

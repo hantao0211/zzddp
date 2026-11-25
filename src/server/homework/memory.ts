@@ -107,7 +107,9 @@ export class LearnedMemories {
     const active = this.store.db.prepare("SELECT * FROM learned_memories WHERE status='active' ORDER BY rowid DESC").all() as MemoryRow[];
     const archived = this.store.db.prepare("SELECT * FROM learned_memories WHERE status!='active' ORDER BY rowid DESC LIMIT 500").all() as MemoryRow[];
 
+    const photoChecks = this.store.feedback.lessons.catalog();
     return {
+      ...(photoChecks.length ? {photoChecks} : {}),
       rules: active.map(view).filter(reusable),
       corrections: this.corrections(),
       history: [...active.filter(r => !reusable(view(r))), ...archived].map(r => {
@@ -132,6 +134,7 @@ export class LearnedMemories {
   }
   revoke(id: string) {
     const memory = this.store.db.prepare("SELECT id FROM learned_memories WHERE id=?").get(id);
+    if (!memory && this.store.feedback.lessons.revoke(id)) return {revoked:true};
     if (!memory) throw new HomeworkError(404, "没有找到这条记忆。");
     this.store.db.prepare("UPDATE learned_memories SET status='revoked',updated_at=? WHERE id=?").run(new Date(this.store.now()).toISOString(), id);
     return { revoked: true };

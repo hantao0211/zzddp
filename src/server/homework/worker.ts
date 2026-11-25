@@ -1,3 +1,4 @@
+import { FeedbackInspectionSchema, verifiedClues, type VerifiedClue } from "./feedback-lessons";
 import { selectedSubmissionReport } from "./selected-submission";
 import { automaticAttemptLimit } from "../../domain/homework-usage";
 import { isCorrectionSignTask } from "../../domain/selected-submission";
@@ -300,25 +301,34 @@ export class HomeworkWorker {
       if (task.coverage !== "complete" && !task.missing.length) task.missing = ["现有材料不足以确认覆盖全部要求。"];
     }
     report = selectedSubmissionReport(this.store, report);
-    if (this.store.writtenCompletionEnabled) await mapParallel(report.tasks.filter(t=>isWrittenTask(t) && (!t.writtenCompletion || this.store.feedback.latest(this.store.feedback.token(job.date,t)))), HOMEWORK_CONCURRENCY, async task => {
+    const learning = new Map<string, VerifiedClue[]>();
+    if (this.store.writtenCompletionEnabled) await mapParallel(report.tasks.filter(isWrittenTask), HOMEWORK_CONCURRENCY, async task => {
+      const token = this.store.feedback.token(job.date,task);
+      const feedback = this.store.feedback.latest(token);
+      const checks = this.store.feedback.lessons.recall(task,token);
+      if (task.writtenCompletion && !feedback && !checks.length) return;
       this.current(job);
       const pages = allPages.filter(p => task.evidence.some(e => e.fileId === p.id));
       if (!pages.length) { task.writtenCompletion = { version: WRITTEN_COMPLETION_VERSION, status: "missing", reason: "未找到指定作业的对应照片。", parts: [] }; return; }
       if (pages.length > 6 || pages.some(p => !homework.find(h => h.fileId === p.id)?.readable)) {
         task.writtenCompletion = { version: WRITTEN_COMPLETION_VERSION, status: "unclear", reason: pages.length > 6 ? "这项作业超过一次可检查的6页，尚未完成逐题检查。" : "对应照片有关键内容看不清，暂时无法检查是否写完。", parts: [] }; return;
       }
-      const feedback = this.store.feedback.latest(this.store.feedback.token(job.date,task));
       const clue = feedback && !feedback.confirmed ? this.store.feedback.clue(feedback) : undefined;
       const completionRules = new LearnedMemories(this.store).forJudgment("homework_completion", [task.subject], task.title + " " + task.requirement);
       const inputFor = (batch: PageRow[]) => ({ title: task.title, requirement: task.requirement, subject: task.subject,
-        ...(clue ? {feedbackId:feedback!.id, feedback:clue} : {}),
+        ...(clue ? {feedbackId:feedback!.id, feedback:clue, reviewVersion:2} : {}),
+        ...(checks.length ? {priorPhotoChecks:checks} : {}),
         pages: batch.map(p => ({ fileId: p.id, page: p.number, printedPage: homework.find(h => h.fileId === p.id)?.printedPage })) });
       const cacheKey = (prefix: string, batch: PageRow[]) => prefix + createHash("sha256").update(JSON.stringify(inputFor(batch))).digest("hex");
       const inspect = async (batch: PageRow[], split = false) => {
         this.current(job);
         const guidance = (clue ? "feedback是家人对本项的观察，仅作线索。重看原图逐项核实。reason用一句话回应反馈，说明看到的位置和判断；无依据的说法不能改变检查结果。" : "") + "证据摘录只需能定位所检查的小题，最多12字。" + (split ? "这是同一作业的一张照片，只列本页范围内的作答处。scopeComplete表示本页应检查内容是否完整可见，其他页由后台合并，不要在这批推测其他页是否已交。整页不属于要求或是明确排除项时返回空parts和scopeComplete=true。" : "");
         const metadata = { ...inputFor(batch), familyRules: completionRules, requirement: assignmentRequirement(task.requirement), guidance, scopePolicy: SUBMITTED_SCOPE_POLICY, inferFromSubmittedWork: mayInferScope(task) };
-        const value = await ai.run("assess_written_completion", WrittenInspectionSchema, metadata, () => this.pipeline.images(batch));
+        const images = () => this.pipeline.images(batch);
+        const value = clue
+          ? await ai.run("assess_written_completion", FeedbackInspectionSchema, metadata, images)
+          : await ai.run("assess_written_completion", WrittenInspectionSchema, metadata, images);
+        const observations = "verifiedClues" in value ? verifiedClues(FeedbackInspectionSchema.parse(value)) : [];
         validateEvidence(value.parts.map(p => p.evidence), batch);
         if (new Set(value.parts.map(p => `${p.evidence.fileId}:${p.label}`)).size !== value.parts.length) throw new AIServiceError("DUPLICATE_WRITTEN_PART", true, "题目作答检查出现重复，正在重试。");
         this.current(job);
@@ -332,7 +342,7 @@ export class HomeworkWorker {
           // The original scope flag is never promoted by a focused recheck.
           value.reason = value.parts.some(p => p.status === "unclear") ? "仍有作答部分看不清，具体位置见下方题目记录。" : value.parts.some(p => p.status === "blank") ? "逐项检查后仍有空题，具体题号见下方记录。" : "已逐项检查指定作业，原先不清楚的部分经复查可见学生作答；本次未批改答案对错。";
         }
-        return value;
+        return {scopeComplete:value.scopeComplete, reason:value.reason, parts:value.parts, ...(observations.length ? {observations} : {})};
       };
       const prefix = isCorrectionSignTask(task) ? "written-completion:correction-sign-v1:" : "written-completion:v2:";
       const inspection = await this.cached(cacheKey(prefix, pages), async () => {
@@ -344,17 +354,20 @@ export class HomeworkWorker {
         for (const page of pages) results.push(await this.cached(cacheKey("written-completion:single-page-v1:", [page]), () => inspect([page], true)));
         const parts = results.flatMap(result => result.parts);
         if (parts.length > 160) throw new AIServiceError("WRITTEN_PARTS_LIMIT", false, "这项作业的作答部分超过一次可检查的数量。照片和已保存的清单仍可查看。");
-        return WrittenInspectionSchema.parse({ scopeComplete: results.every(result => result.scopeComplete),
+        const observations = results.flatMap(result => result.observations || []);
+        return { scopeComplete: results.every(result => result.scopeComplete),
           reason: results.filter(result => result.parts.length || !result.scopeComplete).map(result => result.reason).join("；").slice(0, 1500) || "照片中暂未找到本次要求作答的题目。",
-          parts });
+          parts, ...(observations.length ? {observations} : {}) };
       });
       task.writtenCompletion = evaluateWrittenInspection(inspection, task.coverage, task.requirement);
+      if (checks.length) task.referencedChecks = checks;
+      if (clue && inspection.observations?.length) learning.set(feedback!.id,inspection.observations);
       if (clue) { task.reviewedFeedbackId = feedback!.id; task.feedbackFinding = inspection.reason; }
     });
     if (reviewTasks.length) {
       // Original records stay intact. Drop only the old blanket photo-can-never-prove-reading concern.
       report.uncertainties = report.uncertainties.filter((u) => !obsoleteReadingProofConcern(u));
     }
-    this.store.publish(job, inferredReportScope(reviewReportConclusion(report, this.store.reviewPolicy), homework), memoNeedsRescan || blocked.size > 0 || !result.readable || homework.some((p) => !p.readable || !p.subject) ? "needs_rescan" : "processed", memoNeedsRescan ? "作业照片已整理，已对照可识别的备忘录条目查缺；科目不明的条目单独保留。" : this.store.reviewPolicy ? "已对照备忘录整理；预习复习按家庭约定的学习痕迹判断，材料统计与答案对错分开。" : "已对照备忘录整理；材料齐全仅表示已收到相应内容，不代表答案正确或作业已完成。");
+    this.store.publish(job, inferredReportScope(reviewReportConclusion(report, this.store.reviewPolicy), homework), memoNeedsRescan || blocked.size > 0 || !result.readable || homework.some((p) => !p.readable || !p.subject) ? "needs_rescan" : "processed", memoNeedsRescan ? "作业照片已整理，已对照可识别的备忘录条目查缺；科目不明的条目单独保留。" : this.store.reviewPolicy ? "已对照备忘录整理；预习复习按家庭约定的学习痕迹判断，材料统计与答案对错分开。" : "已对照备忘录整理；材料齐全仅表示已收到相应内容，不代表答案正确或作业已完成。", learning);
   }
 }

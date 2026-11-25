@@ -1,6 +1,7 @@
 import { HomeworkDayPlanInputSchema, HomeworkWeekdaysSchema, resolveHomeworkDayPlan } from "../../domain/homework-calendar";
 import { selectedSubmissionReport } from "./selected-submission";
 import { HomeworkUsageLog } from "./usage";
+import type { VerifiedClue } from "./feedback-lessons";
 import { CompletionFeedbackStore } from "./completion-feedback";
 import { TaskCompletions } from "./task-completions";
 import { HomeworkScopes } from "./scopes";
@@ -164,10 +165,19 @@ export class HomeworkStore {
     });
   }
   done(job: Job) { this.db.prepare("UPDATE jobs SET status='done' WHERE id=?").run(job.id); }
-  publish(job: Job, report: DailyReport | null, status: string, note: string) {
+  publish(job: Job, report: DailyReport | null, status: string, note: string, learning?: ReadonlyMap<string, VerifiedClue[]>) {
     this.transaction(() => {
       if (this.revision(job.date) === job.revision) this.db.prepare("UPDATE days SET report=?,status=?,note=? WHERE date=?").run(report ? JSON.stringify(DailyReportSchema.parse(report)) : null, status, note, job.date);
-      if (this.revision(job.date) === job.revision) this.grading.queueDay(job.date, report);
+      if (this.revision(job.date) === job.revision) {
+        if (learning?.size) for (const task of report?.tasks || []) {
+          const id = task.reviewedFeedbackId;
+          const clues = id && learning.get(id);
+          if (!id || !clues) continue;
+          const token = this.feedback.token(job.date,task);
+          if (this.feedback.latest(token)?.id === id) this.feedback.lessons.record(job.date,task,token,id,clues);
+        }
+        this.grading.queueDay(job.date, report);
+      }
       this.done(job);
     });
   }
