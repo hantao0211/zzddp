@@ -127,3 +127,15 @@ test("DeepSeek photo association requests a bounded direct response while indepe
  const incomplete=new VisionAI({provider:"deepseek",model:"deepseek-flash",apiKey:"synthetic-test-key"},async()=>Response.json({choices:[{finish_reason:"length",message:{content:JSON.stringify(memo)}}]}));
  await assert.rejects(()=>incomplete.run("organize_homework",MemoRecognitionSchema,{}),(e:unknown)=>e instanceof AIServiceError&&e.code==="INCOMPLETE_RESPONSE");
 });
+
+test("exam output limits, filtering and missing finish flags have distinct safe diagnostics",async()=>{
+ for(const [provider,payload,code,retryable] of [
+   ["deepseek",{choices:[{finish_reason:"length"}]},"EXAM_OUTPUT_LIMIT",true],
+   ["openai",{status:"incomplete",incomplete_details:{reason:"max_output_tokens"}},"EXAM_OUTPUT_LIMIT",true],
+   ["deepseek",{choices:[{finish_reason:"content_filter"}]},"EXAM_CONTENT_FILTER",false],
+   ["deepseek",{choices:[{}]},"EXAM_STOP_UNKNOWN",true]
+ ] as const){
+   const ai=new VisionAI({provider,model:"test",apiKey:"synthetic"},async()=>Response.json(payload));
+   await assert.rejects(()=>ai.run("read_marked_exam",MemoRecognitionSchema,{}),(e:unknown)=>e instanceof AIServiceError&&e.code===code&&e.retryable===retryable);
+ }
+});

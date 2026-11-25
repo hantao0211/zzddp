@@ -7,7 +7,7 @@ import { promisify } from "node:util";
 import type { IncomingMessage } from "node:http";
 import { z } from "zod";
 import { examReadingChecks, examReread, emptyExam, readExamHints, examMeta, examManifest, markedPage, observation, type ExamMeta, type ExamRecord, type ExamPage, type ExamDetail, type Observation } from "../../domain/assessment";
-import { AIServiceError } from "../ai/provider";
+import { AIServiceError, type AIImage, type StructuredAI } from "../ai/provider";
 import { detectMime } from "../homework/images";
 import { HomeworkError } from "../homework/store";
 import type { HomeworkExecution } from "../homework/execution";
@@ -136,18 +136,57 @@ export class Assessments {
       const image=await this.aiImage(p.id);
       const ai=execution.forJob(undefined,undefined,{date:meta.date??this.store.today(),title:"试卷整理："+(meta.title??"已批试卷"),pageId:p.id,attempt:p.attempts+1});
       const readingChecks=this.readingChecks(meta.subject);
-      const retryInstructions=p.attempts>0?{instructions:"逐小题识读原卷，已打勾的题简要转录，批注简写，未知字段按要求留空，确保完整输出所有题目及 JSON。"}:{};
-      const result=await execution.cached("marked-page-v4:"+digest(JSON.stringify([p.sha,meta.subject,readingChecks])),()=>ai.run("read_marked_exam",markedPage,{subject:meta.subject,readingChecks,...retryInstructions},[image]));
+      const context={subject:meta.subject,readingChecks};
+      const key=digest(JSON.stringify([p.sha,meta.subject,readingChecks]));
+      const previousCutoff=p.attempts>0 && db.prepare(`SELECT 1 FROM homework_ai_calls WHERE page_id=?
+        AND task='read_marked_exam' AND error_code IN ('INCOMPLETE_RESPONSE','EXAM_OUTPUT_LIMIT','EXAM_STOP_UNKNOWN') LIMIT 1`).get(p.id);
+      const result=previousCutoff
+        ? await this.readPageInGroups(execution,ai,image,key,context)
+        : await execution.cached("marked-page-v4:"+key,()=>ai.run("read_marked_exam",markedPage,context,[image]));
       this.savePage(p.id,result);
       record({ event: "exam.process", ref: p.id.slice(0, 8), attempt: p.attempts + 1 });
     } catch(e) {
       record({ event: "exam.process", error: true, attempt: p.attempts + 1, ref: p.id.slice(0, 8), code: failureCode(e) });
       const again=p.attempts===0 && e instanceof AIServiceError && e.retryable;
-      const reason=e instanceof AIServiceError && e.code==="INCOMPLETE_RESPONSE"?"小步上次只读完了部分内容。":"";
-      const note=again?"正在用原图重新识读本页。":e instanceof HomeworkError?e.message:reason+"原图已保存，可由家长重试本页。";
+      const split=e instanceof AIServiceError && ["EXAM_OUTPUT_LIMIT","EXAM_STOP_UNKNOWN","INCOMPLETE_RESPONSE"].includes(e.code);
+      const reason=e instanceof AIServiceError && e.code.startsWith("EXAM_")?e.message:"";
+      const note=again?(split?"正在准备按题号分组识读。":"正在用原图重新识读本页。"):e instanceof HomeworkError?e.message:reason+"原图已保存，可由家长重试本页。";
       db.prepare("UPDATE exam_pages SET status=?,note=? WHERE id=?").run(again?"queued":"failed",note,p.id);
     }
     return true;
+  }
+  private async readPageInGroups(execution:HomeworkExecution,ai:StructuredAI,image:AIImage,key:string,context:object) {
+    const pageKey="marked-groups-v1:"+key;
+    const outline=await execution.cached(pageKey+":index",async()=>{
+      const target=z.object({label:z.string().trim().min(1).max(180),anchor:z.string().trim().min(1).max(160)});
+      const index=await ai.run("index_exam_page",z.object({
+        targets:z.array(target).min(1).max(80),coverage:z.enum(["complete","partial"]),note:z.string().max(500)
+      }),context,[image]);
+      if(new Set(index.targets.map(t=>t.label.normalize("NFKC"))).size!==index.targets.length)
+        throw new AIServiceError("EXAM_INDEX_CONFLICT",true,"题目目录有重复编号，尚未合并本页。");
+      return index;
+    });
+    const questions:Observation[]=[];
+    let coverage=outline.coverage;
+    let metadata:unknown;
+    const notes=new Set([outline.note]);
+    for(let offset=0;offset<outline.targets.length;offset+=5){
+      const targets=outline.targets.slice(offset,offset+5);
+      this.store.db.prepare("UPDATE exam_pages SET note=? WHERE id=? AND status='running'")
+        .run(`正在分组识读，已读 ${offset}/${outline.targets.length} 道题。`,image.fileId);
+      const group=await execution.cached(pageKey+":"+digest(JSON.stringify(targets)),async()=>{
+        const result=await ai.run("read_marked_exam",markedPage,{...context,targets},[image]);
+        const byLabel=new Map(result.questions.map(q=>[q.label,q]));
+        if(result.questions.length!==targets.length || targets.some(t=>!byLabel.has(t.label)))
+          throw new AIServiceError("EXAM_GROUP_MISMATCH",true,"本组回复的题号与卷面目录未对齐。");
+        return {...result,questions:targets.map(t=>byLabel.get(t.label)!)};
+      });
+      questions.push(...group.questions);
+      metadata??=group.metadata;
+      if(group.coverage==="partial")coverage="partial";
+      notes.add(group.note);
+    }
+    return {questions,metadata,coverage,note:[...notes].filter(Boolean).join(" ").slice(0,500)};
   }
   private async aiImage(pageId:string) {
     const {stdout}=await convert("/usr/bin/convert",["-limit","memory","64MiB","-limit","map","128MiB","-limit","disk","512MiB",join(this.directory,pageId)+"[0]","-auto-orient","-resize","1800x2400>","-background","white","-alpha","remove","-strip","-quality","85","jpeg:-"],{encoding:"buffer",timeout:60000,maxBuffer:3*1024*1024});

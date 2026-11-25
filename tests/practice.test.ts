@@ -229,12 +229,26 @@ test("a truncated exam page retries once while page and archive status follow re
     exams.savePage(two.id,result);
     f.store.db.prepare("UPDATE exam_pages SET status='queued' WHERE id=?").run(one.id);
     t.mock.method(exams as unknown as {aiImage:(id:string)=>unknown},"aiImage",async(id:string)=>({fileId:id,mimeType:"image/jpeg",base64:jpeg()}));
-    let calls=0;
+    const targets=Array.from({length:7},(_,i)=>({label:String(i+1),anchor:"第"+(i+1)+"题"}));
+    const calls:string[]=[];
     const worker=new PracticeWorker(f.store,()=>({async run(task,schema,metadata,images){
       assert.equal(images?.[0].fileId,one.id);
       check("整理中");
-      if(++calls<=2)throw new AIServiceError("INCOMPLETE_RESPONSE",true,"incomplete");
-      return schema.parse(result);
+      if(task==="index_exam_page"){
+        calls.push("index");
+        return schema.parse({targets,coverage:"complete",note:""});
+      }
+      const group=(metadata as {targets?:typeof targets}).targets;
+      if(!group){
+        calls.push("full");
+        throw new AIServiceError("INCOMPLETE_RESPONSE",true,"legacy incomplete");
+      }
+      const start=group[0].label;
+      calls.push(start);
+      const questions=group.map(({label})=>({label,question:"模拟题"+label,studentAnswer:"1",teacherMark:"勾",
+        expectedAnswer:"",correction:"",verdict:"correct",confident:true,knowledgePoints:[],cause:"原因待确认",causeExplanation:""}));
+      if(start==="6" && calls.length===4)questions.pop();
+      return schema.parse({...result,questions});
     }}));
     function check(status:string){
       assert.equal(exams.detail(paper.exam.id).exam.status,status);
@@ -242,10 +256,13 @@ test("a truncated exam page retries once while page and archive status follow re
     }
     await worker.tick();check("等待识读");
     await worker.tick();check("识读未完成");
-    await worker.tick();assert.equal(calls,2);
+    await worker.tick();assert.deepEqual(calls,["full","index","1","6"]);
+    assert.equal(exams.detail(paper.exam.id).questions.length,0);
     assert.equal(exams.list(0,10).items[0].firstFailedPage,1);
     exams.retry(one.id);check("等待识读");
     await worker.tick();check("已整理");
+    assert.deepEqual(calls,["full","index","1","6","6"]);
+    assert.deepEqual(exams.detail(paper.exam.id).questions.map(q=>q.label),targets.map(t=>t.label));
     assert.equal(exams.page(two.id).attempts,0);
   }finally{f.close();}
 });

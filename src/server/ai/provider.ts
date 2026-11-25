@@ -14,6 +14,20 @@ export function readAIConfiguration(env: Record<string, string | undefined> = pr
   throw new AIServiceError("AI_UNCONFIGURED", false, "后台AI尚未配置，原件应保留等待处理，不能伪造识别结果。");
 }
 
+function examStopError(reason: string | undefined) {
+  switch (reason) {
+    case "length":
+    case "max_output_tokens":
+      return new AIServiceError("EXAM_OUTPUT_LIMIT", true, "本页回复达到长度上限。");
+    case "content_filter":
+      return new AIServiceError("EXAM_CONTENT_FILTER", false, "AI 服务限制了本页的输出。");
+    case "insufficient_system_resource":
+      return new AIServiceError("EXAM_PROVIDER_BUSY", true, "AI 服务资源暂时不足。");
+    default:
+      return new AIServiceError("EXAM_STOP_UNKNOWN", true, "AI 服务未给出可识别的结束原因。");
+  }
+}
+
 export interface StructuredAI {
   run<T>(task: AITask, schema: z.ZodType<T>, metadata: unknown, images?: AIImage[]): Promise<T>;
 }
@@ -48,10 +62,14 @@ export class VisionAI implements StructuredAI {
       });
     } catch { throw new AIServiceError("NETWORK_ERROR", true, "AI服务暂时不可达，任务应保留后重试。"); }
     if (!response.ok) throw new AIServiceError(`HTTP_${response.status}`, response.status === 429 || response.status >= 500, `AI服务返回${response.status}，不会将未处理资料标记为已完成。`);
-    let payload: { choices?: { finish_reason?: string; message?: { content?: string } }[]; status?: string; output?: { content?: { type?: string; text?: string }[] }[] };
+    let payload: { choices?: { finish_reason?: string; message?: { content?: string } }[]; status?: string; incomplete_details?: { reason?: string }; output?: { content?: { type?: string; text?: string }[] }[] };
     try { payload = await response.json(); if (!payload || typeof payload !== "object") throw new Error("Invalid envelope"); }
     catch { throw new AIServiceError("INVALID_ENVELOPE", true, "AI响应格式不完整，结果未发布。"); }
-    if ((isDeepSeek && payload.choices?.[0]?.finish_reason !== "stop") || (!isDeepSeek && payload.status !== "completed")) throw new AIServiceError("INCOMPLETE_RESPONSE", true, "AI输出未完整结束，结果未发布。");
+    if ((isDeepSeek && payload.choices?.[0]?.finish_reason !== "stop") || (!isDeepSeek && payload.status !== "completed")) {
+      if (task === "read_marked_exam" || task === "index_exam_page")
+        throw examStopError(isDeepSeek ? payload.choices?.[0]?.finish_reason : payload.incomplete_details?.reason);
+      throw new AIServiceError("INCOMPLETE_RESPONSE", true, "AI输出未完整结束，结果未发布。");
+    }
     const text = isDeepSeek ? payload.choices?.[0]?.message?.content : payload.output?.flatMap((item) => item.content || []).filter((item) => item.type === "output_text").map((item) => item.text || "").join("");
     try { return schema.parse(JSON.parse(text || "")); }
     catch { throw new AIServiceError("INVALID_RESULT", true, "AI结果不符合数据要求，保留原件等待重试。"); }
