@@ -43,6 +43,8 @@ const routes: [RegExp, string][] = [
   [/^learning\/practice\/exams$/, "exam.upload"],
   [/^learning\/practice\/exam-pages\/[\da-f-]+\/(retry|review|photo|explain|learn)$/, "exam.page"],
   [/^learning\/practice\/(items\/|generate$)/, "practice.task"],
+  [/^learning\/practice\/milestone-goals(?:\/|$)/, "exam.goal"],
+  [/^learning\/practice\/milestones\/[a-f0-9]+\/context$/, "exam.context"],
   [/^reading\/logs(?:\/|$)/, "reading.checkin"],
   [/^reading\/activities(?:\/|$)/, "activity.record"],
   [/^reading\/redemptions(?:\/|$)/, "shop.redeem"],

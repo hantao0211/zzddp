@@ -92,6 +92,7 @@ export class PracticeHTTP{
  }
 
  async handle(req:IncomingMessage,res:ServerResponse,viewer:Viewer){const url=new URL(req.url!,"http://internal"),path=url.pathname.replace("/assistant-api/learning/practice","");try{
+ if(path==="/milestones" && req.method==="GET"){send(res,this.store.milestones.snapshot());return;}
  if(path==="/exams" && req.method==="GET"){
    const offset=Number(url.searchParams.get("offset")??0);
    if(!Number.isSafeInteger(offset)||offset<0)throw new HomeworkError(400,"分页无效。");
@@ -156,6 +157,11 @@ export class PracticeHTTP{
  if(action==="complete"&&req.method==="POST"){const v=z.object({reason:z.string().trim().min(1).max(500)}).strict().parse(await body(req));send(res,this.store.manualComplete(id,v.reason,viewer));return;}
  if(action==="answers"&&item[3]&&req.method==="PATCH"){send(res,this.store.reviewAnswer(id,decodeURIComponent(item[3]),await body(req),viewer));return;}}
  if(!isParent(viewer))throw new HomeworkError(403,"资料整理和课内外分类需要家长确认。");
+ const context=path.match(/^\/milestones\/([a-f0-9]{64})\/context$/);
+ if(context&&req.method==="PATCH"){this.store.milestones.saveContext(context[1],await body(req));send(res,{saved:true});return;}
+ if(path==="/milestone-goals"&&req.method==="POST"){this.store.milestones.saveGoal(await body(req));send(res,{saved:true});return;}
+ const goal=path.match(/^\/milestone-goals\/([a-f0-9-]{36})$/);
+ if(goal&&req.method==="POST"){this.store.milestones.settle(goal[1],await body(req),viewer.id);send(res,{saved:true});return;}
  if(exam&&req.method==="PATCH"){send(res,this.store.exams.editMeta(exam[1],await body(req),viewer.id));return;}
  const tag=path.match(/^\/tags\/([^/]+)$/);if(tag&&req.method==="PATCH"){send(res,this.store.analysis.saveEdit(decodeURIComponent(tag[1]),await body(req),viewer.id));return;}
  const scope=path.match(/^\/scopes\/(.+)$/);if(scope&&req.method==="PATCH"){const id=decodeURIComponent(scope[1]);if(id.length>150)throw new HomeworkError(400,"错题标识无效。");const v=z.object({scope:LearningScopeSchema}).strict().parse(await body(req));send(res,this.store.classify(id,v.scope,viewer));return;}

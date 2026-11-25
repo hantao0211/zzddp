@@ -309,3 +309,34 @@ test("exam explanations use the selected photo, keep the verdict independent and
     assert.throws(()=>exams.explain(pageId,{...cmd,requestId:randomUUID()},child.id),/已更新/);
   }finally{f.close();}
 });
+
+test("milestones keep partial distributions, protect revisions, and credit an achieved goal exactly once",()=>{
+  const f=setup();
+  try{
+    const {exams,milestones}=f.store;
+    const meta={title:"数学期中",kind:"期中考试",date:f.store.today(),subject:"数学",scope:"curricular",grade:4,semester:1,score:108,maximum:120,unit:""};
+    const paper=exams.reserve({meta,pages:[{sha:"b".repeat(64),bytes:30}]}).exam.id;
+    exams.reserve({meta:{...meta,title:"期末复习",kind:"随堂小测"},pages:[{sha:"c".repeat(64),bytes:30}]});
+    const current=()=>milestones.snapshot().exams[0];
+    assert.equal(milestones.snapshot().exams.length,1);
+    const context={...current().context,classroom:{rank:4,total:36,average:91.5,bands:[{label:"100 分及以上",count:5}]}};
+    milestones.saveContext(paper,{context,revision:0});milestones.saveContext(paper,{context,revision:0});
+    assert.equal(current().context.year.rank,null);assert.equal(current().revision,1);
+    assert.throws(()=>milestones.saveContext(paper,{revision:0,context:{...context,classroom:{...context.classroom,rank:2}}}),/已更新/);
+    assert.throws(()=>milestones.saveContext(paper,{revision:1,context:{...context,classroom:{...context.classroom,total:3}}}));
+    const goal={subject:"数学",kind:"期中考试",metric:"percent",target:90,points:5,celebration:"去公园野餐"},id=randomUUID(),balance=f.reading.balance();
+    milestones.saveGoal({id,goal});milestones.saveGoal({id,goal});
+    assert.equal(f.reading.balance(),balance);
+    const confirm={action:"confirm",examId:paper};
+    const missed=randomUUID();milestones.saveGoal({id:missed,goal:{...goal,target:90.01}});
+    assert.throws(()=>milestones.settle(missed,confirm,parent.id),/不能确认/);
+    milestones.settle(id,confirm,parent.id);milestones.settle(id,confirm,parent.id);
+    assert.equal(f.reading.balance(),balance+5);assert.equal(f.reading.earnedSteps(f.store.today()),5);
+    assert.equal(milestones.snapshot().goals.find(g=>g.id===id)?.actual,90);
+    const rank=randomUUID();milestones.saveGoal({id:rank,goal:{...goal,metric:"yearRank",target:10,points:0}});
+    assert.throws(()=>milestones.settle(rank,confirm,parent.id),/不能确认/);
+    const better=randomUUID();milestones.saveGoal({id:better,goal:{...goal,metric:"classRank",target:5,points:0}});
+    milestones.settle(better,confirm,parent.id);assert.equal(f.reading.balance(),balance+5);
+    milestones.settle(rank,{action:"cancel"},parent.id);assert.equal(milestones.snapshot().goals.find(g=>g.id===rank)?.status,"cancelled");
+  }finally{f.close();}
+});

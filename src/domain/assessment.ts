@@ -3,7 +3,9 @@ import { DaySchema } from "./calendar";
 import { CauseSchema } from "./grading";
 import { PracticeSubjectSchema } from "./practice";
 
-export const examKinds = ["随堂小测", "单元测验", "考试"] as const;
+import { milestoneKinds } from "./exam-milestones";
+
+export const examKinds = ["随堂小测", "单元测验", "考试", ...milestoneKinds] as const;
 const examFields = {
   title: z.string().trim().min(1).max(120), kind: z.enum(examKinds), date: DaySchema,
   subject: PracticeSubjectSchema, scope: z.enum(["curricular", "extracurricular"]),

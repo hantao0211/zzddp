@@ -1,3 +1,4 @@
+import { ExamMilestones } from "./milestones";
 import {createHash,randomUUID} from "node:crypto";
 import {mkdirSync,writeFileSync,readFileSync,unlinkSync} from "node:fs";
 import {join} from "node:path";
@@ -16,6 +17,7 @@ import type {ExamMeta,Observation} from "../../domain/assessment";
 export class PracticeStore{
  readonly exams:Assessments; readonly analysis:MistakeAnalysis;
  readonly rewards:PracticeRewards;readonly directory:string;
+ readonly milestones:ExamMilestones;
  constructor(readonly homework:HomeworkStore,readonly reading:ReadingStore){this.directory=join(homework.directory,"practice");mkdirSync(this.directory,{recursive:true,mode:0o700});this.rewards=new PracticeRewards(reading);homework.db.exec(`
  CREATE TABLE IF NOT EXISTS learning_scopes(mistake_id TEXT PRIMARY KEY,scope TEXT NOT NULL,actor TEXT NOT NULL,updated_at TEXT NOT NULL);
  CREATE TABLE IF NOT EXISTS practice_tasks(id TEXT PRIMARY KEY,date TEXT NOT NULL,subject TEXT NOT NULL,scope TEXT NOT NULL DEFAULT 'curricular',status TEXT NOT NULL,stage TEXT NOT NULL,note TEXT NOT NULL DEFAULT '',profile TEXT NOT NULL,sources TEXT NOT NULL,paper TEXT,result TEXT,attempts INTEGER NOT NULL DEFAULT 0,version INTEGER NOT NULL DEFAULT 0,actor TEXT NOT NULL,reward_day TEXT,rewarded INTEGER,created_at TEXT NOT NULL,updated_at TEXT NOT NULL,UNIQUE(date,subject,scope));
@@ -26,7 +28,7 @@ export class PracticeStore{
  CREATE TABLE IF NOT EXISTS practice_manual_reviews(id TEXT PRIMARY KEY,practice_id TEXT NOT NULL,question_id TEXT NOT NULL,before_result TEXT,after_result TEXT,reason TEXT NOT NULL,actor TEXT NOT NULL,created_at TEXT NOT NULL);
  CREATE TABLE IF NOT EXISTS practice_history(practice_id TEXT NOT NULL,version INTEGER NOT NULL,result TEXT NOT NULL,created_at TEXT NOT NULL,PRIMARY KEY(practice_id,version));
  CREATE TABLE IF NOT EXISTS practice_mistakes(id TEXT PRIMARY KEY,practice_id TEXT NOT NULL,question_id TEXT NOT NULL,subject TEXT NOT NULL,scope TEXT NOT NULL,question TEXT NOT NULL,answer TEXT NOT NULL,knowledge TEXT NOT NULL,parents TEXT NOT NULL,date TEXT NOT NULL,active INTEGER NOT NULL DEFAULT 1);
- UPDATE practice_tasks SET status='failed',note='服务重启，原题和答卷已保留，请重试。' WHERE status IN ('generating','grading');`);this.exams=new Assessments(this);this.analysis=new MistakeAnalysis(this);}
+ UPDATE practice_tasks SET status='failed',note='服务重启，原题和答卷已保留，请重试。' WHERE status IN ('generating','grading');`);this.exams=new Assessments(this);this.milestones=new ExamMilestones(this);this.analysis=new MistakeAnalysis(this);}
  get db(){return this.homework.db;}today(){return this.reading.today();}time(){return this.reading.time();}
  row(id:string){const row=this.db.prepare("SELECT * FROM practice_tasks WHERE id=?").get(id) as PracticeRow|undefined;if(!row)throw new HomeworkError(404,"没有找到这份小练习。");return row;}
  scope(id:string,text:string){const r=this.db.prepare("SELECT scope FROM learning_scopes WHERE mistake_id=?").get(id) as {scope:LearningScope}|undefined;return r?.scope||inferLearningScope(text);}

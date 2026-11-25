@@ -3,6 +3,9 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ChevronRight, CircleAlert, CircleCheck, ClipboardCheck, Clock3, FileText, Upload, X, type LucideIcon } from "lucide-react";
 import { type ExamRecord, type ExamDetail } from "@/domain/assessment";
 import { homeworkPost, homeworkRequest } from "@/services/homework-gateway";
+import { ExamMilestonePanel } from "./exam-milestones";
+import { isMilestone, type MilestoneData } from "@/domain/exam-milestones";
+import { Flag } from "lucide-react";
 import { ExamWorkspace } from "./exam-detail";
 
 const endpoint="/practice/exams";
@@ -28,8 +31,10 @@ function ExamRow({exam,open}:{exam:ExamRecord;open:(id:string)=>void}){
 }
 
 export function ExamShelf({canManage,openMistakes}:{canManage:boolean;openMistakes:()=>void}){
-  const [mode,setMode]=useState<"new"|"list"|"detail"|null>(null),[latest,setLatest]=useState<Archive|null>(null),[archive,setArchive]=useState<Archive|null>(null);
+  const [mode,setMode]=useState<"new"|"list"|"detail"|"milestones"|null>(null),[latest,setLatest]=useState<Archive|null>(null),[archive,setArchive]=useState<Archive|null>(null);
   const [offset,setOffset]=useState(0),[selected,select]=useState(""),[detail,setDetail]=useState<ExamDetail|null>(null),[version,refresh]=useState(0);
+  const [milestones,setMilestones]=useState<MilestoneData|null>(null),[initialSubject,setInitialSubject]=useState<string>(),[fromMilestones,setFromMilestones]=useState(false);
+  function showMilestones(subject?:string){setNotice("");setError("");setInitialSubject(subject);setMilestones(null);setMode("milestones");}
   const [error,setError]=useState(""),[busy,setBusy]=useState(""),[notice,setNotice]=useState("");
   const submitting=useRef(false),dialog=useRef<HTMLDialogElement>(null);
   useEffect(()=>{const el=dialog.current;if(mode&&!el?.open)el?.showModal();if(!mode)el?.close();},[mode]);
@@ -43,6 +48,7 @@ export function ExamShelf({canManage,openMistakes}:{canManage:boolean;openMistak
         if(mode==="list")setArchive(data);else setLatest(data);
         if(data.items.some(exam=>exam.status==="整理中"))timer=setTimeout(load,3500);
       }
+      if(mode==="milestones"){const data=await homeworkRequest<MilestoneData>("/practice/milestones",{signal:controller.signal});if(!controller.signal.aborted)setMilestones(data);}
       if(mode==="detail"){const data=await homeworkRequest<ExamDetail>(endpoint+"/"+selected,{signal:controller.signal});
         if(controller.signal.aborted)return;setDetail(data);
         if(data.pages.some(p=>["queued","running"].includes(p.status)) || data.questions.some(q=>q.feedback && ["queued","running"].includes(q.feedback.status)))timer=setTimeout(load,3500);
@@ -50,7 +56,7 @@ export function ExamShelf({canManage,openMistakes}:{canManage:boolean;openMistak
     }catch(e){if(!controller.signal.aborted)setError(message(e));}}
     void load();return ()=>{controller.abort();clearTimeout(timer);};
   },[mode,selected,offset,version]);
-  function openDetail(id:string){select(id);setNotice("");setDetail(null);setError("");setMode("detail");}
+  function openDetail(id:string){setFromMilestones(mode==="milestones");select(id);setNotice("");setDetail(null);setError("");setMode("detail");}
   function close(){if(!submitting.current){setMode(null);refresh(n=>n+1);}}
   async function act(fn:()=>Promise<void>){if(submitting.current)return;submitting.current=true;setBusy("正在保存…");setError("");setNotice("");
     try{await fn();refresh(n=>n+1);}catch(e){setError(message(e));}finally{submitting.current=false;setBusy("");}}
@@ -69,15 +75,18 @@ export function ExamShelf({canManage,openMistakes}:{canManage:boolean;openMistak
   return <section className="exam-shelf" aria-label="测验与考试">
     <div className="reading-section-heading"><h2><ClipboardCheck aria-hidden="true"/>测验与考试</h2><button className="button primary compact" onClick={()=>{setError("");setNotice("");setMode("new");}}><Upload size={16}/>上传试卷</button></div>
     {latestPaper?<ExamRow exam={latestPaper} open={openDetail}/>:<p className="reading-muted">{latest?"在这里保存老师批过的小测和考卷。":"正在读取试卷记录…"}</p>}
+    <button className="button secondary compact plum-action mile-home" onClick={()=>showMilestones()}><Flag size={16}/>考试里程碑</button>
     {latestPaper&&<button className="text-button" onClick={()=>{setOffset(0);setError("");setNotice("");setMode("list");}}>全部试卷（{latest?.total}）</button>}
     {!mode&&error&&<p role="alert">{error} <button className="text-button" onClick={()=>{setError("");refresh(n=>n+1);}}>重试</button></p>}
     <dialog ref={dialog} className="reading-dialog exam-dialog" aria-label="试卷档案" onCancel={e=>{e.preventDefault();close();}}>
-      <header><h2>{mode==="new"?"上传已批试卷":mode==="list"?"全部试卷":detail?.exam.title||"试卷详情"}</h2><button className="icon-button" disabled={!!busy} aria-label="关闭试卷档案" onClick={close}><X/></button></header>
+      <header><h2>{mode==="new"?"上传已批试卷":mode==="list"?"全部试卷":mode==="milestones"?"考试里程碑":detail?.exam.title||"试卷详情"}</h2><button className="icon-button" disabled={!!busy} aria-label="关闭试卷档案" onClick={close}><X/></button></header>
       <div className="reading-dialog-body">
       {notice&&<p className="exam-notice" role="status">{notice}</p>}{error&&<p className="form-error" role="alert">{error}</p>}
       {mode==="new"&&<form onSubmit={upload} className="exam-form"><label>选择已批试卷照片<input required name="photos" type="file" multiple accept="image/jpeg,image/png,image/webp"/></label>
         <small>按页序选 1～12 张。小步会识别老师标出的错题，试卷资料可稍后补充。</small><button className="button primary" disabled={!!busy}>{busy||"上传并整理错题"}</button></form>}
       {mode==="list"&&<>{archive?.items.map(e=><ExamRow key={e.id} exam={e} open={openDetail}/>)}<div className="reading-record-actions"><button className="text-button" disabled={!offset} onClick={()=>setOffset(n=>n-10)}>上一页</button><button className="text-button" disabled={offset+10>=(archive?.total??0)} onClick={()=>setOffset(n=>n+10)}>下一页</button></div></>}
+      {mode==="milestones"&&(milestones?<ExamMilestonePanel data={milestones} canManage={canManage} act={act} busy={!!busy} openExam={openDetail} initialSubject={initialSubject}/>:!error&&<p>正在读取考试里程碑…</p>)}
+      {mode==="detail"&&detail&&(fromMilestones||isMilestone(detail.exam.kind))&&<button className="text-button" onClick={()=>showMilestones(detail.exam.subject??"待补科目")}><Flag size={15}/>查看考试里程碑</button>}
       {mode==="detail"&&detail&&<ExamWorkspace key={detail.exam.id} detail={detail} canManage={canManage} busy={!!busy} act={act} notify={setNotice}
         openMistakes={()=>{close();openMistakes();}} putPhoto={putPhoto}/>}
       {mode==="detail"&&!detail&&!error&&<p role="status">正在读取试卷…</p>}
