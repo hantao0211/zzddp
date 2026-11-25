@@ -1,3 +1,5 @@
+import { reviewReadings } from "./grading-readings";
+import { settleReviewedQuestion } from "../../domain/grading-decision";
 import { isWrittenTask } from "../../domain/written-completion";
 import { automaticAttemptLimit } from "../../domain/homework-usage";
 import { selectedSubmissionReport } from "./selected-submission";
@@ -6,7 +8,7 @@ import { resolveUploadTarget } from "./upload-target";
 import { createHash } from "node:crypto";
 import { readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { GRADING_VERSION, GradingVerificationSchema, type GradingReading, GradingResultSchema, emptyCounts, type GradingResult, type GradingSummary, type GradingBatchView, type MistakeView } from "../../domain/grading";
+import { GRADING_VERSION, GradingResultSchema, emptyCounts, type GradingResult, type GradingSummary, type GradingBatchView, type MistakeView } from "../../domain/grading";
 import type { HomeworkStore } from "./store";
 import type { DailyReport } from "../../domain/homework";
 export type GradingSource = { date: string; title: string; subject: string; assigned: boolean; requirements: string[]; taskIds: string[]; primaryPageId: string; pages: { id: string; file_id: string; number: number }[]; expectedLabels: string[] };
@@ -159,6 +161,8 @@ export class GradingStore {
   save(run: GradingRun, result: GradingResult) {
     this.store.transaction(() => {
       const source = JSON.parse(run.source) as GradingSource;
+      const reviews = reviewReadings(this.store.db, run.id, result);
+      if (reviews) result = { ...result, questions: result.questions.map(q => settleReviewedQuestion(q, reviews[q.id] || [])) };
       const active = this.store.db.prepare("SELECT active FROM grading_runs WHERE id=?").get(run.id) as { active: number };
       this.store.db.prepare("UPDATE grading_runs SET status='done',result=?,note='',updated_at=? WHERE id=?").run(JSON.stringify(GradingResultSchema.parse(result)), new Date(this.store.now()).toISOString(), run.id);
       if (!active.active) return;
@@ -170,7 +174,7 @@ export class GradingStore {
           this.store.db.prepare("INSERT INTO grading_mistakes(id,first_date,last_date,subject,title,page_id,payload) VALUES(?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET last_date=MAX(last_date,excluded.last_date),payload=excluded.payload,status='verified'").run(id, source.date, source.date, source.subject, source.title, source.primaryPageId, JSON.stringify(question));
           this.store.db.prepare("INSERT OR IGNORE INTO grading_occurrences(mistake_id,run_id,question_id) VALUES(?,?,?)").run(id, run.id, question.id);
         } else if (question.verdict === "correct" && question.verification === "agreed") this.store.db.prepare("UPDATE grading_mistakes SET status='withdrawn' WHERE id=?").run(id);
-        else if (question.verdict === "uncertain") this.store.db.prepare("UPDATE grading_mistakes SET status='needs_review' WHERE id=?").run(id);
+        else if (question.verdict === "uncertain" || question.verdict === "passedWithNote") this.store.db.prepare("UPDATE grading_mistakes SET status='needs_review' WHERE id=?").run(id);
       }
     });
   }
@@ -197,39 +201,20 @@ export class GradingStore {
       const counts = emptyCounts(); let pending = 0, failed = 0, incomplete = 0;
       if (run.status === "done" && run.result) { summary.finished++; const result = GradingResultSchema.parse(JSON.parse(run.result)); for (const q of result.questions) counts[q.verdict]++; incomplete = result.scopeComplete ? 0 : 1; }
       else if (run.status === "failed") failed++; else pending++;
-      for (const key of Object.keys(counts) as (keyof typeof counts)[]) summary[key] += counts[key];
+      for (const key of Object.keys(counts) as (keyof typeof counts)[]) summary[key] = (summary[key] ?? 0) + counts[key];
       summary.pending += pending; summary.failed += failed; summary.incomplete += incomplete;
       for (const id of source.taskIds) {
         const t = summary.tasks[id] ||= { ...emptyCounts(), pending: 0, failed: 0, incomplete: 0 };
-        for (const key of Object.keys(counts) as (keyof typeof counts)[]) t[key] += counts[key];
+        for (const key of Object.keys(counts) as (keyof typeof counts)[]) t[key] = (t[key] ?? 0) + counts[key];
         t.pending += pending; t.failed += failed; t.incomplete += incomplete;
       }
     }
     return summary;
   }
-  private reviewReadings(runId: string, result: GradingResult | null) {
-    const pending = new Set(result?.questions.filter(q => q.verdict === "uncertain").map(q => q.id));
-    if (!pending.size || !result) return undefined;
-    const stages = {
-      verification: "grade-verify-blind-v2", focusOne: "grade-focus-blind-v2-one", focusTwo: "grade-focus-blind-v2-two",
-    } as const;
-    const readings: Record<string, GradingReading[]> = {};
-    const lookup = this.store.db.prepare("SELECT result FROM analysis_cache WHERE key=?");
-    for (const stage of Object.keys(stages) as (keyof typeof stages)[]) {
-      const row = lookup.get(`${stages[stage]}:${result.version}:${runId}`) as { result: string } | undefined;
-      if (!row) continue;
-      const cached = GradingVerificationSchema.safeParse(JSON.parse(row.result));
-      if (!cached.success) continue;
-      for (const { questionId, studentAnswer, expectedAnswer, verdict, confidence, explanation } of cached.data.checks) {
-        if (pending.has(questionId)) (readings[questionId] ??= []).push({ stage, studentAnswer, expectedAnswer, verdict, confidence, explanation });
-      }
-    }
-    return readings;
-  }
   results(date: string): { summary: GradingSummary; batches: GradingBatchView[] } {
     return { summary: this.summary(date), batches: (this.store.db.prepare("SELECT * FROM grading_runs WHERE date=? AND active=1 ORDER BY rowid").all(date) as (GradingRun & { primary_page_id: string })[]).map(run => { const source = JSON.parse(run.source) as GradingSource;
       const result = run.result ? GradingResultSchema.parse(JSON.parse(run.result)) : null;
-      return { readings: this.reviewReadings(run.id, result), attempts: run.attempts, retryAllowed: run.status === "failed" && run.attempts < 6, failure: run.status === "done" ? null : this.failure(run.id), id: run.id, subject: source.subject, title: source.title, status: run.status, note: run.note, primaryPageId: run.primary_page_id, result }; }) };
+      return { readings: reviewReadings(this.store.db, run.id, result), attempts: run.attempts, retryAllowed: run.status === "failed" && run.attempts < 6, failure: run.status === "done" ? null : this.failure(run.id), id: run.id, subject: source.subject, title: source.title, status: run.status, note: run.note, primaryPageId: run.primary_page_id, result }; }) };
   }
   private failure(runId: string): GradingFailure | null {
     const row = this.store.db.prepare("SELECT code,stage,failed_at,source FROM grading_diagnostics WHERE run_id=?").get(runId) as { code: string; stage: GradingStage; failed_at: string; source: GradingFailure["source"] } | undefined;

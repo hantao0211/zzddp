@@ -4,7 +4,7 @@ import type { z } from "zod";
 type Question = z.infer<typeof GradingQuestionSchema> & { id: string };
 type Check = z.infer<typeof GradingVerificationSchema>["checks"][number];
 /** Only location hints cross the boundary. OCR answers, answer-bearing titles and excerpts must not. */
-export function blindGradingQuestions(questions: Question[], selected: Question[] = questions) {
+export function blindGradingQuestions(questions: Question[], selected: Pick<Question, "id" | "label" | "evidence">[] = questions) {
   return selected.map(q => ({ questionId: q.id, locator: {
     order: questions.findIndex(item => item.id === q.id) + 1,
     numbers: q.label.match(/\d+/g)?.slice(0, 5) || [],

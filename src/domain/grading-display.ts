@@ -1,4 +1,4 @@
-import { equivalentAnswer, type GradedQuestion, type GradingReading } from "./grading";
+import { type GradedQuestion, type GradingReading } from "./grading";
 /** Internal evidence identifiers are links, not readable explanations. Keep genuine problem numbers. */
 export function gradingDisplayQuestion(question: GradedQuestion): GradedQuestion {
   const ids = [question.id, ...question.evidence.map(e => e.fileId)].filter(Boolean);
@@ -27,18 +27,10 @@ export function gradingTakeaway(q: GradedQuestion, readings: GradingReading[] = 
   }
   if (q.verdict === "feedback") return shortSentence(q.explanation) || shortSentence(q.nextStep) || "这题有一条较长的点评，可在详情里读。";
 
-  const focus = readings.filter(r => r.stage !== "verification");
-  if (focus.length === 2) {
-    const [a, b] = focus;
-    if (a.verdict === "correct" && b.verdict === "correct" &&
-      (a.confidence !== "high" || b.confidence !== "high") &&
-      (equivalentAnswer(a.expectedAnswer, b.expectedAnswer) || equivalentAnswer(a.studentAnswer, b.studentAnswer))) {
-      return "两次复查都认为答对了，但把握还不够。先不用改。";
-    }
-    if (a.verdict !== b.verdict) return "两次复查的判断不同，先不用改。";
-  }
-  if (q.studentAnswer === "手写字暂未辨清") return "这个字的笔画还没看清，先不用改。";
-  return "这题还不能确定对错，先不用改。";
+  if (q.verdict === "passedWithNote") return q.explanation;
+  if (q.studentAnswer === "手写字暂未辨清") return "这处手写字的笔画没有辨清。";
+  if (q.explanation && q.explanation !== "两次识别或独立解答未取得一致结果，尚未判对错。") return q.explanation;
+  return readings.length ? "现有复核记录没有确认这题的作答。" : "这条旧记录未保存逐次识读结果。";
 }
 
 const sectionNumber = /^(?:第\s*([一二三四五六七八九十\d]+)\s*大题\s*[、，,：:·.\s]*|([一二三四五六七八九十]+)[、，,]\s*)/;

@@ -10,10 +10,11 @@ const browser = await engine.launch({ headless: true, args: engine === chromium 
 try {
   const page = await browser.newPage({ colorScheme:process.env.SMOKE_COLOR_SCHEME || 'light', viewport: { width: 390, height: 670 }, isMobile: true, hasTouch: true, ignoreHTTPSErrors: true });
   let pending = false, failed = false, photos = 0, child = false, quotaPaused = false; const errors = []; page.on("pageerror", e => errors.push(e.message));
-  const counts = { correct: 2, wrong: 1, blank: 1, uncertain: 1, feedback: 1 };
+  const counts = { passedWithNote: 1, correct: 2, wrong: 1, blank: 1, uncertain: 1, feedback: 1 };
   const summary = () => ({ ...counts, enabled: true, pages: 1, finished: pending || failed ? 0 : 1, pending: pending ? 1 : 0, failed: failed ? 1 : 0, incomplete: 0, tasks: { "synthetic-task": { ...counts, pending: pending ? 1 : 0, failed: failed ? 1 : 0, incomplete: 0 } } });
   const q = (verdict, i) => ({ id: "synthetic-question-" + i, label: `第${i}题`, sourcePartLabels: [], kind: verdict === "feedback" ? "subjective" : "objective", question: i === 2 ? "2+3等于多少？" : "一道人造的模拟练习题", studentAnswer: i === 2 ? "6" : "模拟作答", expectedAnswer: i === 2 ? "5" : "模拟参考答案", verdict, confidence: verdict === "uncertain" ? "low" : "high", explanation: verdict === "uncertain" ? "两次解答没有取得一致，未直接判错。" : "先算2加2等于4，再加1得到5。", knowledgePoints: ["整数加法"], cause: "计算错误", causeExplanation: "从这次作答看，可能在相加时多算了1，不能据此断定是粗心。", nextStep: "用小棒分两步相加，再检查总数。", evidence: [{ fileId: "synthetic-page", page: 1, excerpt: "模拟作答" }], verification: verdict === "uncertain" ? "uncertain" : verdict === "feedback" ? "subjective" : "agreed" });
   const questions = ["correct", "wrong", "blank", "uncertain", "feedback"].map((s, i) => q(s, i + 1));
+  questions.push({ ...q("passedWithNote", 7), explanation: "两次核对的内容分别是整词和单字。" });
   questions[1].explanation += " 图片编号（synthetic-page），第2题。";
   const legacyLabels = [
     ["四、8", "第4大题 · 第8小题"],
@@ -70,7 +71,7 @@ try {
   assert.equal(photos, 0, "Original photos load only when requested");
   assert.equal(await panel.getByText("识别到的作答", { exact: true }).count(), 3);
   const uncertainCard = panel.locator(".grade-verdict-uncertain");
-  assert.match(await uncertainCard.innerText(), /两次复查都认为答对了/);
+  assert.match(await uncertainCard.innerText(), /两次解答没有取得一致/);
   assert.ok(!(await uncertainCard.innerText()).includes("模拟观察记录"));
   await uncertainCard.getByText("查看复核记录", { exact: true }).click();
   await uncertainCard.getByText("AI 读到：甲 · 正确 · 把握高", { exact: true }).waitFor();
@@ -78,9 +79,9 @@ try {
   assert.match(await panel.locator(".grade-verdict-wrong").innerText(), /你写的是「6」，正确答案是「5」/);
   assert.ok(!(await panel.innerText()).includes("synthetic-page"), "Internal page identifiers are not readable explanations");
   await panel.getByRole("button", { name: "全部题目", exact: true }).click();
-  assert.equal(await panel.locator(".grade-question").count(), 6);
+  assert.equal(await panel.locator(".grade-question").count(), 7);
   const categoryButton = label => panel.getByRole("group", { name: "按批改结果筛选" }).getByRole("button", { name: new RegExp("^" + label + " ") });
-  for (const [verdict, label, count] of [["correct", "正确", 2], ["wrong", "错误", 1], ["blank", "未作答", 1], ["uncertain", "未确认", 1], ["feedback", "点评", 1]]) {
+  for (const [verdict, label, count] of [["passedWithNote", "通过但存疑", 1], ["correct", "正确", 2], ["wrong", "错误", 1], ["blank", "未作答", 1], ["uncertain", "未确认", 1], ["feedback", "点评", 1]]) {
     const button = categoryButton(label); await button.click();
     assert.equal(await button.getAttribute("aria-pressed"), "true");
     assert.equal(await panel.locator(".grade-question").count(), count);
@@ -105,7 +106,7 @@ try {
   assert.equal(await panel.locator(".grade-verdict-correct").count(), 0);
   assert.equal(await panel.locator('.grade-stat-filter[aria-pressed="true"]').count(), 0);
   await panel.getByRole("button", { name: "全部题目", exact: true }).click();
-  assert.equal(await panel.locator(".grade-question").count(), 6);
+  assert.equal(await panel.locator(".grade-question").count(), 7);
   for (const viewport of [{ width: 320, height: 568 }, { width: 390, height: 670 }, { width: 768, height: 1024 }, { width: 1280, height: 900 }]) {
     await page.setViewportSize(viewport);
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), "No horizontal page overflow");

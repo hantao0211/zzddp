@@ -10,7 +10,7 @@ import type { HomeworkUsage } from "@/domain/homework-usage";
 import type { HomeworkQuota } from "@/domain/homework-quota";
 import type { KnowledgeCatalog, LearnedMemory } from "@/domain/memory";
 type Member = Viewer & { active: boolean };
-type Overview = { homeworkUsage?: HomeworkUsage | null; homeworkQuota?: HomeworkQuota | null; viewer: Viewer; days: { date: string; status: string; note: string; tasks: number; originals: number; uploads: number; grading: { correct: number; wrong: number; blank: number; uncertain: number; pending: number; failed: number } }[]; memories: LearnedMemory[]; knowledge?: KnowledgeCatalog; legacyAccess: boolean; limits: { chat: number; asr: number; tts: number }; usage: { chat: number; asr: number; tts: number }; day: string; service: { provider: string; model: string } | null; features: { autoGrading: boolean; writtenCompletion: boolean } };
+type Overview = { homeworkUsage?: HomeworkUsage | null; homeworkQuota?: HomeworkQuota | null; viewer: Viewer; days: { date: string; status: string; note: string; tasks: number; originals: number; uploads: number; grading: { passedWithNote?: number; correct: number; wrong: number; blank: number; uncertain: number; pending: number; failed: number } }[]; memories: LearnedMemory[]; knowledge?: KnowledgeCatalog; legacyAccess: boolean; limits: { chat: number; asr: number; tts: number }; usage: { chat: number; asr: number; tts: number }; day: string; service: { provider: string; model: string } | null; features: { autoGrading: boolean; writtenCompletion: boolean } };
 const settingsSections = [
   { id: "records", label: "学习记录", icon: CalendarDays }, { id: "memories", label: "知识记忆", icon: Brain },
   { id: "accounts", label: "家庭账号", icon: Users }, { id: "settings", label: "家庭设置", icon: Settings },
@@ -50,6 +50,7 @@ export function ParentAdmin() {
           <p className="admin-day-summary"><span>{day.originals} 份原件</span><span>{day.tasks} 项作业</span>
             {day.grading.wrong > 0 && <span>{day.grading.wrong} 道错题</span>}
             {day.grading.blank > 0 && <span>{day.grading.blank} 处漏答</span>}
+            {!!day.grading.passedWithNote && <span>{day.grading.passedWithNote} 题通过但存疑</span>}
             {day.grading.uncertain > 0 && <span>{day.grading.uncertain} 题未确认</span>}
             {day.grading.pending > 0 && <span>{day.grading.pending} 页待批改</span>}
             {day.grading.correct > 0 && !(day.grading.wrong || day.grading.blank || day.grading.uncertain || day.grading.pending) && <span>{day.grading.correct} 题正确</span>}

@@ -48,7 +48,7 @@ for (const disagree of [false, true]) test(`grading pipeline ${disagree ? "disag
   const grader = new HomeworkGrader(f.store, () => ai, { images: () => [{ fileId: f.page, mimeType: "image/png", base64: "synthetic" }] });
   try {
     assert.equal(await grader.tick(), true);
-    const summary = f.store.grading.summary(date); assert.equal(summary.pending, 0); assert.equal(summary.wrong, disagree ? 0 : 1); assert.equal(summary.uncertain, disagree ? 1 : 0);
+    const summary = f.store.grading.summary(date); assert.equal(summary.pending, 0); assert.equal(summary.wrong, disagree ? 0 : 1); assert.equal(summary.uncertain, 0); assert.equal(summary.passedWithNote, disagree ? 1 : 0);
     const book = f.store.grading.mistakes(null); assert.equal(book.total, disagree ? 0 : 1);
     f.store.transaction(() => f.store.grading.queueDay(date, null)); assert.equal(await grader.tick(), false);
     assert.equal(firstCalls, 1); assert.equal(verifyCalls, disagree ? 3 : 1); assert.equal(f.store.upload(f.u.id)!.result, raw);
@@ -152,7 +152,7 @@ test("a medium-confidence Chinese glyph is not turned into a wrong-book entry by
     assert.ok(!('expectedLabels' in input.source));assert.doesNotMatch(JSON.stringify(input.questions),/挡地|当地|studentAnswer|expectedAnswer|excerpt/);
     return schema.parse({scopeComplete:true,omittedLabels:[],checks:[{...glyph,confidence:"high",questionId:input.questions[0].questionId}]});
   }}),{images:()=>[]});
-  try{await grader.tick();assert.equal(calls,4);assert.equal(f.store.grading.summary(date).wrong,0);assert.equal(f.store.grading.summary(date).uncertain,1);assert.equal(f.store.grading.mistakes(null).total,0);}finally{f.close();}
+  try{await grader.tick();assert.equal(calls,4);assert.equal(f.store.grading.summary(date).wrong,0);assert.equal(f.store.grading.summary(date).passedWithNote,1);assert.equal(f.store.grading.mistakes(null).total,0);}finally{f.close();}
 });
 
 test("explicit dictation labeled other is queued for grading instead of silently excluded",()=>{

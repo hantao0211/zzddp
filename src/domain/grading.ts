@@ -1,3 +1,4 @@
+import { matchingCorrectAnswer } from "./grading-decision";
 import type { GradingFailure } from "./grading-failure";
 import { z } from "zod";
 import { EvidenceSchema } from "./ai-contracts";
@@ -12,11 +13,11 @@ const AnswerSchema = z.object({
 export const GradingQuestionSchema = AnswerSchema.extend({ sourcePartLabels: z.array(z.string().max(200)).max(160).default([]), label: z.string().min(1).max(180), question: z.string().min(1).max(5000), evidence: z.array(EvidenceSchema).min(1).max(4) });
 export const GradingInspectionSchema = z.object({ scopeComplete: z.boolean(), note: z.string().max(1200), questions: z.array(GradingQuestionSchema).max(80) });
 export const GradingVerificationSchema = z.object({ scopeComplete: z.boolean(), omittedLabels: z.array(z.string().max(180)).max(80), checks: z.array(AnswerSchema.extend({ questionId: z.string().min(1).max(100) })).max(80) });
-export const GradedQuestionSchema = GradingQuestionSchema.extend({ id: z.string(), verification: z.enum(["agreed", "uncertain", "subjective"]) });
+export const GradedQuestionSchema = GradingQuestionSchema.extend({ verdict: z.enum([...JudgmentSchema.options, "passedWithNote"]), id: z.string(), verification: z.enum(["agreed", "uncertain", "subjective"]) });
 export type GradedQuestion = z.infer<typeof GradedQuestionSchema>;
 export const GradingResultSchema = z.object({ version: z.enum(["grading-v1", "grading-v2"]), scopeComplete: z.boolean(), note: z.string(), questions: z.array(GradedQuestionSchema).max(80) });
 export type GradingResult = z.infer<typeof GradingResultSchema>;
-export type GradingCounts = { correct: number; wrong: number; blank: number; uncertain: number; feedback: number };
+export type GradingCounts = { passedWithNote?: number; correct: number; wrong: number; blank: number; uncertain: number; feedback: number };
 export type GradingSummary = GradingCounts & { enabled: boolean; pending: number; failed: number; pages: number; finished: number; incomplete: number; tasks: Record<string, GradingCounts & { pending: number; failed: number; incomplete: number }> };
 export type GradingReading = Pick<GradedQuestion, "studentAnswer" | "expectedAnswer" | "confidence" | "verdict" | "explanation"> & { stage: "verification" | "focusOne" | "focusTwo" };
 export type GradingBatchView = { readings?: Record<string, GradingReading[]>; failure?: GradingFailure | null; attempts?: number; retryAllowed?: boolean; id: string; title: string; subject: string; status: string; note: string; primaryPageId: string; result: GradingResult | null };
@@ -29,7 +30,7 @@ export function readAutoGrading(env: Record<string, string | undefined> = proces
   if (env.ASSISTANT_AUTO_GRADING !== "1") throw new Error("Invalid auto grading setting");
   return true;
 }
-export const emptyCounts = (): GradingCounts => ({ correct: 0, wrong: 0, blank: 0, uncertain: 0, feedback: 0 });
+export const emptyCounts = () => ({ passedWithNote: 0, correct: 0, wrong: 0, blank: 0, uncertain: 0, feedback: 0 });
 function normalized(value: string) { return value.normalize("NFKC").toLowerCase().replace(/\\(?:d?frac)\{([^{}]+)\}\{([^{}]+)\}/g, "$1/$2").replace(/[\s$\\,，。；;]/g, "").replace(/^(?:答案[:：]?|选项[:：]?)/, ""); }
 export function equivalentAnswer(a: string, b: string) {
   const x = normalized(a), y = normalized(b); if (!x || !y) return false; if (x === y) return true;
@@ -50,7 +51,7 @@ export function reconcileQuestion(id: string, first: z.infer<typeof GradingQuest
   const numeric = (s: string) => !/[，,;；\n]/.test(s) && !/\d\s+\d/.test(s) && /^[-+]?\d{1,30}(?:\/\d{1,30})?$/.test(normalized(s));
   const consistent = [first, second].every(q => q.verdict !== "correct" || !numeric(q.studentAnswer) || !numeric(q.expectedAnswer) || equivalentAnswer(q.studentAnswer, q.expectedAnswer));
   const agreed = consistent && first.confidence === "high" && second.confidence === "high" && first.verdict === second.verdict && (first.verdict === "correct" ? sameStudent || sameReference : first.verdict === "blank" ? true : sameStudent && sameReference);
-  if (!agreed || !["correct", "wrong", "blank"].includes(first.verdict)) return { ...first, id, verdict: "uncertain", confidence: "low", verification: "uncertain", explanation: "两次识别或独立解答未取得一致结果，尚未判对错。" };
+  if ((!agreed && !matchingCorrectAnswer(first, second)) || !["correct", "wrong", "blank"].includes(first.verdict)) return { ...first, id, verdict: "uncertain", confidence: "low", verification: "uncertain", explanation: "两次识别或独立解答未取得一致结果，尚未判对错。" };
   return { ...first, ...second, id, verification: "agreed", cause: first.cause === second.cause ? second.cause : "原因待确认", causeExplanation: first.cause === second.cause ? second.causeExplanation : "已确认答案有误，但仅凭这次作答还不能确定错因。" };
 }
 
@@ -61,6 +62,7 @@ export function taskGradingLabel(t?: GradingCounts & { pending: number; failed: 
   if (t.wrong) return `${t.wrong}道错题`;
   if (t.uncertain) return `${t.uncertain}题尚未确认`;
   if (t.blank) return `${t.blank}题未作答`;
+  if (t.passedWithNote) return `${t.passedWithNote}题通过但存疑`;
   if (t.incomplete) return "部分题未完整识别";
   if (t.feedback) return "已给出点评";
   return t.correct ? "已批改，均正确" : "未发现需批改的题";

@@ -11,11 +11,11 @@ export function HomeStudyTools({ grading, homeworkReward, onNavigate }: {
   homeworkReward: HomeworkSnapshot["homeworkReward"];
   onNavigate: (view: HomeStudyView, focusFailures?: boolean) => void;
 }) {
-  const checked = grading && grading.correct + grading.wrong + grading.blank + grading.uncertain + grading.feedback;
+  const checked = grading && grading.correct + (grading.passedWithNote ?? 0) + grading.wrong + grading.blank + grading.uncertain + grading.feedback;
   const gradingNote = grading?.failed
     ? `${grading.failed}页批改未完成${grading.pending ? ` · ${grading.pending}页待批改` : ""}`
     : grading?.pending ? `${grading.pending}页待批改`
-    : grading?.finished ? `已批改${checked}题 · ${grading.wrong}道错题${grading.uncertain ? ` · ${grading.uncertain}题待确认` : ""}`
+    : grading?.finished ? `已批改${checked}题 · ${grading.wrong}道错题${grading.passedWithNote ? ` · ${grading.passedWithNote}题通过但存疑` : ""}${grading.uncertain ? ` · ${grading.uncertain}题待确认` : ""}`
     : "上传后自动批改";
   const entries = [
     { view: "grading", title: grading?.failed ? "查看未完成原因" : "查看批改", note: gradingNote,

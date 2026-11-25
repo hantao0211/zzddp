@@ -52,3 +52,25 @@ test("mistake summaries normalize legacy question labels and keep excerpts separ
  const long: GradedQuestion = { ...first, verification: "agreed", question: "Test example. ".repeat(35) };
  assert.ok(mistakeQuestionSummary(long).preview.endsWith("…"));
 });
+
+import { settleReviewedQuestion } from "../src/domain/grading-decision";
+test("completed blind readings settle matching answers and report the specific remaining doubt", () => {
+ const q: GradedQuestion = { ...first, studentAnswer: "春（两遍）", verdict: "uncertain", verification: "uncertain" };
+ const a = { ...check, studentAnswer: "春（两遍）", expectedAnswer: "春", confidence: "medium", verdict: "correct", stage: "focusOne" } as const;
+ const b = { ...a, studentAnswer: "春", stage: "focusTwo" } as const;
+ assert.equal(settleReviewedQuestion(q, [a,b]).verdict, "correct");
+ assert.equal(settleReviewedQuestion(q, [a]).verdict, "uncertain");
+ const word = settleReviewedQuestion(q,[a,{...b,studentAnswer:"春天",expectedAnswer:"春天"}]);
+ assert.equal(word.verdict,"passedWithNote");
+ assert.match(word.explanation,/「春」和「春天」/);
+ const noKey = {...a,expectedAnswer:"无法确定（缺少词表）",verdict:"uncertain"} as const;
+ assert.match(settleReviewedQuestion(q,[noKey,{...noKey,stage:"focusTwo"}]).explanation,/缺少听写词表/);
+ const flagged = { ...a, verdict: "wrong", studentAnswer: "6", expectedAnswer: "5", explanation: "加法算多了一。" } as const;
+ const possibleError = settleReviewedQuestion(q,[flagged,{...flagged,stage:"focusTwo",expectedAnswer:"五"}]);
+ assert.equal(possibleError.verdict,"uncertain"); assert.match(possibleError.explanation,/加法算多了一/);
+ const unreadable = {...noKey,studentAnswer:"未辨清"};
+ assert.equal(settleReviewedQuestion(q,[unreadable,{...unreadable,stage:"focusTwo"}]).verdict,"uncertain");
+ for(const [x,y] of [["1,23","12,3"],["US","us"],["a part","apart"]]){
+   assert.equal(settleReviewedQuestion({...q,studentAnswer:x},[{...a,studentAnswer:x,expectedAnswer:x},{...b,studentAnswer:y,expectedAnswer:y}]).verdict,"passedWithNote");
+ }
+});
