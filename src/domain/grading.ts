@@ -18,7 +18,8 @@ export const GradingResultSchema = z.object({ version: z.enum(["grading-v1", "gr
 export type GradingResult = z.infer<typeof GradingResultSchema>;
 export type GradingCounts = { correct: number; wrong: number; blank: number; uncertain: number; feedback: number };
 export type GradingSummary = GradingCounts & { enabled: boolean; pending: number; failed: number; pages: number; finished: number; incomplete: number; tasks: Record<string, GradingCounts & { pending: number; failed: number; incomplete: number }> };
-export type GradingBatchView = { failure?: GradingFailure | null; attempts?: number; retryAllowed?: boolean; id: string; title: string; subject: string; status: string; note: string; primaryPageId: string; result: GradingResult | null };
+export type GradingReading = Pick<GradedQuestion, "studentAnswer" | "expectedAnswer" | "confidence" | "verdict" | "explanation"> & { stage: "verification" | "focusOne" | "focusTwo" };
+export type GradingBatchView = { readings?: Record<string, GradingReading[]>; failure?: GradingFailure | null; attempts?: number; retryAllowed?: boolean; id: string; title: string; subject: string; status: string; note: string; primaryPageId: string; result: GradingResult | null };
 export type MistakeProvenance =
   | { kind: "assignment" | "practice" | "exam"; title: string }
   | { kind: "unmatched"; title?: string };

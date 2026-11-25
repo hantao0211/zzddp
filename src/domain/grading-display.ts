@@ -1,4 +1,4 @@
-import type { GradedQuestion } from "./grading";
+import { equivalentAnswer, type GradedQuestion, type GradingReading } from "./grading";
 /** Internal evidence identifiers are links, not readable explanations. Keep genuine problem numbers. */
 export function gradingDisplayQuestion(question: GradedQuestion): GradedQuestion {
   const ids = [question.id, ...question.evidence.map(e => e.fileId)].filter(Boolean);
@@ -8,6 +8,37 @@ export function gradingDisplayQuestion(question: GradedQuestion): GradedQuestion
     return text.replace(/[（(]\s*[)）]/g, "").replace(/ {2,}/g, " ").trim();
   };
   return { ...question, label: clean(question.label), question: clean(question.question), studentAnswer: clean(question.studentAnswer), expectedAnswer: clean(question.expectedAnswer), explanation: clean(question.explanation), knowledgePoints: question.knowledgePoints.map(clean), causeExplanation: clean(question.causeExplanation), nextStep: clean(question.nextStep) };
+}
+
+function shortSentence(text: string) {
+  const first = text.trim().match(/^[^。！？\n]+[。！？]?/u)?.[0]?.trim();
+  return first && first.length <= 72 ? first : "";
+}
+
+export function gradingTakeaway(q: GradedQuestion, readings: GradingReading[] = []): string {
+  if (q.verdict === "correct") return "";
+  if (q.verdict === "blank") return "这题还空着，补上答案吧。";
+  if (q.verdict === "wrong") {
+    if (q.studentAnswer && q.expectedAnswer && q.studentAnswer !== q.expectedAnswer &&
+      q.studentAnswer.length + q.expectedAnswer.length <= 48) {
+      return `你写的是「${q.studentAnswer}」，正确答案是「${q.expectedAnswer}」。`;
+    }
+    return shortSentence(q.explanation) || shortSentence(q.nextStep) || "对照详情里的参考答案，检查这道题。";
+  }
+  if (q.verdict === "feedback") return shortSentence(q.explanation) || shortSentence(q.nextStep) || "这题有一条较长的点评，可在详情里读。";
+
+  const focus = readings.filter(r => r.stage !== "verification");
+  if (focus.length === 2) {
+    const [a, b] = focus;
+    if (a.verdict === "correct" && b.verdict === "correct" &&
+      (a.confidence !== "high" || b.confidence !== "high") &&
+      (equivalentAnswer(a.expectedAnswer, b.expectedAnswer) || equivalentAnswer(a.studentAnswer, b.studentAnswer))) {
+      return "两次复查都认为答对了，但把握还不够。先不用改。";
+    }
+    if (a.verdict !== b.verdict) return "两次复查的判断不同，先不用改。";
+  }
+  if (q.studentAnswer === "手写字暂未辨清") return "这个字的笔画还没看清，先不用改。";
+  return "这题还不能确定对错，先不用改。";
 }
 
 const sectionNumber = /^(?:第\s*([一二三四五六七八九十\d]+)\s*大题\s*[、，,：:·.\s]*|([一二三四五六七八九十]+)[、，,]\s*)/;

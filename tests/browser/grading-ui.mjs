@@ -30,6 +30,7 @@ try {
   await page.route("**/assistant-api/**", async route => {
     const url = new URL(route.request().url()), path = url.pathname;
     const json = data => route.fulfill({ contentType: "application/json", body: JSON.stringify(data) });
+    if (path.endsWith("/practice/exams")) return json({items:[],total:0,stage:{grade:4,semester:1}});
     if (path.endsWith("/reading/state")) return json(null);
     if (path.endsWith("/status")) return json({ authenticated: true, available: true, speech: true, accounts: true, viewer: { id: "11111111-1111-4111-8111-111111111111", name: "模拟成员", username: "synthetic", role: child ? "child" : "admin" } });
     if (path.endsWith("/memories")) return json({ items: [] });
@@ -38,7 +39,7 @@ try {
       const date = url.searchParams.get("date"); selectedDate = date;
       return json({ date, status: "processed", pending: false, note: "模拟资料", dates: [date], quota: { calls: 1, limit: 60 }, grading: summary(), writtenCompletionEnabled: true, uploads: [{ id: "synthetic-upload", date, kind: "memo", status: "processed", createdAt: "", subjects: ["数学"], note: "", aiMs: 0, issues: [], files: [{ id: "synthetic-file", name: "synthetic.png", size: 1, stored: true, pages: [] }] }], report: { date, memoId: "synthetic-upload", updatedAt: "", familyNotes: [], unclassified: [], unassigned: [], uncertainties: [], tasks: [{ id: "synthetic-task", title: "数学练习", subject: "数学", requirement: "完成模拟练习第12页", format: "written", memoEvidence: [], evidence: [], coverage: "complete", missing: [], reviewActivity: null, writtenCompletion: { version: "written-v2", status: "done", reason: "均有模拟作答", parts: [] } }] } });
     }
-    if (path.endsWith("/learning/grading")) return json({ summary: summary(), batches: [{ id: "synthetic-run", title: "数学练习", subject: "数学", attempts: failed ? 3 : 1, retryAllowed: failed, failure: failed ? { code: "INVALID_ENVELOPE", stage: "verification", failedAt: "2026-11-21T14:58:51.833Z", source: "runtime", reason: "AI返回的内容未能正常解析，没能读到可用的批改回复。", nextStep: "原件已保存，不用重新上传。可以请家长重试。" } : null, status: pending ? "queued" : failed ? "failed" : "done", note: pending && quotaPaused ? "今天的AI额度已用完，批改会在明天继续，原件已保存。" : failed ? "批改未完成，原件保留。" : "", primaryPageId: "synthetic-page", result: pending || failed ? null : { version: "grading-v1", scopeComplete: true, note: "", questions: currentQuestions() } }, { id: "synthetic-english", title: "英语练习", subject: "英语", status: "done", note: "", primaryPageId: "synthetic-english-page", result: { version: "grading-v1", scopeComplete: true, note: "", questions: [q("correct", 7)] } }] });
+    if (path.endsWith("/learning/grading")) return json({ summary: summary(), batches: [{ id: "synthetic-run", title: "数学练习", subject: "数学", attempts: failed ? 3 : 1, retryAllowed: failed, failure: failed ? { code: "INVALID_ENVELOPE", stage: "verification", failedAt: "2026-11-21T14:58:51.833Z", source: "runtime", reason: "AI返回的内容未能正常解析，没能读到可用的批改回复。", nextStep: "原件已保存，不用重新上传。可以请家长重试。" } : null, status: pending ? "queued" : failed ? "failed" : "done", note: pending && quotaPaused ? "今天的AI额度已用完，批改会在明天继续，原件已保存。" : failed ? "批改未完成，原件保留。" : "", primaryPageId: "synthetic-page", readings: { "synthetic-question-4": ["verification","focusOne","focusTwo"].map((stage,i)=>({stage,studentAnswer:i===0?"甲":"乙",expectedAnswer:"乙",confidence:i===1?"medium":"high",verdict:"correct",explanation:"模拟观察记录"})) }, result: pending || failed ? null : { version: "grading-v1", scopeComplete: true, note: "", questions: currentQuestions() } }, { id: "synthetic-english", title: "英语练习", subject: "英语", status: "done", note: "", primaryPageId: "synthetic-english-page", result: { version: "grading-v1", scopeComplete: true, note: "", questions: [q("correct", 7)] } }] });
     if (path.endsWith("/learning/mistakes")) {
       const subject = url.searchParams.get("subject");
       const offset = Number(url.searchParams.get("offset"));
@@ -68,7 +69,13 @@ try {
   assert.equal(await panel.getByText("AI尚未确认", { exact: true }).count(), 1);
   assert.equal(photos, 0, "Original photos load only when requested");
   assert.equal(await panel.getByText("识别到的作答", { exact: true }).count(), 3);
-  assert.equal(await panel.getByText("作答待辨清", { exact: true }).count(), 1);
+  const uncertainCard = panel.locator(".grade-verdict-uncertain");
+  assert.match(await uncertainCard.innerText(), /两次复查都认为答对了/);
+  assert.ok(!(await uncertainCard.innerText()).includes("模拟观察记录"));
+  await uncertainCard.getByText("查看复核记录", { exact: true }).click();
+  await uncertainCard.getByText("AI 读到：甲 · 正确 · 把握高", { exact: true }).waitFor();
+  await uncertainCard.getByText("查看复核记录", { exact: true }).click();
+  assert.match(await panel.locator(".grade-verdict-wrong").innerText(), /你写的是「6」，正确答案是「5」/);
   assert.ok(!(await panel.innerText()).includes("synthetic-page"), "Internal page identifiers are not readable explanations");
   await panel.getByRole("button", { name: "全部题目", exact: true }).click();
   assert.equal(await panel.locator(".grade-question").count(), 6);
@@ -154,6 +161,7 @@ try {
   await toggle(12).waitFor();
   await book.getByRole("button", { name: "数学", exact: true }).click();
   await toggle(2).click();
+  await book.getByText("查看详情", { exact: true }).click();
   await book.getByText("可能的错因 · 计算错误", { exact: true }).waitFor();
   assert.equal(await book.locator(".grade-question").count(), 1);
   const sourceText = `来自作业 · ${fullAssignment}`;

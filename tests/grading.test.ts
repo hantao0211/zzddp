@@ -52,6 +52,10 @@ for (const disagree of [false, true]) test(`grading pipeline ${disagree ? "disag
     const book = f.store.grading.mistakes(null); assert.equal(book.total, disagree ? 0 : 1);
     f.store.transaction(() => f.store.grading.queueDay(date, null)); assert.equal(await grader.tick(), false);
     assert.equal(firstCalls, 1); assert.equal(verifyCalls, disagree ? 3 : 1); assert.equal(f.store.upload(f.u.id)!.result, raw);
+    if (disagree) {
+      const batch = f.store.grading.results(date).batches[0];
+      assert.deepEqual(batch.readings?.[batch.result!.questions[0].id].map(r => r.stage), ["verification", "focusOne", "focusTwo"]);
+    }
     if (!disagree) {
       assert.equal(book.items[0].question.cause, "计算错误"); assert.equal(book.items[0].occurrences, 1);
       assert.equal(f.store.grading.mistakes("英语").total, 0);

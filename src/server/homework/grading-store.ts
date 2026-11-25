@@ -6,7 +6,7 @@ import { resolveUploadTarget } from "./upload-target";
 import { createHash } from "node:crypto";
 import { readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { GRADING_VERSION, GradingResultSchema, emptyCounts, type GradingResult, type GradingSummary, type GradingBatchView, type MistakeView } from "../../domain/grading";
+import { GRADING_VERSION, GradingVerificationSchema, type GradingReading, GradingResultSchema, emptyCounts, type GradingResult, type GradingSummary, type GradingBatchView, type MistakeView } from "../../domain/grading";
 import type { HomeworkStore } from "./store";
 import type { DailyReport } from "../../domain/homework";
 export type GradingSource = { date: string; title: string; subject: string; assigned: boolean; requirements: string[]; taskIds: string[]; primaryPageId: string; pages: { id: string; file_id: string; number: number }[]; expectedLabels: string[] };
@@ -207,8 +207,29 @@ export class GradingStore {
     }
     return summary;
   }
+  private reviewReadings(runId: string, result: GradingResult | null) {
+    const pending = new Set(result?.questions.filter(q => q.verdict === "uncertain").map(q => q.id));
+    if (!pending.size || !result) return undefined;
+    const stages = {
+      verification: "grade-verify-blind-v2", focusOne: "grade-focus-blind-v2-one", focusTwo: "grade-focus-blind-v2-two",
+    } as const;
+    const readings: Record<string, GradingReading[]> = {};
+    const lookup = this.store.db.prepare("SELECT result FROM analysis_cache WHERE key=?");
+    for (const stage of Object.keys(stages) as (keyof typeof stages)[]) {
+      const row = lookup.get(`${stages[stage]}:${result.version}:${runId}`) as { result: string } | undefined;
+      if (!row) continue;
+      const cached = GradingVerificationSchema.safeParse(JSON.parse(row.result));
+      if (!cached.success) continue;
+      for (const { questionId, studentAnswer, expectedAnswer, verdict, confidence, explanation } of cached.data.checks) {
+        if (pending.has(questionId)) (readings[questionId] ??= []).push({ stage, studentAnswer, expectedAnswer, verdict, confidence, explanation });
+      }
+    }
+    return readings;
+  }
   results(date: string): { summary: GradingSummary; batches: GradingBatchView[] } {
-    return { summary: this.summary(date), batches: (this.store.db.prepare("SELECT * FROM grading_runs WHERE date=? AND active=1 ORDER BY rowid").all(date) as (GradingRun & { primary_page_id: string })[]).map(run => { const source = JSON.parse(run.source) as GradingSource; return { attempts: run.attempts, retryAllowed: run.status === "failed" && run.attempts < 6, failure: run.status === "done" ? null : this.failure(run.id), id: run.id, subject: source.subject, title: source.title, status: run.status, note: run.note, primaryPageId: run.primary_page_id, result: run.result ? GradingResultSchema.parse(JSON.parse(run.result)) : null }; }) };
+    return { summary: this.summary(date), batches: (this.store.db.prepare("SELECT * FROM grading_runs WHERE date=? AND active=1 ORDER BY rowid").all(date) as (GradingRun & { primary_page_id: string })[]).map(run => { const source = JSON.parse(run.source) as GradingSource;
+      const result = run.result ? GradingResultSchema.parse(JSON.parse(run.result)) : null;
+      return { readings: this.reviewReadings(run.id, result), attempts: run.attempts, retryAllowed: run.status === "failed" && run.attempts < 6, failure: run.status === "done" ? null : this.failure(run.id), id: run.id, subject: source.subject, title: source.title, status: run.status, note: run.note, primaryPageId: run.primary_page_id, result }; }) };
   }
   private failure(runId: string): GradingFailure | null {
     const row = this.store.db.prepare("SELECT code,stage,failed_at,source FROM grading_diagnostics WHERE run_id=?").get(runId) as { code: string; stage: GradingStage; failed_at: string; source: GradingFailure["source"] } | undefined;
