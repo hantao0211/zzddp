@@ -25,14 +25,18 @@ export function readExamHints(raw: unknown, today: string): Partial<ExamMeta> {
   if (!raw || typeof raw !== "object") return {};
   const hints = Object.entries(examFields).flatMap(([key, schema]) => {
     const parsed = schema.safeParse(Reflect.get(raw, key));
+    if (key === "scope" && parsed.success && parsed.data === "extracurricular") {
+      const evidence = Reflect.get(raw, "scopeEvidence");
+      if (typeof evidence !== "string" || !evidence.trim()) return [];
+    }
     return parsed.success && parsed.data !== "" && !(key === "date" && String(parsed.data) > today)
       ? [[key, parsed.data]] : [];
   });
   return Object.fromEntries(hints);
 }
 export const examManifest = z.object({
-  meta: examMeta.optional(), pages: z.array(z.object({sha: z.string().regex(/^[0-9a-f]{64}$/), bytes: z.number().int().min(4).max(20*1024*1024)})).min(1).max(12),
-}).refine(v => new Set(v.pages.map(p => p.sha)).size === v.pages.length, "同一页照片重复");
+  scope: examFields.scope.optional(), meta: examMeta.optional(), pages: z.array(z.object({sha: z.string().regex(/^[0-9a-f]{64}$/), bytes: z.number().int().min(4).max(20*1024*1024)})).min(1).max(12),
+}).refine(v => !v.meta || v.scope === undefined, "试卷归属不可重复填写").refine(v => new Set(v.pages.map(p => p.sha)).size === v.pages.length, "同一页照片重复");
 export const observation = z.object({
   label: z.string().trim().min(1).max(180), question: z.string().trim().min(1).max(3500),
   studentAnswer: z.string().max(1200), teacherMark: z.string().max(500), correction: z.string().max(1200),

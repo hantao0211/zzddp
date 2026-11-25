@@ -31,7 +31,8 @@ try{
  await checkSectionDivider();
  await page.getByRole("button",{name:"上传试卷",exact:true}).click();
  const dialog=page.getByRole("dialog",{name:"试卷档案"});
- assert.equal(await dialog.locator('input:not([type=file]),select').count(),0);
+ assert.equal(await dialog.locator('input:not([type=file])').count(),0);
+ assert.equal(await dialog.getByLabel("试卷归属").inputValue(),"");
  const photos=await page.evaluate(()=>["#fff","#eee"].map(color=>{const c=document.createElement("canvas");c.width=100;c.height=90;const ctx=c.getContext("2d");ctx.fillStyle=color;ctx.fillRect(0,0,100,90);return c.toDataURL("image/png").split(",")[1];}));
  await dialog.locator("input[type=file]").setInputFiles(photos.map((p,i)=>({name:"page-"+i+".png",mimeType:"image/png",buffer:Buffer.from(p,"base64")})));
  await dialog.getByRole("button",{name:"上传并整理错题"}).click();

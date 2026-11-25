@@ -60,18 +60,24 @@ export class Assessments {
     }:undefined}))};
   }
   reserve(input:unknown) {
-    const {meta: supplied,pages}=examManifest.parse(input);
-    const meta=supplied??emptyExam;
+    const {meta: supplied,scope,pages}=examManifest.parse(input);
+    const meta=supplied??{...emptyExam,scope:scope??"curricular"};
     if(meta.date && meta.date>this.store.today())throw new HomeworkError(400,"请填写已经发生的测验日期。");
     const id=digest(JSON.stringify(pages.map(p=>p.sha)));
     return this.store.homework.transaction(()=>{
       const prior=this.store.db.prepare("SELECT metadata FROM exams WHERE id=?").get(id);
       if(prior&&supplied&&prior.metadata!==JSON.stringify(meta))throw new HomeworkError(409,"这些原图已有档案，请在全部试卷中打开并修改资料。");
+      if(prior && scope){
+        const intake=this.store.db.prepare("SELECT locked FROM exam_photo_intakes WHERE exam_id=?").get(id);
+        const alreadySelected=intake ? (JSON.parse(String(intake.locked)) as string[]).includes("scope") : true;
+        if(!alreadySelected || JSON.parse(String(prior.metadata)).scope!==scope)
+          throw new HomeworkError(409,"这些照片已经上传，请在原试卷的「试卷资料」中核对归属。");
+      }
       if(!prior){
         const used=Number(this.store.db.prepare("SELECT COALESCE(sum(bytes),0) n FROM exam_pages").get()!.n);
         if(used+pages.reduce((sum,p)=>sum+p.bytes,0)>4*1024**3)throw new HomeworkError(507,"试卷原件空间不足，请联系家长。");
         this.store.db.prepare("INSERT INTO exams VALUES(?,?,?,?)").run(id,JSON.stringify(meta),meta.date??this.store.today(),this.store.time());
-        if(!supplied)this.store.db.prepare("INSERT INTO exam_photo_intakes(exam_id,upload_day) VALUES(?,?)").run(id,this.store.today());
+        if(!supplied)this.store.db.prepare("INSERT INTO exam_photo_intakes(exam_id,upload_day,locked) VALUES(?,?,?)").run(id,this.store.today(),JSON.stringify(scope?["scope"]:[]));
         pages.forEach((p,i)=>this.store.db.prepare("INSERT INTO exam_pages(id,exam_id,number,sha,bytes) VALUES(?,?,?,?,?)").run(randomUUID(),id,i+1,p.sha,p.bytes));
       }
       return this.detail(id);
@@ -122,7 +128,7 @@ export class Assessments {
       const image=await this.aiImage(p.id);
       const ai=execution.forJob(undefined,undefined,{date:meta.date??this.store.today(),title:"试卷整理："+(meta.title??"已批试卷"),pageId:p.id,attempt:p.attempts+1});
       const readingChecks=this.readingChecks(meta.subject);
-      const result=await execution.cached("marked-page-v3:"+digest(JSON.stringify([p.sha,meta.subject,readingChecks])),()=>ai.run("read_marked_exam",markedPage,{subject:meta.subject,readingChecks},[image]));
+      const result=await execution.cached("marked-page-v4:"+digest(JSON.stringify([p.sha,meta.subject,readingChecks])),()=>ai.run("read_marked_exam",markedPage,{subject:meta.subject,readingChecks},[image]));
       this.savePage(p.id,result);
       record({ event: "exam.process", ref: p.id.slice(0, 8), attempt: p.attempts + 1 });
     } catch(e) {
@@ -194,6 +200,10 @@ export class Assessments {
     for(const key of Object.keys(emptyExam) as (keyof ExamMeta)[]){
       if(locked.has(key))continue;
       const values=new Set(pages.map(p=>p[key]).filter(v=>v!=null));
+      if(key==="scope"){
+        merged.scope=values.has("extracurricular")?"extracurricular":"curricular";
+        continue;
+      }
       Object.assign(merged,{[key]:values.size===1?[...values][0]:emptyExam[key]});
     }
     if(merged.score!==null && merged.maximum!==null && merged.score>merged.maximum){

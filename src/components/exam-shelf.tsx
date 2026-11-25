@@ -66,7 +66,8 @@ export function ExamShelf({canManage,openMistakes}:{canManage:boolean;openMistak
       const files=data.getAll("photos") as File[];if(!files.length||files.length>12)throw Error("每份试卷可选 1～12 张照片。");
       const pages=[];for(const f of files){if(!f.size||f.size>20*1024*1024||!["image/jpeg","image/png","image/webp"].includes(f.type))throw Error("请选每张 20 MB 以内的 JPG、PNG 或 WebP 照片。");pages.push({bytes:f.size,sha:await fileSha(f)});}
       if(new Set(pages.map(p=>p.sha)).size!==pages.length)throw Error("选入了相同的照片，请每页只选一次。");
-      const paper=await homeworkPost<ExamDetail>(endpoint,{pages});
+      const scope=data.get("scope");
+      const paper=await homeworkPost<ExamDetail>(endpoint,scope?{pages,scope}:{pages});
       for(const page of paper.pages){if(page.status!=="awaiting")continue;setBusy("正在上传第 "+page.number+" 页…");await putPhoto(page.id,files[page.number-1]);}
       openDetail(paper.exam.id);setNotice("照片已保存，小步会在后台整理错题。");
     });
@@ -83,7 +84,9 @@ export function ExamShelf({canManage,openMistakes}:{canManage:boolean;openMistak
       <div className="reading-dialog-body">
       {notice&&<p className="exam-notice" role="status">{notice}</p>}{error&&<p className="form-error" role="alert">{error}</p>}
       {mode==="new"&&<form onSubmit={upload} className="exam-form"><label>选择已批试卷照片<input required name="photos" type="file" multiple accept="image/jpeg,image/png,image/webp"/></label>
-        <small>按页序选 1～12 张。小步会识别老师标出的错题，试卷资料可稍后补充。</small><button className="button primary" disabled={!!busy}>{busy||"上传并整理错题"}</button></form>}
+        <small>按页序选 1～12 张。小步会识别老师标出的错题，试卷资料可稍后补充。</small>
+        <label>试卷归属<select name="scope" defaultValue=""><option value="">自动判断</option><option value="curricular">课内</option><option value="extracurricular">课外</option></select></label>
+        <small>自动判断时，卷面有明确课外来源才归为课外，其余归为课内。</small><button className="button primary" disabled={!!busy}>{busy||"上传并整理错题"}</button></form>}
       {mode==="list"&&<>{archive?.items.map(e=><ExamRow key={e.id} exam={e} open={openDetail}/>)}<div className="reading-record-actions"><button className="text-button" disabled={!offset} onClick={()=>setOffset(n=>n-10)}>上一页</button><button className="text-button" disabled={offset+10>=(archive?.total??0)} onClick={()=>setOffset(n=>n+10)}>下一页</button></div></>}
       {mode==="milestones"&&(milestones?<ExamMilestonePanel data={milestones} canManage={canManage} act={act} busy={!!busy} openExam={openDetail} initialSubject={initialSubject}/>:!error&&<p>正在读取考试里程碑…</p>)}
       {mode==="detail"&&detail&&(fromMilestones||isMilestone(detail.exam.kind))&&<button className="text-button" onClick={()=>showMilestones(detail.exam.subject??"待补科目")}><Flag size={15}/>查看考试里程碑</button>}

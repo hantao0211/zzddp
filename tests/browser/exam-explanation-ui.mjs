@@ -22,11 +22,16 @@ try{
  await page.reload();await page.getByRole("heading",{name:"我的课业手账"}).waitFor();
  await page.getByRole("button",{name:"上传试卷",exact:true}).click();
  const dialog=page.getByRole("dialog",{name:"试卷档案"});
- assert.equal(await dialog.locator('input:not([type=file]),select').count(),0);
+ assert.equal(await dialog.locator('input:not([type=file])').count(),0);
+ assert.equal(await dialog.getByLabel("试卷归属").inputValue(),"");
+ const selection=engine===webkit?"extracurricular":"";
+ if(selection)await dialog.getByLabel("试卷归属").selectOption(selection);
  const photos=await page.evaluate(()=>["#fff","#eee"].map(color=>{const c=document.createElement("canvas");c.width=100;c.height=90;const ctx=c.getContext("2d");ctx.fillStyle=color;ctx.fillRect(0,0,100,90);return c.toDataURL("image/png").split(",")[1];}));
  await dialog.locator("input[type=file]").setInputFiles(photos.map((p,i)=>({name:"page-"+i+".png",mimeType:"image/png",buffer:Buffer.from(p,"base64")})));
  await dialog.getByRole("button",{name:"上传并整理错题"}).click();
  await dialog.getByText("已收录 2 道错题",{exact:true}).waitFor({timeout:30000});
+ const archive=await api("learning/practice/exams");
+ assert.equal(archive.data.items[0].scope,selection||"curricular");
  await dialog.getByRole("button",{name:"错题 2",exact:true}).click();
  assert.equal(await dialog.locator(".exam-qrow").count(),2);
  await dialog.locator(".exam-qrow").first().click();

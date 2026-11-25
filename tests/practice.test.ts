@@ -230,7 +230,7 @@ test("photos alone admit marked mistakes before metadata and preserve edits as l
     exams.savePage(pages[1].id,{...page,metadata:{date:"无日期",grade:17,score:"不详"}});
     const book=http.mistakes(undefined,undefined,0);
     assert.equal(book.total,1);assert.equal(book.items[0].subject,"科目待补充");
-    assert.equal(book.items[0].scope,"unknown");assert.equal(book.items[0].date,"");
+    assert.equal(book.items[0].scope,"curricular");assert.equal(book.items[0].date,"");
     assert.equal(http.mistakes("语文",undefined,0).total,0);
     assert.equal(http.mistakes(undefined,undefined,0,10,new URLSearchParams("grain=week")).analysis.trends[0].period,"测验日期待补充");
     exams.savePage(pages[0].id,{...page,questions:[],metadata:{title:"小练习",subject:"数学",grade:4}});
@@ -242,6 +242,29 @@ test("photos alone admit marked mistakes before metadata and preserve edits as l
     const saved=exams.reserve(manifest);
     assert.equal(saved.exam.title,"家长核对的名称");assert.equal(saved.exam.grade,null);
     assert.equal(saved.questions.length,1);assert.equal(saved.questions[0].pageId,pages[1].id);
+  }finally{f.close();}
+});
+
+test("exam photo scope honors selection and merges clear source evidence across pages",()=>{
+  const f=setup();
+  try{
+    const exams=f.store.exams, manifest={pages:["1","2"].map(c=>({sha:c.repeat(64),bytes:40}))};
+    const page={coverage:"complete",note:"",questions:[]};
+    const outside={scope:"extracurricular",scopeEvidence:"星星校外辅导班单元测验"};
+    const auto=exams.reserve(manifest);
+    assert.equal(auto.exam.scope,"curricular");
+    exams.savePage(auto.pages[1].id,{...page,metadata:{scope:"extracurricular"}});
+    assert.equal(exams.detail(auto.exam.id).exam.scope,"curricular");
+    exams.savePage(auto.pages[1].id,{...page,metadata:outside});
+    exams.savePage(auto.pages[0].id,{...page,metadata:{scope:"curricular"}});
+    assert.equal(exams.reserve(manifest).exam.scope,"extracurricular");
+    for(const [index,scope] of ["curricular","extracurricular"].entries()){
+      const input={scope,pages:[{sha:String(index+3).repeat(64),bytes:40}]};
+      const paper=exams.reserve(input);
+      exams.savePage(paper.pages[0].id,{...page,metadata:scope==="curricular"?outside:{scope:"curricular"}});
+      assert.equal(exams.reserve(input).exam.scope,scope);
+      assert.throws(()=>exams.reserve({...input,scope:scope==="curricular"?"extracurricular":"curricular"}),/已经上传/);
+    }
   }finally{f.close();}
 });
 
