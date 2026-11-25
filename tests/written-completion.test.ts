@@ -4,6 +4,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { HomeworkStore } from "../src/server/homework/store";
+import { LearnedMemories } from "../src/server/homework/memory";
 import { HomeworkWorker } from "../src/server/homework/worker";
 import { WrittenInspectionSchema, evaluateWrittenInspection, readWrittenCompletion, isWrittenTask, needsWrittenCompletionUpdate } from "../src/domain/written-completion";
 import { homeworkHomeStatus } from "../src/domain/homework-home";
@@ -28,7 +29,14 @@ for (const state of ["answered", "blank", "unclear", "resolved"] as const) test(
     store.db.exec("UPDATE jobs SET status='done'"); return u;
   };
   const memo = record("memo"), book = record("homework"), raw = store.upload(book.id)!.result, pageId = book.files[0].id + "-p1"; let calls = 0;
+  const memories = new LearnedMemories(store);
+  const matching = "平时数学口算纸与练习册分开提交。";
+  const completion = "平时订正用蓝笔写在原题旁。";
+  for (const [kind, quote] of [["homework_matching", matching], ["homework_completion", completion]] as const) {
+    assert.equal(memories.remember([{kind,trigger:"作业本",subject:"数学",summary:quote,evidenceQuote:quote,confirmationQuote:null,replacesMemoryId:null}],quote,date,[],true).saved.length, 1);
+  }
   const worker = new HomeworkWorker(store, () => ({ async run(task, schema, metadata) {
+    assert.deepEqual((metadata as {familyRules:unknown}).familyRules, [{subject:"数学", convention:task === "organize_homework" ? matching : completion}]);
     if (task === "organize_homework") return schema.parse({ readable: true, subjects: ["数学"], matches: [{ taskId: (metadata as any).candidates[0].id, coverage: "complete", evidence: [{ fileId: pageId, page: 1, excerpt: "指定页面" }], missing: [] }], unassigned: [], uncertainties: [] });
     if (task === "recheck_written_parts") return schema.parse({ parts: (metadata as any).targets.map((p: any) => ({ ...p, status: state === "resolved" ? "answered" : p.status })) });
     assert.equal(task, "assess_written_completion"); calls++;

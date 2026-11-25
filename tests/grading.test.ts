@@ -4,16 +4,21 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { HomeworkStore } from "../src/server/homework/store";
+import { LearnedMemories } from "../src/server/homework/memory";
 import { HomeworkGrader } from "../src/server/homework/grader";
 import { DailyReportSchema } from "../src/domain/homework";
 import { GradingQuestionSchema, reconcileQuestion, equivalentAnswer, readAutoGrading } from "../src/domain/grading";
 import { AIServiceError, type StructuredAI } from "../src/server/ai/provider";
 const date = "2026-11-17";
-function fixture() {
+function fixture(convention?: string) {
   const directory = mkdtempSync(join(tmpdir(), "xiaobu-grade-")), store = new HomeworkStore(directory, Date.now, null, false, true);
   const u = store.begin({ date, kind: "homework", files: [{ name: "synthetic.png", size: 1, sha256: "a".repeat(64) }] });
   const file = u.files[0].id, page = file + "-p1"; store.stored(file, "image/png"); store.setPages(file, [{ id: page, file_id: file, number: 1 }]); store.finalize(u.id);
   const job = store.claim()!; store.recognized(job, { pages: [{ fileId: page, readable: true, subject: "数学", book: "模拟数学", printedPage: "12", content: "模拟算式", uncertainties: [] }] }, ["数学"], false, 0, "Synthetic fixture"); store.db.exec("UPDATE jobs SET status='done'");
+  if (convention) {
+    const saved = new LearnedMemories(store).remember([{kind:"homework_grading",trigger:"符号",subject:"数学",summary:convention,evidenceQuote:convention,confirmationQuote:null,replacesMemoryId:null}],convention,date,[],true);
+    assert.equal(saved.saved.length, 1);
+  }
   store.transaction(() => store.grading.queueDay(date, null));
   return { store, directory, page, u, close() { store.close(); rmSync(directory, { recursive: true, force: true }); } };
 }
@@ -36,9 +41,12 @@ test("grading configuration and reconciliation require two agreeing objective an
   assert.equal(reconcileQuestion("q", first, { ...check, kind: "subjective" }).verdict, "feedback");
 });
 for (const disagree of [false, true]) test(`grading pipeline ${disagree ? "disagreement" : "verified wrong"}: blind verification, persistent book, dedup and immutable originals`, async () => {
-  const f = fixture(); let firstCalls = 0, verifyCalls = 0;
+  const convention = "平时练习上的圈表示老师留的批注，判题时另看孩子的笔迹。";
+  const f = fixture(convention); let firstCalls = 0, verifyCalls = 0;
   const raw = f.store.upload(f.u.id)!.result;
   const ai: StructuredAI = { async run(task, schema, metadata) {
+    const payload = metadata as { familyRules?: unknown; source?: {familyRules?: unknown} };
+    assert.deepEqual(task === "grade_homework" ? payload.familyRules : payload.source?.familyRules, [{subject:"数学",convention}]);
     if (task === "grade_homework") { assert.deepEqual((metadata as { pages: unknown }).pages, [{ fileId: f.page, page: 1 }]); firstCalls++; return schema.parse({ scopeComplete: true, note: "", questions: [question(f.page)] }); }
     assert.equal(task, "verify_homework_grading"); verifyCalls++;
     const input = metadata as { questions: { questionId: string; verdict?: unknown; expectedAnswer?: unknown; studentAnswer?: unknown }[] };

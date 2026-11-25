@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { MemoryCandidateSchema, type LearnedMemory, type MemoryCandidate, type KnowledgeCatalog, type ConfirmedKnowledgeExample } from "../../domain/memory";
+import { isHomeworkRule, type HomeworkRuleKind, type HomeworkRule, MemoryCandidateSchema, type LearnedMemory, type MemoryCandidate, type KnowledgeCatalog, type ConfirmedKnowledgeExample } from "../../domain/memory";
 import { ClarificationActionSchema } from "../../domain/clarifications";
 import { HomeworkError, type HomeworkStore, type UploadRow } from "./store";
 import { effectiveMemo, sourceHash, type NoteRow } from "./memo-context";
@@ -40,16 +40,60 @@ const tokens = (text: string) => {
   return [...result].slice(0, 100);
 };
 
+export function rememberCandidates(store: Pick<HomeworkStore, "db" | "transaction" | "now">, candidates: MemoryCandidate[], question: string, date: string, history: ChatInput["history"] = [], canTeachJudgment = false) {
+  const saved: LearnedMemory[] = [], notices: string[] = [];
+  if (/(不要|不用|别|无需|不必|不需要).{0,10}(记住|记忆|保存|记录)|(只是|仅仅|仅).{0,8}(例子|举例)/u.test(question)) return { saved, notices };
+  store.transaction(() => {
+    for (const input of candidates) {
+      const parsed = MemoryCandidateSchema.safeParse(input);
+      if (!parsed.success) { notices.push("有一条记忆缺少明确依据，未保存。"); continue; }
+      const candidate = parsed.data;
+      if (candidate.kind === "memo_abbreviation" && (!isReusableAbbreviationEvidence(candidate.evidenceQuote) || !isReusableAbbreviationEvidence(candidate.summary) || !isReusableAbbreviationEvidence(question))) { notices.push("这是本次识别的纠正，不会保存为把一个课号替换成另一个课号的简称规则；作业内容通过修改预览确认。"); continue; }
+      if (!isReusableMemoryEvidence(candidate.evidenceQuote)) { notices.push("这次的作业对应关系只用于当前说明，不保存为长期简称规则。"); continue; }
+      if (isHomeworkRule(candidate.kind)) {
+        if (!canTeachJudgment) { notices.push("跨作业的判定约定由家长确认。"); continue; }
+        const quote = candidate.evidenceQuote;
+        if (/[?？]|是不是|能不能|是否|为什么|例如|比如|假设|假如|举例|可能是|好像/u.test(quote) ||
+            !/以后|今后|每次|每逢|惯例|我们(?:家|班)(?:的)?.{0,16}(?:用|按|看)|通常|一般|一直|一律|平时|习惯|默认|表示|代表|约定|凡是|统一|只要|只用于|只记录|都用|总是|按.+为准/u.test(quote)) {
+          notices.push("这段说明仅供本次讨论，尚未保存为跨作业的判定约定。"); continue;
+        }
+        // Only the confirmed convention itself can reach a later review.
+        candidate.summary = quote;
+      }
+      const confirmation = candidate.confirmationQuote;
+      const confirmed = !!confirmation && question.includes(confirmation) && /^(对|是的|没错|正确|就是|确认|记住|好的|好，|OK|ok|嗯|你说得对|理解对了)/u.test(confirmation);
+      const earlier = history.slice(-8).filter((m) => m.role === "user").some((m) => m.content.includes(candidate.evidenceQuote)) || !!history.filter((m) => m.role === "assistant").at(-1)?.content.includes(candidate.evidenceQuote);
+      if (!question.includes(candidate.evidenceQuote) && !(confirmed && earlier)) { notices.push("有一条记忆尚未得到你的明确说明或确认，未保存。"); continue; }
+      if (!confirmed && candidate.kind === "memo_abbreviation" && /是什么|是啥|什么意思|代表什么|是不是|是否|怎么|如何|能不能/u.test(candidate.evidenceQuote)) { notices.push("这次仍是在提问，尚未作为已确认知识保存。"); continue; }
+      const value = parsed.data, triggerKey = value.kind === "memo_abbreviation" ? abbreviationKey(value.trigger) : key(value.trigger);
+      if (!triggerKey) { notices.push("有一条记忆缺少明确的检索关键词，未保存。"); continue; }
+      const matching = store.db.prepare("SELECT * FROM learned_memories WHERE status='active' AND kind=? AND trigger_key=? AND subject IS ? ORDER BY rowid DESC LIMIT 1").get(value.kind, triggerKey, value.subject) as MemoryRow | undefined;
+      const existing = value.replacesMemoryId ? store.db.prepare("SELECT * FROM learned_memories WHERE id=? AND status='active'").get(value.replacesMemoryId) as MemoryRow | undefined : matching;
+      if (existing && existing.subject === value.subject && existing.kind === value.kind && key(existing.summary) === key(value.summary)) continue;
+      if ((existing && existing.id !== value.replacesMemoryId) || (!existing && value.replacesMemoryId) || (existing && (existing.kind !== value.kind || existing.subject !== value.subject)) || (matching && existing?.id !== matching.id)) { notices.push("这次说明与已有记忆的版本不一致，未自动替换。请指出需要更正的那条记忆。"); continue; }
+      const count = store.db.prepare("SELECT COUNT(*) AS n FROM learned_memories WHERE status='active'").get() as { n: number };
+      if (!existing && count.n >= 500) { notices.push("已积累较多记忆，请先整理不再适用的内容；已有记忆仍保留。"); continue; }
+      const id = randomUUID(), time = new Date(store.now()).toISOString();
+      if (existing) store.db.prepare("UPDATE learned_memories SET status='superseded',updated_at=? WHERE id=?").run(time, existing.id);
+      const sourceQuote = question.includes(value.evidenceQuote) ? value.evidenceQuote : `${value.evidenceQuote}\n用户确认：${confirmation}`;
+      store.db.prepare("INSERT INTO learned_memories(id,kind,trigger_text,trigger_key,subject,summary,source_quote,source_date,replaces_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)").run(id, value.kind, value.trigger, triggerKey, value.subject, value.summary, sourceQuote, date, existing?.id || null, time, time);
+      saved.push(view(store.db.prepare("SELECT * FROM learned_memories WHERE id=?").get(id) as MemoryRow));
+    }
+  });
+  return { saved, notices: [...new Set(notices)] };
+}
+
 export class LearnedMemories {
   constructor(private store: HomeworkStore) {}
   list(): LearnedMemory[] { return (this.store.db.prepare("SELECT * FROM learned_memories WHERE status='active' ORDER BY rowid DESC LIMIT 500").all() as MemoryRow[]).map(view); }
   catalog(): KnowledgeCatalog {
-    const rows = this.store.db.prepare("SELECT * FROM learned_memories ORDER BY rowid DESC LIMIT 500").all() as MemoryRow[];
-    const applicable = reusable;
+    const active = this.store.db.prepare("SELECT * FROM learned_memories WHERE status='active' ORDER BY rowid DESC").all() as MemoryRow[];
+    const archived = this.store.db.prepare("SELECT * FROM learned_memories WHERE status!='active' ORDER BY rowid DESC LIMIT 500").all() as MemoryRow[];
+
     return {
-      rules: rows.filter(r => r.status === "active" && applicable(view(r))).map(view),
+      rules: active.map(view).filter(reusable),
       corrections: this.corrections(),
-      history: rows.filter(r => r.status !== "active" || !applicable(view(r))).map(r => {
+      history: [...active.filter(r => !reusable(view(r))), ...archived].map(r => {
         const memory = view(r);
         const status = r.status === "active" ? "excluded" as const : r.status === "superseded" ? "superseded" as const : "revoked" as const;
         const reason = !isReusableMemoryEvidence(memory.sourceQuote) ? "这条只说明当次照片或作业的对应关系，不作为跨作业的长期规则。" : memory.kind === "memo_abbreviation" && (!isReusableAbbreviationEvidence(memory.sourceQuote) || !isReusableAbbreviationEvidence(memory.summary)) ? "识字或课号纠正只适用于当次记录，不能作为替换课号的简称规则。" : status === "superseded" ? "已有较新的解释，不再调用这一版。" : "已停用，不再用于后续识别和问答。";
@@ -62,41 +106,12 @@ export class LearnedMemories {
     return this.list().filter(reusable).map((memory, order) => {
       const text = `${memory.trigger} ${memory.summary}`.toLowerCase();
       const trigger = memory.kind === "memo_abbreviation" ? abbreviationKey(memory.trigger) : key(memory.trigger);
-      const score = (trigger && normalized.includes(trigger) ? 10 : 0) + terms.filter((t) => text.includes(t)).length + (memory.kind !== "memo_abbreviation" ? 1 : 0);
+      const score = (trigger && normalized.includes(trigger) ? 10 : 0) + terms.filter((t) => text.includes(t)).length + (memory.kind === "learning_preference" || memory.kind === "usage_preference" ? 1 : 0);
       return { memory, score, order };
     }).filter((r) => r.score > 0).sort((a, b) => b.score - a.score || a.order - b.order).slice(0, 8).map((r) => r.memory);
   }
-  remember(candidates: MemoryCandidate[], question: string, date: string, history: ChatInput["history"] = []) {
-    const saved: LearnedMemory[] = [], notices: string[] = [];
-    if (/(不要|不用|别|无需|不必|不需要).{0,10}(记住|记忆|保存|记录)|(只是|仅仅|仅).{0,8}(例子|举例)/u.test(question)) return { saved, notices };
-    this.store.transaction(() => {
-      for (const input of candidates) {
-        const parsed = MemoryCandidateSchema.safeParse(input);
-        if (!parsed.success) { notices.push("有一条记忆缺少明确依据，未保存。"); continue; }
-        const candidate = parsed.data;
-        if (candidate.kind === "memo_abbreviation" && (!isReusableAbbreviationEvidence(candidate.evidenceQuote) || !isReusableAbbreviationEvidence(candidate.summary) || !isReusableAbbreviationEvidence(question))) { notices.push("这是本次识别的纠正，不会保存为把一个课号替换成另一个课号的简称规则；作业内容通过修改预览确认。"); continue; }
-        if (!isReusableMemoryEvidence(candidate.evidenceQuote)) { notices.push("这次的作业对应关系只用于当前说明，不保存为长期简称规则。"); continue; }
-        const confirmation = candidate.confirmationQuote;
-        const confirmed = !!confirmation && question.includes(confirmation) && /^(对|是的|没错|正确|就是|确认|记住|好的|好，|OK|ok|嗯|你说得对|理解对了)/u.test(confirmation);
-        const earlier = history.slice(-8).filter((m) => m.role === "user").some((m) => m.content.includes(candidate.evidenceQuote)) || !!history.filter((m) => m.role === "assistant").at(-1)?.content.includes(candidate.evidenceQuote);
-        if (!question.includes(candidate.evidenceQuote) && !(confirmed && earlier)) { notices.push("有一条记忆尚未得到你的明确说明或确认，未保存。"); continue; }
-        if (!confirmed && candidate.kind === "memo_abbreviation" && /是什么|是啥|什么意思|代表什么|是不是|是否|怎么|如何|能不能/u.test(candidate.evidenceQuote)) { notices.push("这次仍是在提问，尚未作为已确认知识保存。"); continue; }
-        const value = parsed.data, triggerKey = value.kind === "memo_abbreviation" ? abbreviationKey(value.trigger) : key(value.trigger);
-        if (!triggerKey) { notices.push("有一条记忆缺少明确的检索关键词，未保存。"); continue; }
-        const matching = this.store.db.prepare("SELECT * FROM learned_memories WHERE status='active' AND kind=? AND trigger_key=? AND subject IS ? ORDER BY rowid DESC LIMIT 1").get(value.kind, triggerKey, value.subject) as MemoryRow | undefined;
-        const existing = value.replacesMemoryId ? this.store.db.prepare("SELECT * FROM learned_memories WHERE id=? AND status='active'").get(value.replacesMemoryId) as MemoryRow | undefined : matching;
-        if (existing && key(existing.summary) === key(value.summary)) continue;
-        if ((existing && existing.id !== value.replacesMemoryId) || (!existing && value.replacesMemoryId) || (existing && existing.kind !== value.kind) || (matching && existing?.id !== matching.id)) { notices.push("这次说明与已有记忆的版本不一致，未自动替换。请指出需要更正的那条记忆。"); continue; }
-        const count = this.store.db.prepare("SELECT COUNT(*) AS n FROM learned_memories WHERE status='active'").get() as { n: number };
-        if (!existing && count.n >= 500) { notices.push("已积累较多记忆，请先整理不再适用的内容；已有记忆仍保留。"); continue; }
-        const id = randomUUID(), time = new Date(this.store.now()).toISOString();
-        if (existing) this.store.db.prepare("UPDATE learned_memories SET status='superseded',updated_at=? WHERE id=?").run(time, existing.id);
-        const sourceQuote = question.includes(value.evidenceQuote) ? value.evidenceQuote : `${value.evidenceQuote}\n用户确认：${confirmation}`;
-        this.store.db.prepare("INSERT INTO learned_memories(id,kind,trigger_text,trigger_key,subject,summary,source_quote,source_date,replaces_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)").run(id, value.kind, value.trigger, triggerKey, value.subject, value.summary, sourceQuote, date, existing?.id || null, time, time);
-        saved.push(view(this.store.db.prepare("SELECT * FROM learned_memories WHERE id=?").get(id) as MemoryRow));
-      }
-    });
-    return { saved, notices: [...new Set(notices)] };
+  remember(candidates: MemoryCandidate[], question: string, date: string, history: ChatInput["history"] = [], canTeachJudgment = false) {
+    return rememberCandidates(this.store, candidates, question, date, history, canTeachJudgment);
   }
   revoke(id: string) {
     const memory = this.store.db.prepare("SELECT id FROM learned_memories WHERE id=?").get(id);
@@ -119,6 +134,15 @@ export class LearnedMemories {
         return [{ id: note.id, sourceDate: memo.date, original: small(original), corrected: small(current), explanation: action.userQuote }];
       } catch { return []; }
     });
+  }
+  forJudgment(kind: HomeworkRuleKind, subjects: readonly string[], context = ""): HomeworkRule[] {
+    const rows = this.store.db.prepare("SELECT * FROM learned_memories WHERE status='active' AND kind=? ORDER BY rowid DESC").all(kind) as MemoryRow[];
+    const text = key(context);
+    return rows.filter(row => (row.subject === null || subjects.includes(row.subject)) && reusable(view(row)))
+      .map(row => ({ row, relevance: text.includes(row.trigger_key) ? 2 : tokens(row.trigger_text).some(token => text.includes(token)) ? 1 : 0 }))
+      .sort((a, b) => b.relevance - a.relevance)
+      .slice(0, 20)
+      .map(({row}) => ({ subject: row.subject, convention: row.summary }));
   }
   forRecognition() {
     const rules = this.list().filter((m) => m.kind === "memo_abbreviation" && reusable(m)).slice(0, 20), corrections = this.corrections();

@@ -1,3 +1,4 @@
+import { MEMO_ASSIGNMENT_POLICY } from "../../domain/memo-assignment";
 import { SELECTED_SUBMISSION_POLICY } from "../../domain/submission-policy";
 import { randomUUID } from "node:crypto";
 import { HomeworkDialogueSchema } from "../../domain/ai-contracts";
@@ -8,7 +9,7 @@ import { AIServiceError, type AIImage, type StructuredAI } from "../ai/provider"
 import { HomeworkError, HomeworkStore, type UploadRow } from "./store";
 import { effectiveMemo, sourceHash, type NoteRow } from "./memo-context";
 import type { ImagePipeline } from "./images";
-import type { Viewer } from "../../domain/accounts";
+import { isParent, type Viewer } from "../../domain/accounts";
 import { chatPhotos } from "../assistant/photos";
 import { SYSTEM_HELP } from "../../domain/system-help";
 import { LearnedMemories } from "./memory";
@@ -79,6 +80,7 @@ export class HomeworkConversation {
     // Recent dialogue is separated from document records so a short answer is not drowned by old uncertainties.
     const dialogueGuide = {
       submissionPolicy: SELECTED_SUBMISSION_POLICY,
+      memoPolicy: MEMO_ASSIGNMENT_POLICY,
       previousAssistantTurn: input.history.filter((m) => m.role === "assistant").at(-1)?.content || null,
       recentUserStatements: [...input.history.filter((m) => m.role === "user").slice(-3).map((m) => m.content), input.question],
       shortFollowUp: input.history.length > 0 && input.question.length <= 120,
@@ -104,7 +106,7 @@ export class HomeworkConversation {
     result.sourceMaterialIds = [...new Set(result.sourceMaterialIds.map((id) => aliases.get(id)!))];
     let proposal: ClarificationPreview | undefined;
     if (result.clarification) proposal = this.propose(context, result.clarification, owner, [...input.history.filter((m) => m.role === "user").map((m) => m.content), input.question]);
-    const memory = this.memories.remember(result.memoryCandidates, input.question, context.date, input.history);
+    const memory = this.memories.remember(result.memoryCandidates, input.question, context.date, input.history, isParent(viewer));
     const { clarification: _ignored, memoryCandidates: _candidates, ...reply } = result;
     // This action acknowledgement is derived from the validated preview, never from an AI promise.
     if (proposal) {

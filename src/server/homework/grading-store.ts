@@ -1,3 +1,5 @@
+import type { HomeworkRule } from "../../domain/memory";
+import { LearnedMemories } from "./memory";
 import { reviewReadings } from "./grading-readings";
 import { settleReviewedQuestion } from "../../domain/grading-decision";
 import { isWrittenTask } from "../../domain/written-completion";
@@ -11,7 +13,7 @@ import { join } from "node:path";
 import { GRADING_VERSION, GradingResultSchema, emptyCounts, type GradingResult, type GradingSummary, type GradingBatchView, type MistakeView } from "../../domain/grading";
 import type { HomeworkStore } from "./store";
 import type { DailyReport } from "../../domain/homework";
-export type GradingSource = { date: string; title: string; subject: string; assigned: boolean; requirements: string[]; taskIds: string[]; primaryPageId: string; pages: { id: string; file_id: string; number: number }[]; expectedLabels: string[] };
+export type GradingSource = { familyRules?: HomeworkRule[]; date: string; title: string; subject: string; assigned: boolean; requirements: string[]; taskIds: string[]; primaryPageId: string; pages: { id: string; file_id: string; number: number }[]; expectedLabels: string[] };
 export type GradingRun = { id: string; primary_page_id?: string; source: string; status: string; attempts: number; result: string | null; note: string };
 const digest = (v: unknown) => createHash("sha256").update(JSON.stringify(v)).digest("hex");
 export class GradingStore {
@@ -44,7 +46,7 @@ export class GradingStore {
     if (!source.pages?.some(page => page.id === source.primaryPageId)) return `unresolved:${source.primaryPageId || fallback}`;
     const normalize = (text: string) => text.normalize("NFKC").replace(/\s+/g, " ").trim();
     return digest({ version: GRADING_VERSION, subject: source.subject, title: normalize(source.title), assigned: source.assigned,
-      requirements: source.requirements.map(normalize).sort(),
+      requirements: source.requirements.map(normalize).sort(), ...(source.familyRules?.length ? {familyRules:source.familyRules} : {}),
       primary: source.pages.filter(p => p.id === source.primaryPageId).map(p => this.pageKey(p)), pages: source.pages.map(p => this.pageKey(p)) });
   }
   /** Keep history and originals; only equivalent active work is folded into one run. */
@@ -123,6 +125,8 @@ export class GradingStore {
     }));
     // Inferred labels and task IDs may change without changing the work to grade.
     const previous = this.store.db.prepare("SELECT * FROM grading_runs WHERE date=? AND active=1 ORDER BY rowid").all(date) as (GradingRun & { primary_page_id: string })[];
+    const sourcesByPage = new Map(previous.map(run => [run.primary_page_id, JSON.parse(run.source) as GradingSource]));
+    const memories = new LearnedMemories(this.store);
     const byContent = new Map(previous.filter(run => {
       const source = JSON.parse(run.source) as GradingSource;
       if (run.status === "done" && run.result && JSON.parse(run.result).version !== GRADING_VERSION) return false;
@@ -138,6 +142,10 @@ export class GradingStore {
       if (related.length && !written.length) continue;
       const context = [pages[index - 1], primary, pages[index + 1]].filter(p => p?.page && p.subject === primary.subject && (p === primary || p.page!.file_id === primary.page!.file_id));
       const source: GradingSource = { date, title: written.map(t => t.title).join("、") || primary.book || "已上传作业", subject: primary.subject, assigned: !!written.length, requirements: written.map(t => t.inferredScope ? `${t.requirement}；${t.inferredMeaning?.description||""}检查范围根据已传作业推断：${t.inferredScope.description}；${t.inferredScope.note}` : t.requirement), taskIds: written.map(t => t.id), primaryPageId: primary.fileId, pages: context.map(p => p.page!), expectedLabels: written.flatMap(t => t.writtenCompletion?.parts.filter(p => p.evidence.fileId === primary.fileId).map(p => p.label) || []) };
+      // Freeze conventions for this page across retries and independent checks.
+      const prior = sourcesByPage.get(primary.fileId);
+      const rules = prior?.subject === primary.subject ? prior.familyRules || [] : memories.forJudgment("homework_grading", [primary.subject], [source.title, ...source.requirements].join(" "));
+      if (rules.length) source.familyRules = rules;
       const id = digest({ version: GRADING_VERSION, source });
       const existing = byContent.get(this.contentKey(source));
       if (existing && existing.primary_page_id === source.primaryPageId) {

@@ -153,3 +153,29 @@ test("OCR numeral corrections cannot become reusable aliases, including old mism
     assert.equal(f.memories.remember([valid], valid.evidenceQuote, date).saved.length, 1);
   } finally { f.cleanup(); }
 });
+
+test("only a parent-confirmed reusable convention reaches the matching subject and stage", async () => {
+  const f = fixture();
+  const quote = "我们通常用蓝笔在原题旁订正，检查订正时可以看那里。";
+  const convention = { ...candidate(), kind:"homework_completion" as const, trigger:"订正位置", evidenceQuote:quote, summary:"模型自行扩写的规则不应进入下一份作业" };
+  const chat = new HomeworkConversation(f.store);
+  const reply: StructuredAI = { async run(_task, schema) {
+    return schema.parse({answer:"已收到说明。",spokenAnswer:"收到。",hint:null,followUpQuestion:null,sourceMaterialIds:[],clarification:null,memoryCandidates:[convention]});
+  }};
+  const viewer = {id:"p", username:"parent", name:"家长", role:"parent" as const};
+  try {
+    assert.equal((await chat.answer(reply, {question:quote, history:[]}, "owner", {...viewer,role:"child"})).memoriesSaved.length, 0);
+    for (const oneOff of ["这张照片是订正页。", "以后是不是都看蓝笔？"]) {
+      assert.equal(f.memories.remember([{...convention,evidenceQuote:oneOff}], oneOff, date, [], true).saved.length, 0);
+    }
+    const result = await chat.answer(reply, {question:quote, history:[]}, "owner", viewer);
+    assert.equal(result.memoriesSaved.length, 1);
+    assert.deepEqual(f.memories.forJudgment("homework_completion", ["语文"]), [{subject:"语文",convention:quote}]);
+    assert.deepEqual(f.memories.forJudgment("homework_grading", ["语文"]), []);
+    assert.deepEqual(f.memories.forJudgment("homework_completion", ["英语"]), []);
+    assert.deepEqual(f.memories.forRecognition().rules, []);
+    assert.equal(f.memories.catalog().rules[0].sourceQuote, quote);
+    f.memories.revoke(result.memoriesSaved[0].id);
+    assert.deepEqual(f.memories.forJudgment("homework_completion", ["语文"]), []);
+  } finally { f.cleanup(); }
+});

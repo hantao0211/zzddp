@@ -1,8 +1,19 @@
 import { z } from "zod";
 import { SubjectSchema } from "./contracts";
 
+export const homeworkRuleLabels = {
+  homework_matching: "作业匹配",
+  homework_completion: "完成检查",
+  homework_grading: "作业批改",
+} as const;
+export type HomeworkRuleKind = keyof typeof homeworkRuleLabels;
+export function isHomeworkRule(kind: string): kind is HomeworkRuleKind {
+  return Object.prototype.hasOwnProperty.call(homeworkRuleLabels, kind);
+}
+export type HomeworkRule = { subject: string | null; convention: string };
+
 export const MemoryCandidateSchema = z.object({
-  kind: z.enum(["memo_abbreviation", "learning_preference", "usage_preference"]),
+  kind: z.enum(["memo_abbreviation", "learning_preference", "usage_preference", "homework_matching", "homework_completion", "homework_grading"]),
   trigger: z.string().trim().min(1).max(80).describe("简称或检索关键词，简称不要带例子数字；不是正则表达式"),
   summary: z.string().trim().min(8).max(600).describe("从用户明确说明提炼的可复用知识，注明场景；数字变化时不能固定套用例子中的课号"),
   subject: SubjectSchema.nullable(),
