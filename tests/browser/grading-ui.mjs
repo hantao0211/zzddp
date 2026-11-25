@@ -70,6 +70,9 @@ try {
   assert.equal(await panel.getByText("AI尚未确认", { exact: true }).count(), 1);
   assert.equal(photos, 0, "Original photos load only when requested");
   assert.equal(await panel.getByText("识别到的作答", { exact: true }).count(), 3);
+  await panel.getByRole("button", { name: "已通过，查看疑点", exact: true }).click();
+  await panel.getByText("疑点 · 两次核对的内容分别是整词和单字。", { exact: true }).waitFor();
+  await panel.getByRole("button", { name: "先看需要留意的题", exact: true }).click();
   const uncertainCard = panel.locator(".grade-verdict-uncertain");
   assert.match(await uncertainCard.innerText(), /两次解答没有取得一致/);
   assert.ok(!(await uncertainCard.innerText()).includes("模拟观察记录"));
@@ -119,7 +122,7 @@ try {
   await page.setViewportSize({ width: 390, height: 670 });
   await page.locator('.hw-date input').fill('2026-11-21');
   await panel.getByText('2026/11/21 · AI逐题检查，错题自动归档', { exact: true }).waitFor();
-  assert.equal(await panel.getByRole('button', { name: '先看需要留意的题', exact: true }).getAttribute('aria-pressed'), 'true');
+  await panel.getByRole('button', { name: '先看需要留意的题', exact: true, pressed: true }).waitFor();
   await page.getByRole("button", { name: "错题本", exact: true }).click();
   const book = page.getByRole("region", { name: "错题本", exact: true });
   const toggle = number => book.getByRole("button", { name: new RegExp(`^第${number}题 `) });
