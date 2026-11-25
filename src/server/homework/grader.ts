@@ -1,3 +1,4 @@
+import { assignmentRequirement, isMemoTrackingPart } from "../../domain/memo-assignment";
 import { blindGradingQuestions, reconcileFocusedQuestion } from "../../domain/grading-verification";
 import type { GradingStage } from "../../domain/grading-failure";
 import { mapParallel } from "../work/concurrency";
@@ -24,7 +25,8 @@ export class HomeworkGrader {
         const current = this.store.db.prepare("SELECT active FROM grading_runs WHERE id=?").get(run.id) as { active: number };
         if (!current.active) throw new HomeworkError(409, "这页的作业要求已更新，使用新的批改任务继续。");
       }, { date: source.date, title: source.title, runId: run.id, pageId: source.primaryPageId, attempt: run.attempts });
-      const inputSource = { ...source, pages: source.pages.map(p => ({ fileId: p.id, page: p.number })) };
+      const expectedLabels = source.expectedLabels.filter(label => !source.requirements.some(req => isMemoTrackingPart(label, req)));
+      const inputSource = { ...source, expectedLabels, requirements: source.requirements.map(assignmentRequirement), pages: source.pages.map(p => ({ fileId: p.id, page: p.number })) };
       const { expectedLabels: _expectedLabels, taskIds: _taskIds, ...verificationSource } = inputSource;
       const first = await this.cached(`grade-first:${GRADING_VERSION}:${run.id}`, async () => {
         const value = await ai.run("grade_homework", GradingInspectionSchema, inputSource, images);
@@ -35,7 +37,7 @@ export class HomeworkGrader {
         return value;
       });
       const questions = first.questions.map(q => ({ ...q, id: createHash("sha256").update(run.id + ":" + q.label).digest("hex") }));
-      let result: GradingResult = { version: GRADING_VERSION, scopeComplete: first.scopeComplete && !source.expectedLabels.length, note: first.note, questions: [] };
+      let result: GradingResult = { version: GRADING_VERSION, scopeComplete: first.scopeComplete && !expectedLabels.length, note: first.note, questions: [] };
       if (questions.length) {
         stage = "verification";
         const second = await this.cached(`grade-verify-blind-v2:${GRADING_VERSION}:${run.id}`, async () => {
@@ -63,7 +65,7 @@ export class HomeworkGrader {
         });
       }
       const covered = new Set(first.questions.flatMap(q => q.sourcePartLabels));
-      const omitted = source.expectedLabels.filter(label => !covered.has(label));
+      const omitted = expectedLabels.filter(label => !covered.has(label));
       if (omitted.length) { result.scopeComplete = false; result.note += `${result.note ? "；" : ""}尚未完整覆盖的作答部分：${omitted.join("、")}`; }
       if (!source.assigned) result.questions = result.questions.map(q => q.verdict === "blank" ? { ...q, verdict: "uncertain", verification: "uncertain", explanation: "尚未明确布置范围，不将空白题认定为漏做。" } : q);
       stage = "saving";

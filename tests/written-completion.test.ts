@@ -59,3 +59,24 @@ test("handwritten dictation and other explicit paper work cannot be skipped beca
  }
  for(const title of ["看不清的事项","整理书包","口头背诵课文"]){assert.equal(isWrittenTask({title,requirement:"按当天要求完成",format:"other"}),false,title);}
 });
+
+test("memo progress marks can neither complete nor block a written assignment", async () => {
+  const { assignmentRequirement } = await import("../src/domain/memo-assignment");
+  const requirement = "计算练习；右侧标注“-2，已讲已订”，并勾选完成。";
+  assert.equal(assignmentRequirement(requirement), "计算练习。");
+  assert.equal(assignmentRequirement("订正；右侧标注“-1，已订，需签名”，并勾选完成。"), "订正；需签名。");
+  assert.equal(assignmentRequirement("在正确答案右侧打勾；计算 -2 的相反数。"), "在正确答案右侧打勾；计算 -2 的相反数。");
+  assert.equal(assignmentRequirement("练习；右侧以大括号标“×”（未勾选完成）。"), "练习。");
+  const evidence = {fileId:"sheet", page:1, excerpt:"模拟照片"};
+  const real = { label:"选择正确答案并打勾", status:"answered" as const, evidence };
+  const note = { label:"右侧标注“-2，已讲已订”并勾选完成", status:"blank" as const, evidence };
+  const input = {scopeComplete:true, parts:[real,note], reason:"右侧未勾选"};
+  const result = evaluateWrittenInspection(input, "complete", requirement);
+  assert.deepEqual(result.parts, [real]);
+  assert.equal(result.status, "done");
+  assert.doesNotMatch(result.reason, /未勾选/);
+  assert.equal(evaluateWrittenInspection({...input,scopeComplete:false}, "complete", requirement).status, "unclear");
+  assert.equal(evaluateWrittenInspection({...input,parts:[{...note,status:"answered"}]}, "complete", requirement).status, "unclear");
+  assert.equal(evaluateWrittenInspection({...input,parts:[{...real,status:"blank"},note]}, "complete", requirement).status, "incomplete");
+  assert.equal(evaluateWrittenInspection({...input,parts:[real,{...note,label:"备忘录上的完成勾选"}]}, "complete", "计算练习").status, "done");
+});

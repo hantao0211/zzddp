@@ -83,3 +83,26 @@ test("incomplete scope, a real blank answer and invalid cache evidence never bec
   const task=f.store.snapshot(date).report!.tasks[1];assert.notEqual(task.writtenCompletion?.status,"done",mode);if(mode==="blank")assert.equal(task.writtenCompletion?.status,"incomplete");if(mode==="missing")assert.ok(task.missing.includes("第2页第3项未作答。"));
  }finally{f.close();}}
 });
+
+test("old memo checks are removed on read only when the remaining photo evidence supports completion", () => {
+  const f = fixture();
+  try {
+    const task = f.report.tasks[1];
+    const prior = task.writtenCompletion!;
+    prior.parts.push({ label:"备忘录上的完成勾选", status:"blank", evidence:prior.parts[0].evidence });
+    prior.status = "incomplete";
+    task.coverage = "complete";
+    task.missing = [];
+    f.publish(f.report);
+    const cache = { scopeComplete:true, reason:"有清单标记", parts:prior.parts };
+    const update = f.store.db.prepare("UPDATE analysis_cache SET result=? WHERE key=?");
+    update.run(JSON.stringify(cache), f.dictationKey);
+    const before = f.digest();
+    const snapshot = f.store.snapshot(date);
+    assert.equal(homeworkSummary(snapshot)!.rows[1].activity.text, "已做完");
+    assert.deepEqual(homeworkTaskDetail(snapshot, snapshot.report!.tasks[1]).parts, []);
+    assert.equal(f.digest(), before);
+    update.run(JSON.stringify({...cache, scopeComplete:false}), f.dictationKey);
+    assert.equal(f.store.snapshot(date).report!.tasks[1].writtenCompletion?.status, "unclear");
+  } finally { f.close(); }
+});

@@ -1,3 +1,4 @@
+import { assignmentRequirement } from "./memo-assignment";
 import { taskSubmission } from "./task-submission";
 import { reviewConclusion } from "./review-conclusion";
 import type { DailyReport, HomeworkSnapshot } from "./homework";
@@ -21,5 +22,5 @@ export function homeworkTaskDetail(snapshot: HomeworkSnapshot, original: DailyRe
     }
     return { photos: [...resolved.values()], unavailable: unavailable.size };
   }
-  return { requirement: task.requirement, concerns: taskSubmission(task) === "self" ? [] : [...new Set(task.missing.filter(s => s.trim()))], homework: resolve(task.evidence, "homework"), memo: resolve(task.memoEvidence, "memo"), parts: task.writtenCompletion?.parts.filter(p => p.status !== "answered") || [] };
+  return { requirement: assignmentRequirement(task.requirement) || task.title, concerns: taskSubmission(task) === "self" ? [] : [...new Set(task.missing.filter(s => s.trim()))], homework: resolve(task.evidence, "homework"), memo: resolve(task.memoEvidence, "memo"), parts: task.writtenCompletion?.parts.filter(p => p.status !== "answered") || [] };
 }

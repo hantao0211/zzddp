@@ -47,3 +47,16 @@ test("new organization and read-time old results apply the same scope policy, wi
   assert.deepEqual(store.db.prepare("SELECT report FROM days WHERE date=?").get(date),raw);assert.deepEqual(store.quota(),quota);assert.deepEqual(store.db.prepare("SELECT * FROM jobs").all(),jobs);assert.equal(calls,2);
  }finally{worker.stop();store.close();rmSync(directory,{recursive:true,force:true});}
 });
+
+test("a missing handwritten number alone does not establish that an assigned dictation word was left blank", () => {
+  const reportTask = task();
+  const part = reportTask.writtenCompletion!.parts[2];
+  part.label = "编号7默写词（页面未出现编号7）";
+  part.status = "blank";
+  const result = inferTaskScope(reportTask, pages);
+  assert.equal(result.writtenCompletion?.status, "unclear");
+  assert.match(result.writtenCompletion!.reason, /跳号/);
+  assert.deepEqual(inferTaskScope(result, pages), result);
+  part.label = "印刷词表第7题作答处";
+  assert.equal(inferTaskScope(reportTask, pages).writtenCompletion?.status, "incomplete");
+});

@@ -1,3 +1,4 @@
+import { isMemoTrackingPart } from "../../domain/memo-assignment";
 import { existingWrittenInspection, type WrittenPageInput } from "./written-cache";
 import { evaluateWrittenInspection, isWrittenTask } from "../../domain/written-completion";
 import { isCorrectionSignTask } from "../../domain/submission-policy";
@@ -22,11 +23,19 @@ export function selectedSubmissionReport(store: HomeworkStore, report: DailyRepo
   const projected = selectedReportConclusion(report, pages, store.writtenCompletionEnabled);
   if (!store.writtenCompletionEnabled) return projected;
   return {...projected,tasks:projected.tasks.map(task => {
-    if (!task.selectedSubmission || !isWrittenTask(task) || isCorrectionSignTask(task) || task.writtenCompletion && task.writtenCompletion.status !== "unclear") return task;
+    const prior = task.writtenCompletion;
+    const hasMemoParts = prior?.parts.some(p => isMemoTrackingPart(p.label, task.requirement));
+    if (!hasMemoParts && (!task.selectedSubmission || !isWrittenTask(task) || isCorrectionSignTask(task) || task.writtenCompletion && task.writtenCompletion.status !== "unclear")) return task;
     const ids = new Set(task.evidence.map(e => e.fileId));
     const batch = [...known.values()].filter(page => ids.has(page.fileId));
-    if (batch.length !== ids.size) return task;
-    const cached = existingWrittenInspection(store,task,batch);
-    return cached ? {...task,writtenCompletion:evaluateWrittenInspection(cached,task.coverage)} : task;
+    const cached = batch.length === ids.size ? existingWrittenInspection(store,task,batch) : null;
+    if (hasMemoParts && prior) {
+      // Historical reports lack the scope flag. Recover it only from the same
+      // inspection and never promote a partial, stale or unmatched set of pages.
+      const scopeComplete = !!cached?.scopeComplete && JSON.stringify(cached.parts) === JSON.stringify(prior.parts)
+        && batch.every(page => prior.parts.some(p => p.evidence.fileId === page.fileId));
+      return { ...task, writtenCompletion: evaluateWrittenInspection({ ...prior, scopeComplete }, task.coverage, task.requirement) };
+    }
+    return cached ? {...task,writtenCompletion:evaluateWrittenInspection(cached, task.coverage, task.requirement)} : task;
   })};
 }
