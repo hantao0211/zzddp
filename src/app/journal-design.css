@@ -496,15 +496,15 @@
 .journal-flower-speech {
   --speech-paper: #f4ced9;
   --speech-ink: #73374c;
-  right: 156px; top: 4px; opacity: 0;
-  padding: .35em .66em .33em .76em;
-  border-radius: 53% 48% 47% 44% / 60% 48% 52% 45%;
+  right: 156px; bottom: calc(100% - 40px); opacity: 0;
+  width: max-content; max-width: min(12em, calc(46vw / var(--garden-scale)));
+  padding: .4em .95em;
+  border-radius: 1.25em 1.1em 1em 1.2em / 1em .95em 1em .9em;
   background: var(--speech-paper); color: var(--speech-ink);
   rotate: -7deg; transform-origin: 90% 85%;
   font-size: max(18px, calc(14px / var(--garden-scale)));
-  font-weight: 400; line-height: 1.18; white-space: pre; text-align: center;
+  font-weight: 400; line-height: 1.35; white-space: pre-line; overflow-wrap: anywhere; text-align: center;
 }
-.journal-flower-speech[data-multiline] { translate: 0 -1.75em; }
 .journal-flower-speech::after {
   content: ""; position: absolute; right: -.30em; bottom: -.20em;
   width: 1em; height: .8em; background: var(--speech-paper);
@@ -514,7 +514,7 @@
   .journal-flower-speech { --speech-paper: #78485b; --speech-ink: #fff1e7; }
 }
 @media (max-width: 359px) {
-  .journal-flower-speech { right: 166px; top: -2px; }
+  .journal-flower-speech { right: 166px; }
 }
 
 .journal-flower .journal-quiet-reminder { display: none; }

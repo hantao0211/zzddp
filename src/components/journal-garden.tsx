@@ -155,7 +155,6 @@ function FlowerSpeech({ progress, allowReadingReminder, remindUpload, onReminder
     }
     if (remindUpload) reminderBeat.current = (reminderBeat.current + 1) % 4;
     bubble.textContent = phrase;
-    bubble.toggleAttribute("data-multiline", phrase.includes("\n"));
     const animation = animateFlowerSpeech(bubble);
     if (phrase === uploadReminder) {
       onReminderSpeech(true);
