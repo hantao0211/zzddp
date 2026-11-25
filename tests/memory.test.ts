@@ -168,6 +168,9 @@ test("only a parent-confirmed reusable convention reaches the matching subject a
     for (const oneOff of ["这张照片是订正页。", "以后是不是都看蓝笔？"]) {
       assert.equal(f.memories.remember([{...convention,evidenceQuote:oneOff}], oneOff, date, [], true).saved.length, 0);
     }
+    const abbreviated = {...convention, evidenceQuote:"以后都用蓝笔订正"};
+    assert.equal(f.memories.remember([abbreviated], "你是说以后都用蓝笔订正吗？", date, [], true).saved.length, 0);
+    assert.equal(f.memories.remember([{...abbreviated, confirmationQuote:"对"}], "不对", date, [{role:"assistant",content:"以后都用蓝笔订正"}], true).saved.length, 0);
     const result = await chat.answer(reply, {question:quote, history:[]}, "owner", viewer);
     assert.equal(result.memoriesSaved.length, 1);
     assert.deepEqual(f.memories.forJudgment("homework_completion", ["语文"]), [{subject:"语文",convention:quote}]);

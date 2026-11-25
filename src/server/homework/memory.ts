@@ -40,6 +40,15 @@ const tokens = (text: string) => {
   return [...result].slice(0, 100);
 };
 
+// A model may quote just the affirmative words inside a question or a denial.
+function statesConvention(message: string, quote: string) {
+  const start = message.indexOf(quote);
+  if (start < 0) return false;
+  const prefix = message.slice(0, start).split(/[。！？!?；;\n]/u).pop() || "";
+  const suffix = /[。！？!?；;\n]$/u.test(quote) ? "" : message.slice(start + quote.length).match(/^[^。！？!?；;\n]*[。！？!?；;]?/u)?.[0] || "";
+  return !/[?？]|(?:并非|并不是|不是说|没说过|假设|假如|比如|举例|是不是|是否|能不能)/u.test(prefix + quote + suffix);
+}
+
 export function rememberCandidates(store: Pick<HomeworkStore, "db" | "transaction" | "now">, candidates: MemoryCandidate[], question: string, date: string, history: ChatInput["history"] = [], canTeachJudgment = false) {
   const saved: LearnedMemory[] = [], notices: string[] = [];
   if (/(不要|不用|别|无需|不必|不需要).{0,10}(记住|记忆|保存|记录)|(只是|仅仅|仅).{0,8}(例子|举例)/u.test(question)) return { saved, notices };
@@ -63,6 +72,14 @@ export function rememberCandidates(store: Pick<HomeworkStore, "db" | "transactio
       const confirmation = candidate.confirmationQuote;
       const confirmed = !!confirmation && question.includes(confirmation) && /^(对|是的|没错|正确|就是|确认|记住|好的|好，|OK|ok|嗯|你说得对|理解对了)/u.test(confirmation);
       const earlier = history.slice(-8).filter((m) => m.role === "user").some((m) => m.content.includes(candidate.evidenceQuote)) || !!history.filter((m) => m.role === "assistant").at(-1)?.content.includes(candidate.evidenceQuote);
+      if (isHomeworkRule(candidate.kind)) {
+        const direct = statesConvention(question, candidate.evidenceQuote);
+        const reply = /^(?:对|是的|没错|正确|就是这样|确认|记住|好的|好|嗯|OK|你说得对|理解对了)[。！!，,\s]*$/iu.test(question.trim());
+        const previous = history.at(-1);
+        if (!direct && !(reply && confirmed && previous && previous.content.includes(candidate.evidenceQuote))) {
+          notices.push("尚未取得家长对这条跨作业约定的明确说明。"); continue;
+        }
+      }
       if (!question.includes(candidate.evidenceQuote) && !(confirmed && earlier)) { notices.push("有一条记忆尚未得到你的明确说明或确认，未保存。"); continue; }
       if (!confirmed && candidate.kind === "memo_abbreviation" && /是什么|是啥|什么意思|代表什么|是不是|是否|怎么|如何|能不能/u.test(candidate.evidenceQuote)) { notices.push("这次仍是在提问，尚未作为已确认知识保存。"); continue; }
       const value = parsed.data, triggerKey = value.kind === "memo_abbreviation" ? abbreviationKey(value.trigger) : key(value.trigger);
