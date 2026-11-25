@@ -614,3 +614,17 @@
 .mile-track i { display:block; height:100%; border-radius:inherit; background:var(--journal-green); }
 .mile-earned { display:flex; align-items:center; gap:6px; color:var(--journal-green); }
 .mile-add { justify-self:start; }
+
+.exam-page-state { display:inline-flex; align-items:center; gap:5px; }
+.exam-scan-icon { display:inline-flex; align-items:center; position:relative; flex:none; }
+.exam-scan-icon::after {
+  content:""; position:absolute; top:5px; left:1px; right:1px; height:2px;
+  border-radius:2px; background:currentColor; transform:translateY(5px);
+}
+@media (prefers-reduced-motion:no-preference) {
+  .exam-scan-icon::after { animation:exam-read-page 1.8s ease-in-out infinite; }
+}
+@keyframes exam-read-page {
+  0%,100% { transform:translateY(0); }
+  50% { transform:translateY(10px); }
+}

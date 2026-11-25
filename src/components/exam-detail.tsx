@@ -3,12 +3,13 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ArrowLeft, BookOpen, Check, ChevronRight, FileImage, MessageCircle, Pencil, Plus, ScanLine } from "lucide-react";
 import { examKinds, examReadingChecks, type ExamDetail, type ExamMeta, type ExamQuestion, type Observation } from "@/domain/assessment";
 import { homeworkPost, homeworkRequest } from "@/services/homework-gateway";
+import { ExamScanIcon } from "./exam-scan-icon";
 import { PhotoPreviewButton } from "./photo-preview";
 
 const choices=["语文","数学","英语"];
 const pagePath=(id:string)=>"/practice/exam-pages/"+id;
 const resultLabels={correct:"正确",wrong:"错误",uncertain:"待核对",blank:"未作答"};
-const pageStatus:Record<string,string>={awaiting:"待补传",queued:"等待识读",running:"正在识读",done:"已整理",failed:"识读未完成"};
+const pageStatus:Record<string,string>={awaiting:"待补传",queued:"等待识读",running:"正在识读",done:"已整理",failed:"识读已停止"};
 type Act=(fn:()=>Promise<void>)=>void;
 function choicesGrade(){return [1,2,3,4,5,6].map(g=><option key={g} value={g}>{g}年级</option>);}
 function readMeta(data:FormData){
@@ -70,7 +71,7 @@ export function ExamWorkspace({detail,canManage,busy,act,notify,openMistakes,put
     {pages.map(p=>{
       const rows=questions.filter(q=>q.pageId===p.id&&(filter==="all"||q.verdict===filter));
       if(filter!=="all"&&!rows.length)return null;
-      return <section key={p.id} className="exam-sheet"><div className="exam-tools"><h3>第 {p.number} 页 <small>{pageStatus[p.status]}</small></h3>{p.status!=="awaiting"&&<Original pageId={p.id} number={p.number}/>}</div>
+      return <section key={p.id} className="exam-sheet"><div className="exam-tools"><h3>第 {p.number} 页 <small className="exam-page-state">{p.status==="running"&&<ExamScanIcon/>}{pageStatus[p.status]}</small></h3>{p.status!=="awaiting"&&<Original pageId={p.id} number={p.number}/>}</div>
         {p.status==="awaiting"&&<label>补传本页原照片<input type="file" accept="image/jpeg,image/png,image/webp" disabled={busy} onChange={e=>{const f=e.target.files?.[0];if(f)act(()=>putPhoto(p.id,f));}}/></label>}
         {p.note&&(p.status==="done"?<details><summary>识读说明</summary><p>{p.note}</p></details>:<p className="reading-muted" role="status">{p.note}</p>)}
         {canManage&&p.status==="failed"&&<button className="button secondary compact" disabled={busy} onClick={()=>act(async()=>{await homeworkPost(pagePath(p.id)+"/retry");notify("");})}>重试识读</button>}

@@ -17,7 +17,8 @@ const convert = promisify(execFile);
 const digest = (v: string|Buffer) => createHash("sha256").update(v).digest("hex");
 type StoredPage = ExamPage & {exam_id:string; sha:string; bytes:number; mime:string; attempts:number};
 function examStatus(states:string[]){
-  if(states.some(s=>s==="queued"||s==="running"))return "整理中";
+  if(states.includes("running"))return "整理中";
+  if(states.includes("queued"))return "等待识读";
   if(states.includes("awaiting"))return "待补传";
   if(states.includes("failed"))return "识读未完成";
   return "已整理";
@@ -50,8 +51,8 @@ export class Assessments {
   list(offset:number,limit:number) {
     const db=this.store.db;
     const rows=db.prepare(`SELECT e.id,e.metadata,count(*) pages,sum(p.status='done') done,
-      group_concat(p.status) states FROM (SELECT * FROM exams ORDER BY date DESC,created_at DESC,id LIMIT ? OFFSET ?) e JOIN exam_pages p ON p.exam_id=e.id
-      GROUP BY e.id ORDER BY e.date DESC,e.created_at DESC,e.id`).all(limit,offset) as {id:string;metadata:string;pages:number;done:number;states:string}[];
+      group_concat(p.status) states, min(CASE WHEN p.status='failed' THEN p.number END) firstFailedPage FROM (SELECT * FROM exams ORDER BY date DESC,created_at DESC,id LIMIT ? OFFSET ?) e JOIN exam_pages p ON p.exam_id=e.id
+      GROUP BY e.id ORDER BY e.date DESC,e.created_at DESC,e.id`).all(limit,offset) as {id:string;metadata:string;pages:number;done:number;states:string;firstFailedPage:number|null}[];
     return {items:rows.map(({metadata,states,...row})=>({...JSON.parse(metadata) as ExamMeta,...row,status:examStatus(states.split(","))})),total:Number(db.prepare("SELECT COUNT(*) n FROM exams").get()!.n)};
   }
   detail(id:string):ExamDetail {

@@ -6,27 +6,33 @@ import { homeworkPost, homeworkRequest } from "@/services/homework-gateway";
 import { ExamMilestonePanel } from "./exam-milestones";
 import { isMilestone, type MilestoneData } from "@/domain/exam-milestones";
 import { Flag } from "lucide-react";
+import { ExamScanIcon } from "./exam-scan-icon";
 import { ExamWorkspace } from "./exam-detail";
 
 const endpoint="/practice/exams";
-type Archive={items:ExamRecord[];total:number;stage:{grade:number;semester:number}|null};
+type ArchiveItem=ExamRecord & {firstFailedPage?:number|null};
+type Archive={items:ArchiveItem[];total:number;stage:{grade:number;semester:number}|null};
 const pagePath=(id:string)=>"/practice/exam-pages/"+id;
 const message=(e:unknown)=>e instanceof Error?e.message:"操作未完成，请重试。";
 async function fileSha(file:File){return Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",await file.arrayBuffer())),b=>b.toString(16).padStart(2,"0")).join("");}
 async function putPhoto(id:string,file:File){await homeworkRequest(pagePath(id)+"/photo",{method:"PUT",headers:{"Content-Type":"application/octet-stream"},body:file});}
 
 const examStates: Record<string,{tone:string;icon:LucideIcon}> = {
-  "整理中": {tone:"in-progress",icon:Clock3},
+  "整理中": {tone:"in-progress",icon:FileText},
+  "等待识读": {tone:"in-progress",icon:Clock3},
   "已整理": {tone:"done",icon:CircleCheck},
   "待补传": {tone:"uncertain",icon:Upload},
   "识读未完成": {tone:"wrong",icon:CircleAlert},
 };
-function ExamRow({exam,open}:{exam:ExamRecord;open:(id:string)=>void}){
+function ExamRow({exam,open}:{exam:ArchiveItem;open:(id:string)=>void}){
   const {tone,icon:Icon}=examStates[exam.status]??{tone:"neutral",icon:FileText};
-  const info=[exam.date,exam.subject,exam.status!=="已整理" && exam.pages>1 && ("已整理 "+exam.done+"/"+exam.pages+" 页")].filter(Boolean).join(" · ");
+  const running=exam.status==="整理中", stopped=exam.status==="识读未完成";
+  const label=running?"正在识读":stopped?"识读已停止":exam.status;
+  const progress=exam.status!=="已整理" && exam.pages>1 && ("共"+exam.pages+"页，已完成"+exam.done+"页");
+  const info=[exam.date,exam.subject,progress,stopped&&exam.firstFailedPage&&("第"+exam.firstFailedPage+"页未读完")].filter(Boolean).join(" · ");
   return <button className={`exam-line exam-status-row status-${tone}`} onClick={()=>open(exam.id)}>
     <span className="exam-row-info"><strong>{exam.title||"已批试卷"}</strong>{info&&<small>{info}</small>}</span>
-    <span className="exam-row-state"><Icon size={16} aria-hidden="true"/>{exam.status}<ChevronRight size={14} aria-hidden="true"/></span>
+    <span className="exam-row-state">{running?<ExamScanIcon/>:<Icon size={16} aria-hidden="true"/>}{label}<ChevronRight size={14} aria-hidden="true"/></span>
   </button>;
 }
 
@@ -46,7 +52,7 @@ export function ExamShelf({canManage,openMistakes}:{canManage:boolean;openMistak
         const data=await homeworkRequest<Archive>(endpoint+query,{signal:controller.signal});
         if(controller.signal.aborted)return;
         if(mode==="list")setArchive(data);else setLatest(data);
-        if(data.items.some(exam=>exam.status==="整理中"))timer=setTimeout(load,3500);
+        if(data.items.some(exam=>exam.status==="整理中"||exam.status==="等待识读"))timer=setTimeout(load,3500);
         else if(data.items.some(exam=>exam.status!=="已整理"))timer=setTimeout(load,15000);
       }
       if(mode==="milestones"){const data=await homeworkRequest<MilestoneData>("/practice/milestones",{signal:controller.signal});if(!controller.signal.aborted)setMilestones(data);}

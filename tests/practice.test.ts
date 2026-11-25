@@ -232,6 +232,7 @@ test("a truncated exam page retries once while page and archive status follow re
     let calls=0;
     const worker=new PracticeWorker(f.store,()=>({async run(task,schema,metadata,images){
       assert.equal(images?.[0].fileId,one.id);
+      check("整理中");
       if(++calls<=2)throw new AIServiceError("INCOMPLETE_RESPONSE",true,"incomplete");
       return schema.parse(result);
     }}));
@@ -239,10 +240,11 @@ test("a truncated exam page retries once while page and archive status follow re
       assert.equal(exams.detail(paper.exam.id).exam.status,status);
       assert.equal(exams.list(0,10).items[0].status,status);
     }
-    await worker.tick();check("整理中");
+    await worker.tick();check("等待识读");
     await worker.tick();check("识读未完成");
     await worker.tick();assert.equal(calls,2);
-    exams.retry(one.id);check("整理中");
+    assert.equal(exams.list(0,10).items[0].firstFailedPage,1);
+    exams.retry(one.id);check("等待识读");
     await worker.tick();check("已整理");
     assert.equal(exams.page(two.id).attempts,0);
   }finally{f.close();}
