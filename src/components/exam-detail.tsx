@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { ArrowLeft, BookOpen, Check, ChevronRight, FileImage, MessageCircle, Pencil, Plus, ScanLine } from "lucide-react";
+import { ArrowLeft, BookOpen, Check, ChevronRight, FileImage, MessageCircle, Pencil, Plus, RotateCw, ScanLine } from "lucide-react";
 import { examKinds, examReadingChecks, type ExamDetail, type ExamMeta, type ExamQuestion, type Observation } from "@/domain/assessment";
 import { homeworkPost, homeworkRequest } from "@/services/homework-gateway";
 import { ExamScanIcon } from "./exam-scan-icon";
@@ -56,7 +56,7 @@ export function ExamWorkspace({detail,canManage,busy,act,notify,openMistakes,put
   }
   const counts={all:questions.length,uncertain:questions.filter(q=>q.verdict==="uncertain").length,wrong:questions.filter(q=>q.verdict==="wrong").length};
   return <div className="exam-workspace">
-    <div className="exam-overview"><div><strong>{counts.wrong?"已收录 "+counts.wrong+" 道错题":exam.done===exam.pages?"已整理 "+counts.all+" 道题":"已整理 "+exam.done+" / "+exam.pages+" 页"}</strong>
+    <div className={"exam-overview"+(exam.done<exam.pages?" is-partial":"")}><div><strong>{counts.wrong?"已收录 "+counts.wrong+" 道错题":exam.done===exam.pages?"已整理 "+counts.all+" 道题":"已整理 "+exam.done+" / "+exam.pages+" 页"}</strong>
       <small>{[exam.subject,exam.grade&&exam.grade+"年级",exam.date].filter(Boolean).join(" · ")||"共 "+exam.pages+" 页"}</small></div>
       {counts.wrong>0&&<button className="text-button" onClick={openMistakes}><BookOpen size={15}/>错题本</button>}</div>
     <details className="exam-meta-panel"><summary>试卷资料</summary>
@@ -71,12 +71,27 @@ export function ExamWorkspace({detail,canManage,busy,act,notify,openMistakes,put
     {pages.map(p=>{
       const rows=questions.filter(q=>q.pageId===p.id&&(filter==="all"||q.verdict===filter));
       if(filter!=="all"&&!rows.length)return null;
-      return <section key={p.id} className="exam-sheet"><div className="exam-tools"><h3>第 {p.number} 页 <small className="exam-page-state">{p.status==="running"&&<ExamScanIcon/>}{pageStatus[p.status]}</small></h3>{p.status!=="awaiting"&&<Original pageId={p.id} number={p.number}/>}</div>
+      const failed=p.status==="failed";
+      const addQuestion=canManage&&(failed||p.status==="done")&&<button
+        type="button" id={"exam-open-"+p.id} disabled={busy} onClick={()=>open(p.id)}
+        className={failed?"button secondary compact plum-action":"text-button exam-add-question"}>
+        <Plus size={16} aria-hidden="true"/>手动补题
+      </button>;
+      return <section key={p.id} className="exam-sheet"><div className="exam-tools"><h3>第 {p.number} 页 <small className={"exam-page-state"+(failed?" is-stopped":"")}>{p.status==="running"&&<ExamScanIcon/>}{pageStatus[p.status]}</small></h3>{p.status!=="awaiting"&&<Original pageId={p.id} number={p.number}/>}</div>
         {p.status==="awaiting"&&<label>补传本页原照片<input type="file" accept="image/jpeg,image/png,image/webp" disabled={busy} onChange={e=>{const f=e.target.files?.[0];if(f)act(()=>putPhoto(p.id,f));}}/></label>}
-        {p.note&&(p.status==="done"?<details><summary>识读说明</summary><p>{p.note}</p></details>:<p className="reading-muted" role="status">{p.note}</p>)}
-        {canManage&&p.status==="failed"&&<button className="button secondary compact" disabled={busy} onClick={()=>act(async()=>{await homeworkPost(pagePath(p.id)+"/retry");notify("");})}>重试识读</button>}
+        {p.note&&!failed&&(p.status==="done"?<details><summary>识读说明</summary><p>{p.note}</p></details>:<p className="reading-muted" role="status">{p.note}</p>)}
+        {failed&&(p.note||canManage)&&<div className="exam-page-recovery">
+          {p.note&&<p className="reading-muted" role="status">{p.note}</p>}
+          {canManage&&<div className="exam-recovery-actions">
+            <button type="button" className="button primary compact" disabled={busy}
+              onClick={()=>act(async()=>{await homeworkPost(pagePath(p.id)+"/retry");notify("");})}>
+              <RotateCw size={16} aria-hidden="true"/>重试本页
+            </button>
+            {addQuestion}
+          </div>}
+        </div>}
         {rows.map(q=><button className="exam-qrow" id={"exam-open-"+q.id} key={q.id} onClick={()=>open(p.id,q.id)}><span><strong>{q.label}</strong><small>{q.feedback?(q.feedback.status==="done"?"小步已回复":q.feedback.status==="failed"?"复读未完成":"小步正在看原卷"):q.question}</small></span><span className={"exam-verdict v-"+q.verdict}>{resultLabels[q.verdict]}</span><ChevronRight size={15}/></button>)}
-        {canManage&&["done","failed"].includes(p.status)&&<button className="text-button" id={"exam-open-"+p.id} onClick={()=>open(p.id)}><Plus size={15}/>补录漏识别的题</button>}
+        {!failed&&addQuestion}
       </section>;
     })}
   </div>;

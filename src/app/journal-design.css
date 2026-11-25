@@ -628,3 +628,21 @@
   0%,100% { transform:translateY(0); }
   50% { transform:translateY(10px); }
 }
+
+.exam-overview.is-partial { background:var(--field-bg); }
+.exam-sheet .exam-page-state.is-stopped {
+  vertical-align:middle; padding:2px 7px; border-radius:6px;
+  background:var(--journal-pink); color:var(--ink); font-size:.72em;
+}
+.exam-page-recovery { margin:6px 0 4px; padding-block:4px 8px; }
+.exam-page-recovery > p { font-size:.9em; line-height:1.6; }
+.exam-recovery-actions {
+  display:grid; grid-template-columns:repeat(auto-fit,minmax(min(6.5rem,100%),1fr));
+  gap:10px; max-width:19rem;
+}
+.exam-page-recovery > p + .exam-recovery-actions { margin-top:10px; }
+.exam-recovery-actions > .button {
+  display:inline-flex; justify-content:center; align-items:center; gap:6px;
+  min-height:44px; margin:0; padding-inline:8px;
+}
+.exam-add-question { min-height:44px; margin-top:4px; }

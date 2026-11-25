@@ -13,14 +13,24 @@ const exams=states.map((status,i)=>({id:String(i),date,subject:"数学",title:i?
 const engine=process.env.SMOKE_BROWSER==="webkit"?webkit:chromium;
 const browser=await engine.launch({headless:true,args:engine===chromium?["--no-sandbox"]:[]});
 try{
-  const page=await browser.newPage({viewport:{width:320,height:844},isMobile:true,hasTouch:true,ignoreHTTPSErrors:true,colorScheme:process.env.SMOKE_COLOR_SCHEME});
+  const context=await browser.newContext({viewport:{width:320,height:844},isMobile:true,hasTouch:true,ignoreHTTPSErrors:true,colorScheme:process.env.SMOKE_COLOR_SCHEME});
+  let page=await context.newPage();
   const errors=[];
+  const pages=[
+    {id:"first-page",number:1,status:"failed",note:"原图已保存，可重试本页。",coverage:"partial"},
+    {id:"second-page",number:2,status:"done",note:"",coverage:"complete"}
+  ];
+  let retries=0;
   page.on("pageerror",e=>errors.push(e.message));
-  await page.route("**/assistant-api/**",route=>{
+  await page.context().route("**/assistant-api/**",route=>{
     const url=new URL(route.request().url());
     const send=data=>route.fulfill({contentType:"application/json",body:JSON.stringify(data)});
     if(url.pathname.endsWith("/status"))return send({authenticated:true,available:true,accounts:true,viewer});
     if(url.pathname.endsWith("/practice/exams"))return send({items:url.searchParams.has("latest")?exams.slice(0,1):exams,total:exams.length,stage:null});
+    if(url.pathname.endsWith("/practice/exams/3"))return send({exam:exams[3],pages,questions:[]});
+    if(url.pathname.endsWith("/exam-pages/first-page/retry") && route.request().method()==="POST"){
+      retries++;pages[0].status="queued";pages[0].note="";return send({saved:true});
+    }
     if(url.pathname.endsWith("/learning/state"))return send({date,pending:false,status:"processed",note:"",dates:[],quota:{calls:0,limit:60},uploads:[],report:null});
     if(url.pathname.endsWith("/reading/state"))return send(null);
     return send({items:[],date,entries:[],uncertainties:[],familyNotes:[]});
@@ -57,6 +67,40 @@ try{
   await list.nth(3).getByText("已整理",{exact:true}).waitFor({timeout:22000});
   await page.getByRole("button",{name:"关闭试卷档案"}).click();
   await latest.getByText("已整理").waitFor();
+  exams[3].status="识读未完成";
+  for (const role of ["child","parent"]) {
+    viewer.role=role;
+    if(role==="parent"){
+      page=await page.context().newPage();
+      page.on("pageerror",e=>errors.push(e.message));
+      await page.goto(base+"/?studyDate="+date);
+    }
+    await page.getByRole("button",{name:/全部试卷/}).click();
+    await page.getByRole("dialog").locator(".exam-line").nth(3).click();
+    const modal=page.getByRole("dialog",{name:"试卷档案"});
+    const failed=modal.locator(".exam-sheet").first();
+    await failed.getByText("识读已停止",{exact:true}).waitFor();
+    const actions=failed.locator(".exam-recovery-actions");
+    if (role==="child") {
+      assert.equal(await actions.count(),0);
+      continue;
+    }
+    const retry=actions.getByRole("button",{name:"重试本页"}),add=actions.getByRole("button",{name:"手动补题"});
+    for(const width of [320,390,1024]){
+      await page.setViewportSize({width,height:844});
+      const a=await retry.boundingBox(),b=await add.boundingBox();
+      assert.ok(a && b && Math.abs(a.y-b.y)<1 && b.x-a.x-a.width>=8);
+      assert.ok(a.height>=44 && b.height>=44 && b.x+b.width<=width);
+      if(width===390 && process.env.SMOKE_OUTPUT_DIR)await modal.screenshot({path:process.env.SMOKE_OUTPUT_DIR+"/page-actions.png"});
+    }
+    await add.click();
+    await modal.getByRole("heading",{name:"补录题目"}).waitFor();
+    await modal.getByRole("button",{name:"取消",exact:true}).click();
+    assert.ok(await add.evaluate(el=>el===document.activeElement));
+    await retry.click();
+    await failed.getByText("等待识读",{exact:true}).waitFor();
+    assert.equal(retries,1);
+  }
   assert.deepEqual(errors,[]);
   console.log("EXAM_STATE_COLORS_ICONS_AND_REFRESH_OK",process.env.SMOKE_BROWSER,colors);
 }finally{await browser.close();}
