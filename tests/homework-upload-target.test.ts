@@ -14,22 +14,27 @@ import { HomeworkWorker } from "../src/server/homework/worker";
 import { resolveUploadTarget } from "../src/server/homework/upload-target";
 import type { StructuredAI, AIImage } from "../src/server/ai/provider";
 const date = "2026-11-20", hash = (value: string) => createHash("sha256").update(value).digest("hex");
-function fixture(grading = false) {
+function fixture(grading = false, inspect = false) {
   const dir = mkdtempSync(join(tmpdir(), "xiaobu-upload-target-"));
-  let store = new HomeworkStore(dir, Date.now, null, false, grading), subject: Subject | null = "数学", mode = "match";
+  let store = new HomeworkStore(dir, Date.now, null, inspect, grading), subject: Subject | null = "数学", mode = "match";
   const calls: { task: AITask; input: any }[] = [];
   const ai: StructuredAI = { async run<T>(task: AITask, schema: z.ZodType<T>, input: unknown, images: AIImage[] = []) {
     const value = input as any; calls.push({ task, input: value });
     if (task === "extract_homework") return schema.parse({ pages: images.map(p => ({ fileId: p.fileId, readable: true, subject, book: "模拟练习", printedPage: "74", content: "模拟练习", studyTrace: { state: "marked", description: "模拟笔迹" }, uncertainties: [] })) });
+    if (task === "assess_written_completion" && inspect) {
+      const done = images.length === 2;
+      return schema.parse({scopeComplete:done,reason:done ? "两页均已作答" : "漏拍一页",
+        parts:images.map(p=>({label:"练习",status:done ? "answered" : "blank",evidence:{fileId:p.fileId,page:1,excerpt:"模拟作答"}}))});
+    }
     assert.equal(task, "organize_homework");
-    return schema.parse({ readable: true, subjects: ["数学"], matches: mode === "omit" ? [] : value.candidates.map((t: any) => ({ taskId: t.id, coverage: "complete", evidence: value.extractedPages.map((p: any) => ({ fileId: p.fileId, page: p.page, excerpt: "模拟页面" })), missing: [] })), unassigned: [], uncertainties: [] });
+    return schema.parse({ readable: true, subjects: ["数学"], matches: mode === "omit" ? [] : (mode==="first" ? value.candidates.slice(0,1) : value.candidates).map((t: any) => ({ taskId: t.id, coverage: "complete", evidence: value.extractedPages.map((p: any) => ({ fileId: p.fileId, page: p.page, excerpt: "模拟页面" })), missing: [] })), unassigned: [], uncertainties: [] });
   } };
   const pipeline = { async convert(file: { id: string }) { const pages = [{ id: file.id + "-p1", file_id: file.id, number: 1 }]; store.setPages(file.id, pages); return pages; }, images(pages: { id: string }[]) { return pages.map(p => ({ fileId: p.id, mimeType: "image/jpeg" as const, base64: "synthetic" })); } };
   let worker = new HomeworkWorker(store, () => ai, pipeline);
-  function memo(seed = "memo") {
+  function memo(seed = "memo", titles = ["P74","P75"]) {
     const u = store.begin({ date, kind: "memo", files: [{ name: seed + ".png", size: 1, sha256: hash(seed) }] });
     store.stored(u.files[0].id, "image/png"); store.finalize(u.id); const job = store.claim()!;
-    store.recognized(job, { date, readable: true, assignments: ["P74", "P75"].map(title => ({ subject: "数学", title, requirement: "完成数学" + title, format: "written", evidence: [{ fileId: u.files[0].id + "-p1", page: 1, excerpt: title }] })), uncertainties: [] }, ["数学"], false, 1, "");
+    store.recognized(job, { date, readable: true, assignments: titles.map(title => ({ subject: "数学", title, requirement: "完成数学" + title, format: "written", evidence: [{ fileId: u.files[0].id + "-p1", page: 1, excerpt: title }] })), uncertainties: [] }, ["数学"], false, 1, "");
     return u;
   }
   const input = (seed: string, targetTaskId?: string) => ({ date, kind: "homework" as const, ...(targetTaskId ? { targetTaskId } : {}), files: [{ name: seed + ".png", size: 1, sha256: hash(seed) }] });
@@ -105,5 +110,30 @@ test("a selected destination carries a matched unknown-subject page through to a
     f.upload("unknown-for-grading", task.id); await f.tick(); await f.tick();
     const run = f.store().db.prepare("SELECT source FROM grading_runs WHERE active=1").get() as { source: string };
     assert.ok(run); const source = JSON.parse(run.source); assert.equal(source.subject, "数学"); assert.equal(source.assigned, true); assert.deepEqual(source.taskIds, [task.id]);
+  } finally { f.cleanup(); }
+});
+
+test("adding one missed photo rechecks the original automatic match together with the targeted supplement", async () => {
+  const f = fixture(false,true);
+  try {
+    f.memo("list",["运算练习","计算订正"]); await f.drain();
+    const id = f.store().snapshot(date).report!.tasks[0].id;
+    f.setMode("first");
+    const first = f.upload("first-page");
+    await f.drain();
+    const before = f.store().snapshot(date);
+    assert.equal(before.report!.tasks[0].writtenCompletion?.status,"incomplete");
+    assert.equal(homeworkSummary(before)!.rows[0].uploadLabel,"补传照片");
+    f.setMode("omit");
+    const extra = f.upload("missing-page",id);
+    await f.drain();
+    const after = f.store().snapshot(date);
+    const ids = [first,extra].map(u => u.files[0].id+"-p1").sort();
+    const checks = f.calls.filter(c=>c.task==="assess_written_completion");
+    assert.deepEqual(checks.at(-1)!.input.pages.map((p:{fileId:string})=>p.fileId).sort(),ids);
+    assert.deepEqual(after.report!.tasks[0].evidence.map(e=>e.fileId).sort(),ids);
+    assert.equal(after.report!.tasks[0].writtenCompletion?.status,"done");
+    assert.equal(homeworkSummary(after)!.rows[0].uploadLabel,undefined);
+    assert.equal(after.report!.tasks[1].evidence.length,0);
   } finally { f.cleanup(); }
 });

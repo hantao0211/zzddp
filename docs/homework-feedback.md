@@ -6,6 +6,7 @@
 | --- | --- | --- | --- |
 | 备忘录识读 | 漏看课号中的一个数字，容易把一次 OCR 纠正学成两个课号等价。 | 家长解释的简称可以复用。具体数字重新读本次原图，一次纠正作为识别案例。 | `src/server/homework/memory.ts`、`tests/memory.test.ts` |
 | 作业匹配 | 同科的另一项作业照片被借来检查当前任务。 | 采用上传时指定的作业，再核对科目、明确页码和内容。确有冲突时指出具体照片。 | `src/server/homework/selected-submission.ts`、`tests/selected-written-cache.test.ts` |
+| 作业匹配 | 先自动对应、再从该项补传时，按指定照片推断范围可能遗漏原来对应的页。 | 补传时记录已单独对应到本项的页。新旧证据合并检查，清单换版、改科目、另有明确归属时重新核对。 | `tests/homework-upload-target.test.ts`、`tests/selected-written-cache.test.ts` |
 | 完成检查 | 备忘录右侧完成勾选被算作练习册上一道空题，即使对应页全有作答也显示未做完。 | 清单定义布置范围。书面完成看对应原件的实际作答。题目要求勾选选项、订正或签名时照常检查。 | `src/domain/memo-assignment.ts`、`tests/written-completion.test.ts`、`tests/selected-written-cache.test.ts` |
 | 范围推断 | 手写默写编号跳号被当成漏写一个词。 | 旧规则把跳号生成的虚构词条从空题降成了待判，仍拦住完成。没有指定词表和数量时剔除该词条，按每处真实作答判断。给定词表或数量时按要求核对，实际空题照常指出。 | `src/domain/inferred-scope.ts`、`tests/inferred-scope.test.ts` |
 | 批改结论 | 两次独立复查都认为正确，汇总却只给出笼统的待确认。 | 分开核对是否定位同一题、是否读到同一作答和最终判定。按已核验结果给出通过或通过但存疑，并指出具体疑点；明确错误仍进入错题流程。 | `src/domain/grading-decision.ts`、`tests/grading.test.ts` |

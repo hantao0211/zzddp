@@ -88,8 +88,13 @@ export class HomeworkStore {
   begin(input: UploadInput) {
     if (input.targetTaskId && input.kind !== "homework") throw new HomeworkError(400, "备忘录不能指定作业。");
     const target = input.targetTaskId ? currentUploadTarget(this, input.date, input.targetTaskId) : null;
-    const shown = input.targetTaskId ? this.snapshot(input.date).report?.tasks.find(t => t.id === input.targetTaskId) : null;
+    const tasks = target ? this.snapshot(input.date).report?.tasks || [] : [];
+    const shown = tasks.find(t => t.id === input.targetTaskId);
     if (input.targetTaskId && (!target || !shown || shown.subject !== target.subject || shown.title !== target.title || shown.requirement !== target.requirement)) throw new HomeworkError(409, "作业清单已更新，请刷新后从对应作业上传。照片尚未提交。");
+    if (target && shown?.evidence.length) {
+      const otherPages = new Set(tasks.filter(t => t.id !== shown.id).flatMap(t => t.evidence.map(e => e.fileId)));
+      target.priorPageIds = [...new Set(shown.evidence.map(e => e.fileId))].filter(id => !otherPages.has(id));
+    }
     const fingerprint = hash({ date: input.date, kind: input.kind, files: input.files.map(({ size, sha256 }) => ({ size, sha256 })) });
     const old = this.db.prepare("SELECT id FROM uploads WHERE fingerprint=?").get(fingerprint) as { id: string } | undefined;
     if (old) {

@@ -2,7 +2,7 @@ import { sourceHash, effectiveMemo } from "./memo-context";
 import type { HomeworkStore } from "./store";
 import type { UploadTarget } from "../../domain/homework";
 
-type SavedTarget = UploadTarget & { memoId: string; entryIndex: number; sourceHash: string };
+type SavedTarget = UploadTarget & { memoId: string; entryIndex: number; sourceHash: string; priorPageIds?: string[] };
 // Keep the original memo identity: task array positions can change after a correction.
 export function currentUploadTarget(store: HomeworkStore, date: string, taskId: string): SavedTarget | null {
   const memo = store.uploads(date).filter(u => u.kind === "memo").at(-1);

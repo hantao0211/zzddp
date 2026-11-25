@@ -3,7 +3,7 @@ import type { DailyReport, ExtractedHomework, UploadTarget } from "./homework";
 import { WRITTEN_COMPLETION_VERSION } from "./written-completion";
 
 type Task = DailyReport["tasks"][number];
-export type SelectedPage = ExtractedHomework["pages"][number] & { page: number; target: UploadTarget };
+export type SelectedPage = ExtractedHomework["pages"][number] & { page: number; previouslyMatched?: boolean; target: UploadTarget };
 import { isCorrectionSignTask } from "./submission-policy";
 export { isCorrectionSignTask, SELECTED_SUBMISSION_POLICY } from "./submission-policy";
 
@@ -42,7 +42,7 @@ export function selectedReportConclusion(report: DailyReport, pages: SelectedPag
   const tasks = report.tasks.map(original => {
     // Stale memo/report versions must not gain a current destination's meaning.
     const assigned = pages.filter(p => p.target.taskId === original.id && p.target.subject === original.subject && p.target.title === original.title && p.target.requirement === original.requirement && p.target.format === original.format);
-    if (!assigned.length) return original.selectedSubmission ? { ...original, selectedSubmission: undefined, writtenCompletion: original.writtenCompletion?.reason.startsWith("已看到订正内容和手写签名") ? null : original.writtenCompletion } : original;
+    if (!assigned.some(p => !p.previouslyMatched)) return original.selectedSubmission ? { ...original, selectedSubmission: undefined, writtenCompletion: original.writtenCompletion?.reason.startsWith("已看到订正内容和手写签名") ? null : original.writtenCompletion } : original;
     const required = requiredPages(original), observed = assigned.flatMap(p => pageNumbers(p.printedPage || "") || []);
     const wrongPage = required && observed.length && !observed.some(n => required.includes(n));
     const wrongSubject = assigned.some(p => p.subject && p.subject !== original.subject);
@@ -56,10 +56,12 @@ export function selectedReportConclusion(report: DailyReport, pages: SelectedPag
     // With no explicit page/count requirement, the selected photos define the inferred scope.
     // Do not borrow unrelated same-subject worksheets from automatic matching.
     const sourceEvidence = mayInferScope(original) ? original.evidence.filter(e => assigned.some(p => p.fileId === e.fileId)) : original.evidence;
-    const scopeChanged = sourceEvidence.length !== original.evidence.length;
+    const scopeChanged = sourceEvidence.length !== original.evidence.length ||
+      assigned.some(p => !original.evidence.some(e => e.fileId === p.fileId) &&
+        !original.writtenCompletion?.parts.some(part => part.evidence.fileId === p.fileId));
     const evidence = sourceEvidence.map(e => assigned.some(p => p.fileId === e.fileId) && /内容对应尚未判清/u.test(e.excerpt) ? { ...e, excerpt: "上传时已明确选择这项作业，按指定归属接收。" } : e);
-    for (const page of assigned) if (!evidence.some(e => e.fileId === page.fileId)) evidence.push({ fileId: page.fileId, page: page.page, excerpt: "上传时已明确选择这项作业，按指定归属接收。" });
-    const task: Task = { ...original, ...(scopeChanged ? {writtenCompletion:null,inferredScope:undefined} : {}), evidence, missing: [...new Set(missing)], coverage: missing.length ? original.coverage === "complete" ? "partial" : original.coverage : "complete", selectedSubmission: { version: "selected-destination-v1", pageIds: assigned.map(p => p.fileId), note: "已按上传时指定的作业接收并做基本检查，没有明显归属冲突；不需要补拍封面或本子编号。" } };
+    for (const page of assigned) if (!evidence.some(e => e.fileId === page.fileId)) evidence.push({ fileId: page.fileId, page: page.page, excerpt: page.previouslyMatched ? "补传前已对应到本项的作业照片。" : "上传时已明确选择这项作业，按指定归属接收。" });
+    const task: Task = { ...original, ...(scopeChanged ? {writtenCompletion:null,inferredScope:undefined,reviewedFeedbackId:undefined,feedbackFinding:undefined,referencedChecks:undefined} : {}), evidence, missing: [...new Set(missing)], coverage: missing.length ? original.coverage === "complete" ? "partial" : original.coverage : "complete", selectedSubmission: { version: "selected-destination-v1", pageIds: assigned.map(p => p.fileId), note: "已按上传时指定的作业接收并做基本检查，没有明显归属冲突；不需要补拍封面或本子编号。" } };
     if (task.writtenCompletion?.status === "unclear" && task.writtenCompletion.parts.length && task.writtenCompletion.parts.every(p=>p.status==="answered") && !task.missing.length && original.missing.length && original.missing.every(identityOnlyConcern) && (identityOnlyConcern(task.writtenCompletion.reason) || task.writtenCompletion.reason === "指定作业范围的照片还不完整，不能判断整项是否写完。") && !assigned.some(p=>p.uncertainties.some(s=>/(?:题干|作答|答案).{0,15}(?:裁切|遮挡|模糊|看不清)/u.test(s)))) task.writtenCompletion = {...task.writtenCompletion,status:"done",reason:"已按指定作业接收，已检查的作答均有填写；看不到本子编号不影响完成判断，答案对错另看批改。"};
     if (completionEnabled && isCorrectionSignTask(task) && !task.writtenCompletion && !task.missing.length && !readable.some(p=>/未订正|未签名|未签字|漏订正|漏签|(?:订正|签名|签字).{0,8}(?:为空|空白|未完成)|(?:尚需|还需|待).{0,4}(?:订正|签名|签字)/u.test(p.content))) {
       const correction = feature(readable, /(?:订正|改正)(?:行|处|内容|词语|为|[:：])|(?:底部|页底|下方|已|有|可见).{0,20}订正/u);

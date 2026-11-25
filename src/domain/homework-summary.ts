@@ -6,7 +6,7 @@ import { isWrittenTask, needsWrittenCompletionUpdate } from "./written-completio
 import { needsReviewTraceUpdate, usesReviewTraces } from "./review-policy";
 
 type State = { text: string; tone: "good" | "attention" | "muted" };
-export type HomeworkSummaryRow = { id: string; title: string; subject: string; photo: State; activity: State; photoDetail: string; activityDetail: string; photoCount?: number; selfTask?: boolean; completionToken?: string; selfConfirmed?: boolean; updating?: boolean; memoEdited?: boolean; inferred?:boolean; displayTitle?:string };
+export type HomeworkSummaryRow = { id: string; title: string; subject: string; photo: State; activity: State; photoDetail: string; activityDetail: string; uploadLabel?: "上传作业" | "选传作业" | "补传照片"; photoCount?: number; selfTask?: boolean; completionToken?: string; selfConfirmed?: boolean; updating?: boolean; memoEdited?: boolean; inferred?:boolean; displayTitle?:string };
 export function homeworkSummary(snapshot: HomeworkSnapshot | null) {
   if (!snapshot?.uploads.length) return null;
   const receipt = (kind: "memo" | "homework") => {
@@ -28,7 +28,7 @@ export function homeworkSummary(snapshot: HomeworkSnapshot | null) {
     if (taskSubmission(task) === "self") {
       const confirmed=task.selfCompletion;const marked=task.reviewActivity?.status === "marked";
       const photoCount=homeworkTaskDetail(snapshot,task).homework.photos.length;
-      return {id:task.id,title:task.title,subject:task.subject,selfTask:true,updating:false,completionToken:task.completionToken,selfConfirmed:!!confirmed,photoCount,photo:{text:photoCount?`已收到${photoCount}张`:"照片可选",tone:"good"},activity:{text:confirmed?"已完成（手动）":marked?"已做":"待完成",tone:confirmed||marked?"good":"attention"},photoDetail:photoCount?`已收到这项作业的${photoCount}张补充照片。这项不强制交照片，无需额外补拍。`:"这项通常没有书面成果，不要求交照片。已上传的照片仅作补充参考。",activityDetail:confirmed?`${confirmed.confirmedBy}已确认完成。这是手动完成标记，可在这里撤销确认。`:marked?"已看到学习痕迹，按家庭约定记为已做；也可以自己确认完成。":"做好后点“我完成了”即可，不用为了证明完成而拍照或补写笔记。"};
+      return {id:task.id,title:task.title,subject:task.subject,selfTask:true,updating:false,completionToken:task.completionToken,selfConfirmed:!!confirmed,photoCount,uploadLabel:photoCount ? undefined : "选传作业",photo:{text:photoCount?`已收到${photoCount}张`:"照片可选",tone:"good"},activity:{text:confirmed?"已完成（手动）":marked?"已做":"待完成",tone:confirmed||marked?"good":"attention"},photoDetail:photoCount?`已收到这项作业的${photoCount}张补充照片。这项不强制交照片，无需额外补拍。`:"这项通常没有书面成果，不要求交照片。已上传的照片仅作补充参考。",activityDetail:confirmed?`${confirmed.confirmedBy}已确认完成。这是手动完成标记，可在这里撤销确认。`:marked?"已看到学习痕迹，按家庭约定记为已做；也可以自己确认完成。":"做好后点“我完成了”即可，不用为了证明完成而拍照或补写笔记。"};
     }
     const photo: State = { text: { complete: "已收到", partial: "对应待确认", none: hasPhotos ? "未匹配" : "未交照片", uncertain: task.evidence.length ? "已关联" : "待匹配" }[task.coverage], tone: task.coverage === "complete" ? "good" : "attention" };
     let activity: State = { text: "尚未判断", tone: "muted" };
@@ -52,7 +52,9 @@ export function homeworkSummary(snapshot: HomeworkSnapshot | null) {
       activityDetail = "家长已核对这项作业并确认写完。";
     }
     const updating=!!snapshot.pending&&!snapshot.processing?.memo&&(!!snapshot.processing?.taskIds?.includes(task.id)||!!snapshot.processing?.subjects.includes(task.subject));
-    return { id: task.id, title: task.title, displayTitle:task.inferredMeaning?.displayTitle, subject: task.subject, inferred:!!task.inferredScope||!!task.inferredMeaning, photo, activity, photoDetail:photoDetail+(task.missing.some(text=>text.startsWith("这张照片交给"))?" "+task.missing.filter(text=>text.startsWith("这张照片交给")).join(" "):"")+(updating?" 新照片还在整理，当前显示上次结果。":""), activityDetail:activityDetail+(updating?" 新照片还在整理，当前显示上次结果。":""), updating };
+    const uploadLabel = !updating && (photo.tone !== "good" || activity.tone !== "good")
+      ? task.evidence.length ? "补传照片" : "上传作业" : undefined;
+    return { id: task.id, title: task.title, uploadLabel, displayTitle:task.inferredMeaning?.displayTitle, subject: task.subject, inferred:!!task.inferredScope||!!task.inferredMeaning, photo, activity, photoDetail:photoDetail+(task.missing.some(text=>text.startsWith("这张照片交给"))?" "+task.missing.filter(text=>text.startsWith("这张照片交给")).join(" "):"")+(updating?" 新照片还在整理，当前显示上次结果。":""), activityDetail:activityDetail+(updating?" 新照片还在整理，当前显示上次结果。":""), updating };
   });
   for (const [index, task] of (snapshot.report?.unclassified || []).entries()) rows.push({ id: `unclassified-${index}`, title: task.title, subject: "待识别", photo: { text: "未对应好", tone: "attention" }, activity: { text: "先确认科目", tone: "muted" }, photoDetail: "这项备忘录的科目还没识别清楚，因此还没对应照片。可以直接修改科目和作业要求。", activityDetail: "先把这项作业的科目和要求说清楚，系统才能对应照片并检查。" });
   return { memo: receipt("memo"), homework: receipt("homework"), rows, empty: snapshot.pending ? "AI正在整理，完成后会显示每项作业。" : !snapshot.uploads.some(u => u.kind === "memo") ? "补一张备忘录，就能列出各项作业。" : "AI还没整理出清单，已上传的照片会保留。" };

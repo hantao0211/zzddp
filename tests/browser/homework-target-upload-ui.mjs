@@ -107,5 +107,25 @@ try{
  assert.equal(await scope.inputValue(),'curricular');
  for(const width of [320,390,768,1280]){await page.setViewportSize({width,height:900});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await page.screenshot({path:output+`/target-upload-${width}.png`,fullPage:true});}
  await dialog.getByRole('button',{name:'取消',exact:true}).click();assert.deepEqual(errors,[]);
+ // A written assignment can already have photos and still need one more page.
+ pending=false;
+ const missing=tasks[1];
+ missing.coverage='complete';
+ missing.evidence=[{fileId:'existing-work-page',page:1,excerpt:'已收到第一页'}];
+ missing.writtenCompletion={version:'written-v2',status:'incomplete',reason:'作答范围尚未完整',parts:[]};
+ await page.reload({waitUntil:'networkidle'});
+ const incomplete=rows.filter({hasText:missing.title});
+ const supplement=incomplete.getByRole('button',{name:'为数学P75补传照片',exact:true});
+ await supplement.waitFor();
+ await incomplete.getByRole('button',{name:'查看数学P75的完成情况'}).click();
+ await page.getByRole('dialog',{name:'这项作业的情况'}).getByRole('button',{name:'补传照片',exact:true}).click();
+ await dialog.getByText('交到：数学 · 数学P75',{exact:true}).waitFor();
+ await dialog.getByRole('button',{name:'取消',exact:true}).click();
+ dialog=await choose(supplement,'new-page.png');
+ await dialog.getByRole('button',{name:'确认上传',exact:true}).click();await dialog.waitFor({state:'hidden'});
+ assert.equal(submitted.at(-1).targetTaskId,missing.id);
+ assert.equal(submitted.at(-1).date,date);
+ assert.deepEqual(submitted.at(-1).files.map(f=>f.name),['new-page.png']);
+ assert.deepEqual(errors,[]);
  console.log('TARGET_UPLOAD_UI_OK=true optional-picker,optional-receipt,manual-completion-preserved,optional-add-and-cancel,explicit-destination,ordinary-no-target,cancel-resets-target,validation-error-retry,pending-only-selected-task,next-task-available,mobile-tablet-desktop');
 }finally{await browser.close();}
