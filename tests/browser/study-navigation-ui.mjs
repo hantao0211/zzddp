@@ -58,7 +58,7 @@ try{const page=await browser.newPage({colorScheme:process.env.SMOKE_COLOR_SCHEME
 
  const overview=page.getByRole('region',{name:'作业概况',exact:true});
  assert.equal(await overview.locator('tbody tr').count(),3,'The home journal starts with a short overview');
- await overview.getByText('全部完成 9/9',{exact:true}).waitFor();
+ await overview.getByText('（共9项，全部完成）',{exact:true}).waitFor();
  const expand=page.getByRole('button',{name:'展开其余6项作业',exact:true});
  assert.equal(await expand.getAttribute('aria-expanded'),'false');await expand.click();
  assert.equal(await overview.locator('tbody tr').count(),9);

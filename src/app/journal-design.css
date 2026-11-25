@@ -428,6 +428,8 @@
 }
 
 /* Empty days stay part of the journal, with a shared family calendar. */
+/* Keep the action in its own column when the progress label wraps under the title. */
+.study-shell .hw-summary-heading { display: grid; grid-template-columns: minmax(0, 1fr) auto; }
 .study-shell .hw-summary-heading .hw-progress-title { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: 4px 8px; }
 .study-shell .hw-summary-heading .hw-progress-badge { padding: 3px 8px; border-radius: 999px; background: var(--status-bg); color: var(--status-color); font-size: 12px; font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .hw-empty-progress .hw-summary-heading { align-items: center; }

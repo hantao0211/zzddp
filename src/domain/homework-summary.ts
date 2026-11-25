@@ -70,10 +70,10 @@ export function homeworkProgress(snapshot: HomeworkSnapshot | null, summary: Ret
   const rows = summary?.rows ?? [];
   if (rows.length) {
     const done = rows.filter(row => row.activity.tone === "good").length;
-    const count = done + "/" + rows.length;
-    if (done === rows.length) return { kind: "done", text: "全部完成 " + count } as const;
+    const total = `共${rows.length}项`;
+    if (done === rows.length) return { kind: "done", text: `（${total}，全部完成）` } as const;
     const started = done > 0 || hasHomework;
-    return { kind: started ? "in-progress" : "not-started", text: "已完成 " + count } as const;
+    return { kind: started ? "in-progress" : "not-started", text: `（${total}，${done}项已完成）` } as const;
   }
   const memos = snapshot.uploads.filter(u => u.kind === "memo");
   if (!memos.length) return { kind: hasHomework ? "in-progress" : "not-started", text: "备忘录未上传" } as const;
