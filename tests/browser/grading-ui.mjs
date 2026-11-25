@@ -63,6 +63,22 @@ try {
     throw new Error("Unexpected simulated endpoint: " + path);
   });
   await page.goto(base, { waitUntil: "networkidle" });
+  const dateBadge = page.locator(".study-heading-date");
+  const dateInput = dateBadge.getByLabel("作业日期", { exact: true });
+  const startingDate = await dateInput.inputValue();
+  for (const [day, weekday, width] of [["2026-11-24", "周二", 320], ["2026-11-29", "周日", 390], ["2027-01-01", "周五", 1280]]) {
+    await page.setViewportSize({ width, height: 670 });
+    await dateInput.fill(day);
+    await dateBadge.getByText(weekday, { exact: true }).waitFor();
+    const fits = await dateBadge.evaluate(el => {
+      const badge = el.getBoundingClientRect();
+      const text = el.querySelector("time").getBoundingClientRect();
+      return badge.width === 128 && badge.height === 44 && text.left >= badge.left && text.right <= badge.right && text.top >= badge.top && text.bottom <= badge.bottom;
+    });
+    assert.ok(fits, "The complete date and weekday fit inside the shared header badge");
+  }
+  await dateInput.fill(startingDate);
+  await page.setViewportSize({ width: 390, height: 670 });
   await page.getByRole("button", { name: "查看批改", exact: true }).click();
   const panel = page.getByRole("region", { name: "批改结果", exact: true });
   await panel.getByText("错误 · 已入错题本", { exact: true }).waitFor();
