@@ -18,6 +18,7 @@ try {
  for (const role of ['parent','child']) {
   const page = await browser.newPage({viewport:{width:390,height:680}, hasTouch:true, isMobile:true, ignoreHTTPSErrors:true,
     colorScheme:process.env.SMOKE_COLOR_SCHEME || 'light'});
+  let practiceStatus = role === 'parent' ? 'queued' : 'ready';
   const viewer = {role, name:'模拟账号', id:'11111111-1111-4111-8111-111111111111'};
   let answerRequests=0, downloads=0, popups=0;
   page.on('download', () => downloads++);
@@ -33,7 +34,7 @@ try {
     return send(paper);
    }
    if(path.endsWith('/status')) return send({authenticated:true,available:true,accounts:true,viewer});
-   if(path.endsWith('/practice/state')) return send({today:date,viewer,profile:{grade:4,semester:1},subjects:[{subject:'英语',curricular:1,unknown:0,rewardEligible:true}],items:[item]});
+   if(path.endsWith('/practice/state')) return send({today:date,viewer,profile:{grade:4,semester:1},subjects:[{subject:'英语',curricular:1,unknown:0,rewardEligible:true}],items:[{...item,status:practiceStatus,paper:practiceStatus==="ready"?item.paper:null}]});
    if(path.endsWith('/learning/state')) return send({date,dates:[date],pending:false,status:'idle',quota:{calls:0,limit:100},uploads:[],report:null});
    if(path.endsWith('/practice/exams')) return send({items:[],total:0,stage:{grade:4,semester:1}});
    return send({items:[]});
@@ -41,6 +42,26 @@ try {
   await page.goto(base+'/?studyDate='+date);
   await page.getByRole('button',{name:/15分钟小练习/}).first().click();
   await page.getByRole('button',{name:'打开今日练习'}).click();
+  if(role==='parent') {
+   const detail=page.locator('.practice-dialog'), pencil=detail.locator('.practice-writing-pencil');
+   await detail.getByText('练习已排队',{exact:true}).waitFor();
+   assert.equal(await pencil.evaluate(el=>getComputedStyle(el).animationName),'none');
+   practiceStatus='generating';
+   await detail.getByText('小步正在出题',{exact:true}).waitFor();
+   await page.setViewportSize({width:320,height:680});
+   const animations=await pencil.evaluate(el=>getComputedStyle(el).animationName);
+   assert.equal(animations,'practice-write');
+   const position=()=>pencil.evaluate(el=>getComputedStyle(el).transform);
+   const start=await position();
+   await page.waitForFunction(({start})=>getComputedStyle(document.querySelector('.practice-writing-pencil')).transform!==start,{start});
+   assert.ok(await detail.evaluate(el=>el.scrollWidth<=el.clientWidth));
+   await page.emulateMedia({reducedMotion:'reduce'});
+   assert.equal(await pencil.evaluate(el=>getComputedStyle(el).animationName),'none');
+   assert.equal(await detail.getByText('小步正在出题',{exact:true}).isVisible(),true);
+   practiceStatus='ready';
+   await detail.getByRole('button',{name:'下载题单'}).waitFor();
+   assert.equal(await pencil.count(),0);
+  }
   const entry=page.getByRole('button',{name:'查看参考答案',exact:true});
   assert.equal(answerRequests,0);
   if(role==='child') {

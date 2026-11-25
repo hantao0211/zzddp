@@ -107,3 +107,58 @@
   .practice-print-output{display:block;page:xiaobu-practice}
   .practice-print-output .practice-document-sheet{max-width:none}
 }
+
+/* The pencil tip and both ink strokes share the same start point and clock. */
+.practice-writing {
+  display:flex; align-items:center; gap:14px; padding:9px 14px;
+  margin:10px 0 14px; border-radius:14px; background:var(--journal-pink);
+  color:var(--ink);
+}
+.practice-writing strong,.practice-writing small { display:block; }
+.practice-writing strong { font-size:1.05rem; }
+.practice-writing small { margin-top:3px; color:var(--muted); line-height:1.5; }
+.practice-writing-art { position:relative; flex:0 0 74px; height:66px; }
+.practice-writing-sheet {
+  position:absolute; left:3px; bottom:6px; width:55px; height:46px;
+  border-radius:4px 8px 4px 4px; background:#fff6df; transform:rotate(-6deg);
+  box-shadow:2px 3px 0 #c9ab98;
+}
+.practice-writing-sheet::before {
+  content:""; position:absolute; top:9px; left:9px; width:15px; height:3px;
+  border-radius:2px; background:#9eaf97;
+}
+.practice-writing-line {
+  position:absolute; left:9px; top:21px; height:2px; width:30px;
+  background:#825663; border-radius:2px; transform-origin:left center;
+}
+.practice-writing-line.second { top:32px; width:21px; }
+.practice-writing-pencil {
+  position:absolute; left:5px; top:-12px; width:8px; height:34px;
+  transform:translate(21px,11px) rotate(32deg); transform-origin:50% 100%;
+  border-radius:3px 3px 0 0;
+  background:linear-gradient(to top,#553e48 0 8%,#deb987 8% 24%,#b95572 24% 78%,#f2d5cb 78% 86%,#cf8293 86%);
+  clip-path:polygon(0 0,100% 0,100% 76%,50% 100%,0 76%);
+}
+@media (prefers-reduced-motion:no-preference) {
+  .practice-writing:not(.queued) .practice-writing-pencil { animation:practice-write 3.4s linear infinite; }
+  .practice-writing:not(.queued) .practice-writing-line.first { animation:practice-ink-first 3.4s linear infinite; }
+  .practice-writing:not(.queued) .practice-writing-line.second { animation:practice-ink-second 3.4s linear infinite; }
+}
+@keyframes practice-write {
+  0%,8%,100% { transform:translate(0,0) rotate(32deg); }
+  23% { transform:translate(15px,-1px) rotate(27deg); }
+  38% { transform:translate(30px,0) rotate(32deg); }
+  44% { transform:translate(23px,-4px) rotate(37deg); }
+  53% { transform:translate(0,11px) rotate(32deg); }
+  65% { transform:translate(10.5px,10px) rotate(27deg); }
+  77%,86% { transform:translate(21px,11px) rotate(32deg); }
+  94% { transform:translate(11px,-4px) rotate(37deg); }
+}
+@keyframes practice-ink-first {
+  0%,8%,100% { transform:scaleX(0); } 38%,94% { transform:scaleX(1); }
+  0%,94% { opacity:1; } 99%,100% { opacity:0; }
+}
+@keyframes practice-ink-second {
+  0%,53%,100% { transform:scaleX(0); } 77%,94% { transform:scaleX(1); }
+  0%,94% { opacity:1; } 99%,100% { opacity:0; }
+}

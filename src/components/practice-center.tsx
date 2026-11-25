@@ -28,6 +28,21 @@ export function PracticeCenter({active=true,openSource}:{active?:boolean;openSou
    </button>)}
  </details> : null}</article>;})}</div><p className="reading-muted">小练习使用课内错题。旧作业待分类时，家长可到原作业补一次归属。教材版本和当前进度可在学习档案里补充。</p><details className="practice-history"><summary><Clock3 size={18}/>近期小练习 · {data.items.length}份</summary>{data.items.map(p=><button className="practice-history-row" key={p.id} onClick={()=>setSelected(p.id)}><span>{p.date} · {p.subject} · 课内</span><span>{labels[p.status]}{p.rewarded?` · +${p.rewarded}小脚步`:""}</span></button>)}{!data.items.length&&<p>还没有小练习，选一门主课开始。</p>}</details>{selected&&data.items.some(p=>p.id===selected)&&<PracticeDetail item={data.items.find(p=>p.id===selected)!} parent={!!parent} close={()=>setSelected(null)} refresh={async text=>{await load();setNotice(text);window.dispatchEvent(new Event("xiaobu:growth-updated"));}}/>}</>}</section>;
 }
+function PracticeWritingStatus({queued}:{queued:boolean}) {
+  return <div className={queued?"practice-writing queued":"practice-writing"} role="status">
+    <span className="practice-writing-art" aria-hidden="true">
+      <span className="practice-writing-sheet">
+        <span className="practice-writing-line first"/>
+        <span className="practice-writing-line second"/>
+        <span className="practice-writing-pencil"/>
+      </span>
+    </span>
+    <div><strong>{queued?"练习已排队":"小步正在出题"}</strong>
+      <small>{queued?"轮到这份练习就会开始。":"题目核对好后，会自动显示在这里。"}</small>
+    </div>
+  </div>;
+}
+
 function PracticeDetail({item:p,parent,close,refresh}:{item:PracticeView;parent:boolean;close:()=>void;refresh:(text:string)=>Promise<void>}){const ref=useRef<HTMLDialogElement>(null),[photos,setPhotos]=useState<{name:string;image:string}[]>([]),[busy,setBusy]=useState(false),[error,setError]=useState(""),[review,setReview]=useState<PracticeAnswer|null>(null);
  useEffect(()=>{ref.current?.showModal();return()=>ref.current?.close();},[]);
  async function run(work:()=>Promise<unknown>,text:string){setBusy(true);setError("");try{await work();await refresh(text);}catch(e){setError(message(e));}finally{setBusy(false);}}
@@ -56,8 +71,11 @@ function PracticeDetail({item:p,parent,close,refresh}:{item:PracticeView;parent:
  const [preview, setPreview] = useState<"worksheet" | "answers" | null>(null);
  const answerButton = useRef<HTMLButtonElement>(null);
  const printButton = useRef<HTMLButtonElement>(null);
+ const preparing=p.status==="queued"||p.status==="generating";
  const working=["queued","generating","grading"].includes(p.status),complete=p.status==="graded"&&p.result?.scopeComplete&&p.result.answers.every(a=>!["blank","uncertain"].includes(a.verdict));
- return <dialog ref={ref} className="reading-dialog practice-dialog" aria-labelledby="practice-detail-title" onCancel={e=>{e.preventDefault();if(!busy)close();}}><header><h2 id="practice-detail-title">{p.subject} · 课内小练习</h2><div className="economy-actions"><TutorialButton topic="practice"/><button className="icon-button" disabled={busy} aria-label="关闭小练习" onClick={close}><X/></button></div></header><div className="reading-dialog-body"><p>{p.date} · {p.profileLabel} · {labels[p.status]}</p>{p.note&&<p className="practice-status-note">{p.note}</p>}{error&&<p className="form-error" role="alert">{error}</p>}{p.rewarded>0?<p className="reading-notice"><Check size={18}/>完成奖励已到账 <StepAmount value={p.rewarded} signed/></p>:!p.rewardEligible?<p className="reading-muted">今天这科奖励已领取，本次继续记录学习，不重复发放。</p>:<p className="reading-muted">真实做完这一套可攒 <StepAmount value={2}/>，批改正确率不影响奖励。</p>}
+ return <dialog ref={ref} className="reading-dialog practice-dialog" aria-labelledby="practice-detail-title" onCancel={e=>{e.preventDefault();if(!busy)close();}}><header><h2 id="practice-detail-title">{p.subject} · 课内小练习</h2><div className="economy-actions"><TutorialButton topic="practice"/><button className="icon-button" disabled={busy} aria-label="关闭小练习" onClick={close}><X/></button></div></header><div className="reading-dialog-body"><p>{p.date} · {p.profileLabel}{!preparing&&" · "+labels[p.status]}</p>
+ {preparing&&<PracticeWritingStatus queued={p.status==="queued"}/>}
+ {p.note&&<p className="practice-status-note">{p.note}</p>}{error&&<p className="form-error" role="alert">{error}</p>}{p.rewarded>0?<p className="reading-notice"><Check size={18}/>完成奖励已到账 <StepAmount value={p.rewarded} signed/></p>:!p.rewardEligible?<p className="reading-muted">今天这科奖励已领取，本次继续记录学习，不重复发放。</p>:<p className="reading-muted">真实做完这一套可攒 <StepAmount value={2}/>，批改正确率不影响奖励。</p>}
  {p.sources.length>0&&<details><summary>这次练习来自哪些错题</summary>{p.sources.map(s=><article className="practice-question-preview" key={s.id}><strong>{s.title}</strong><p>{s.question}</p><p>知识点：{s.knowledgePoints.join("、")}</p>{s.photoUrl&&<PhotoPreviewButton src={s.photoUrl} alt={`${s.title}的来源照片`}>查看来源原图</PhotoPreviewButton>}</article>)}</details>}
  {p.paper && <>
    <h3>{p.paper.title}</h3>
