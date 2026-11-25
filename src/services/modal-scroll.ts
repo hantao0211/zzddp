@@ -3,7 +3,23 @@ export function installModalScrollGuard() {
   let restore: (() => void) | undefined;
   let point: { x: number; y: number } | undefined;
   const hasDialog = () => !!document.querySelector("dialog[open]");
+  const suspended = new Set<HTMLDialogElement>();
   function sync() {
+    // A hidden, kept-alive page can still own a native modal. Release its
+    // top-layer input capture, keeping the mounted form for the return trip.
+    for (const dialog of document.querySelectorAll<HTMLDialogElement>("[data-study-pane][hidden] dialog[open]")) {
+      if (dialog.matches(":modal")) {
+        suspended.add(dialog);
+        dialog.close();
+      }
+    }
+    for (const dialog of suspended) {
+      if (!dialog.isConnected) suspended.delete(dialog);
+      else if (!dialog.closest("[data-study-pane][hidden]")) {
+        suspended.delete(dialog);
+        if (!dialog.open) dialog.showModal();
+      }
+    }
     if (hasDialog() && !restore) {
       const x = window.scrollX, y = window.scrollY;
       const body = document.body, root = document.documentElement;
@@ -58,13 +74,16 @@ export function installModalScrollGuard() {
     if (hasDialog() && !event.ctrlKey && !canScroll(event.target, event.deltaX, event.deltaY) && event.cancelable) event.preventDefault();
   }
   const observer = new MutationObserver(sync);
-  observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["open"] });
+  observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["open", "hidden"] });
   document.addEventListener("touchstart", start, { passive: true, capture: true });
   document.addEventListener("touchmove", move, { passive: false, capture: true });
   document.addEventListener("wheel", wheel, { passive: false, capture: true });
+  window.addEventListener("pageshow", sync);
   sync();
   return () => {
     observer.disconnect();
+    window.removeEventListener("pageshow", sync);
+    suspended.clear();
     document.removeEventListener("touchstart", start, true);
     document.removeEventListener("touchmove", move, true);
     document.removeEventListener("wheel", wheel, true);

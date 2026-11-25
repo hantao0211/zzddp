@@ -65,8 +65,8 @@ export function StudyWorkspace({ initialPage }: { initialPage: "home" | "reading
 
   return <StudyNavigationContext.Provider value={navigation}>
     <div key={session} onClick={followStudyLink}>
-      {(initialPage === "home" || preloaded || page === "home") && <div hidden={page !== "home"}><LearningApp active={page === "home"} onDemoModeChange={setDemoMode} /></div>}
-      {(initialPage === "reading" || preloaded || page !== "home") && <div hidden={page === "home"}><ReadingApp active={page !== "home"} /></div>}
+      {(initialPage === "home" || preloaded || page === "home") && <div data-study-pane="" hidden={page !== "home"}><LearningApp active={page === "home"} onDemoModeChange={setDemoMode} /></div>}
+      {(initialPage === "reading" || preloaded || page !== "home") && <div data-study-pane="" hidden={page === "home"}><ReadingApp active={page !== "home"} /></div>}
       {ready && <StudyAssistant studyDate={date || undefined} navigationManaged={!demoMode} readingMode={page !== "home"} readingLogId={readingLogId} />}
     </div>
   </StudyNavigationContext.Provider>;
