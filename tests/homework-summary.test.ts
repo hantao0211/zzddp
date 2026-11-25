@@ -71,18 +71,22 @@ test("uncertain tasks with linked evidence do not claim the photos have never be
   assert.doesNotMatch(homeworkSummary(s)!.rows[1].photoDetail, /AI还没把照片与这一项对应/);
 });
 
-test("both flower reminders share the viewed day's Shanghai evening window", () => {
-  const date = "2026-11-17";
-  const at = (time: string) => Date.parse(`${date}T${time}+08:00`);
-  const start = at("20:30:00"), end = at("22:00:00");
-  for (const time of ["00:00:00", "07:15:00", "07:45:00", "16:00:00", "17:00:00", "19:30:00", "20:00:00", "20:29:59.999"]) {
-    assert.deepEqual(gardenReminderTiming(date, at(time)), { open: false, nextChange: start });
-  }
-  for (const time of [start, end - 1]) {
-    assert.deepEqual(gardenReminderTiming(date, time), { open: true, nextChange: end });
-  }
-  for (const time of [end, at("23:59:59"), Date.parse("2026-11-18T00:00:00+08:00"), start + 86400000]) {
-    assert.deepEqual(gardenReminderTiming(date, time), { open: false, nextChange: null });
+test("flower reminders follow the Shanghai school week and stop at 23:00 every day", () => {
+  for (const [date, hour] of [
+    ["2026-11-23", "19"], ["2026-11-24", "19"], ["2026-11-25", "19"],
+    ["2026-11-26", "19"], ["2026-11-27", "19"], ["2026-11-28", "09"], ["2026-11-29", "09"],
+  ]) {
+    const at = (time: string) => Date.parse(`${date}T${time}+08:00`);
+    const start = at(`${hour}:00:00`), end = at("23:00:00");
+    for (const time of [at("00:00:00"), at("07:45:00"), start - 1]) {
+      assert.deepEqual(gardenReminderTiming(date, time), { open: false, nextChange: start }, date);
+    }
+    for (const time of [start, at("22:00:00"), end - 1]) {
+      assert.deepEqual(gardenReminderTiming(date, time), { open: true, nextChange: end }, date);
+    }
+    for (const time of [end, at("23:59:59"), at("00:00:00") + 86400000, start + 86400000]) {
+      assert.deepEqual(gardenReminderTiming(date, time), { open: false, nextChange: null }, date);
+    }
   }
 });
 

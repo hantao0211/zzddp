@@ -5,8 +5,10 @@ import type { HomeworkSnapshot } from "./homework";
 import { needsReviewTraceUpdate } from "./review-policy";
 
 export function gardenReminderTiming(date: string, now = Date.now()) {
-  const start = Date.parse(`${date}T20:30:00+08:00`);
-  const end = Date.parse(`${date}T22:00:00+08:00`);
+  const weekday = new Date(`${date}T00:00:00Z`).getUTCDay();
+  const startHour = weekday === 0 || weekday === 6 ? "09" : "19";
+  const start = Date.parse(`${date}T${startHour}:00:00+08:00`);
+  const end = Date.parse(`${date}T23:00:00+08:00`);
   if (now < start) return { open: false, nextChange: start };
   if (now < end) return { open: true, nextChange: end };
   return { open: false, nextChange: null };
