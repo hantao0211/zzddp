@@ -46,13 +46,25 @@ try {
   await edit.getByRole("button",{name:"保存活动"}).tap();
   await edit.waitFor({state:"hidden"});
 
+  await page.reload();
+  await page.getByRole("button",{name:"成长活动",exact:true}).click();
+  await editButton.tap();
+  await edit.getByRole("button",{name:/活动图标.*绘画/}).waitFor();
+  await edit.getByRole("button",{name:"取消",exact:true}).tap();
+  // An existing rule without an explicit icon can also acquire one.
+  await panel.getByRole("button",{name:"编辑家庭小帮手",exact:true}).tap();
+  await edit.getByRole("button",{name:/活动图标/}).tap();
+  await edit.getByRole("button",{name:"书写",exact:true}).tap();
+  await edit.getByRole("button",{name:"保存活动",exact:true}).tap();
+  await edit.waitFor({state:"hidden"});
+
   const child = await browser.newPage(options);
   await post(child,"session",{username:"qa-child",password});
   await child.goto(base+"/reading/?view=growth");
   const card = child.locator(".growth-activities article").filter({hasText:"模拟写字课"});
   await card.locator(".journal-tile-icon .lucide-palette").waitFor();
   const preset = child.locator(".growth-activities article").filter({hasText:"家庭小帮手"});
-  await preset.locator(".journal-tile-icon .lucide-house").waitFor();
+  await preset.locator(".journal-tile-icon .lucide-pencil").waitFor();
   console.log("ACTIVITY_ICON_CREATE_EDIT_CANCEL_CHILD_OK",process.env.SMOKE_BROWSER);
 } finally {
   await browser.close();
