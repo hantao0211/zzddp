@@ -14,6 +14,7 @@ import { useEffect, useRef, useState } from "react";
 import { homeworkPost, homeworkRequest } from "@/services/homework-gateway";
 import type { GradedQuestion, GradingReading, GradingBatchView, GradingSummary, MistakeView } from "@/domain/grading";
 import { Image, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, MessageCircle, PencilLine, Lightbulb, X } from "lucide-react";
+import { MistakeSortSchema, mistakeSortLabels, type MistakeSort } from "@/domain/mistake-sort";
 import { isSignatureRecord } from "@/domain/grading-signature";
 import { GradingFilters, filterLabels, type GradingFilter } from "./grading-filters";
 import { StatusIndicator } from "./status-indicator";
@@ -81,7 +82,8 @@ function pageStatus(batch: GradingBatchView) {
   return "等待批改";
 }
 
-function GradeDetail({close, position, count, move, itemKey, children}: {
+function GradeDetail({close, position, count, move, itemKey, children, label = "批改详情"}: {
+  label?: string;
   close: () => void; position: number; count: number; move: (index: number) => void; itemKey: string; children: React.ReactNode;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
@@ -92,7 +94,7 @@ function GradeDetail({close, position, count, move, itemKey, children}: {
     return () => element?.close();
   }, []);
   useEffect(() => { if (body.current) body.current.scrollTop = 0; },[itemKey]);
-  return <dialog ref={dialog} className="dialog grade-detail-dialog" aria-label="批改详情" onCancel={e => { e.preventDefault(); close(); }}>
+  return <dialog ref={dialog} className="dialog grade-detail-dialog" aria-label={label} onCancel={e => { e.preventDefault(); close(); }}>
     <header className="grade-detail-nav">
       <button type="button" onClick={close}><ChevronLeft size={17} aria-hidden="true" />返回列表</button>
       <div><button type="button" aria-label="上一条" disabled={position <= 0} onClick={() => move(position - 1)}><ChevronLeft size={18} /></button>
@@ -228,10 +230,10 @@ function mistakeSourceLabel(item: MistakeView, compact = false) {
   }
   return source?.title ? `未匹配作业 · ${source.title}` : compact ? "作业待匹配" : "未匹配具体作业";
 }
-type MistakeFilters = { subject: PracticeSubject | ""; scope: LearningScope | "";more?:Selections };
+type MistakeFilters = { subject: PracticeSubject | ""; scope: LearningScope | ""; sort: MistakeSort; more?:Selections };
 
 function readMistakes(filters: MistakeFilters, offset: number, signal: AbortSignal) {
-  const query = new URLSearchParams({ offset: String(offset), limit: String(MISTAKE_PAGE_SIZE) });
+  const query = new URLSearchParams({ offset: String(offset), limit: String(MISTAKE_PAGE_SIZE), sort: filters.sort });
   if (filters.subject) query.set("subject", filters.subject);
   if (filters.scope) query.set("scope", filters.scope);
   if(filters.more){
@@ -305,7 +307,7 @@ function MistakeScopeEditor({ item, close, saved }: {
 }
 
 export function MistakeBook({ canManage = false }: { canManage?: boolean }) {
-  const [filters, setFilters] = useState<MistakeFilters>({ subject: "", scope: "" });
+  const [filters, setFilters] = useState<MistakeFilters>({ subject: "", scope: "", sort:"newest" });
   const [data, setData] = useState<MistakePage | null>(null);
   const [error, setError] = useState("");
   const [revision, setRevision] = useState(0);
@@ -314,6 +316,7 @@ export function MistakeBook({ canManage = false }: { canManage?: boolean }) {
   const [openId, setOpenId] = useState<string | null>(null);
   const requests = useRef<AbortController>(null);
   const heading = useRef<HTMLHeadingElement>(null);
+  const opener = useRef<HTMLButtonElement | null>(null);
   const openIdRef = useRef(openId);
   openIdRef.current = openId;
 
@@ -363,7 +366,7 @@ export function MistakeBook({ canManage = false }: { canManage?: boolean }) {
   }
 
   function changeFilters(next: MistakeFilters) {
-    if (next.subject === filters.subject && next.scope === filters.scope && next.more===filters.more) return;
+    if (next.subject === filters.subject && next.scope === filters.scope && next.more===filters.more && next.sort===filters.sort) return;
     requests.current?.abort();
     setOpenId(null);
     setPage(0);
@@ -376,19 +379,21 @@ export function MistakeBook({ canManage = false }: { canManage?: boolean }) {
     heading.current?.focus();
   }
 
+  const index = data?.items.findIndex(item => item.id === openId) ?? -1;
+  const selected = data?.items[index];
   const pageCount = Math.ceil((data?.total ?? 0) / MISTAKE_PAGE_SIZE);
   return <section className="card grade-panel mistake-book" aria-label="错题本">
     <h2 ref={heading} tabIndex={-1}>我的错题本{data ? ` · ${data.total}题` : ""}</h2>
-    <p className="grade-source">已核验的错题会沿用原作业归属，可单独纠正个别题。</p>
-    <div className="tabs grade-filters" role="group" aria-label="按科目筛选">
-      {(["", ...PracticeSubjectSchema.options] as const).map(subject =>
-        <button type="button" key={subject} aria-pressed={filters.subject === subject} className={filters.subject === subject ? "selected" : ""}
-          onClick={() => changeFilters({ ...filters, subject })}>{subject || "全部科目"}</button>)}
-    </div>
-    <div className="tabs grade-filters" role="group" aria-label="按课内外筛选">
-      {(["", ...LearningScopeSchema.options] as const).map(scope =>
-        <button type="button" key={scope} aria-pressed={filters.scope === scope} className={filters.scope === scope ? "selected" : ""}
-          onClick={() => changeFilters({ ...filters, scope })}>{scope ? scopeLabels[scope] : "全部归属"}</button>)}
+    <div className="mistake-toolbar" role="group" aria-label="错题筛选与排序">
+      <label>科目<select value={filters.subject} onChange={e => changeFilters({...filters,subject:e.target.value ? PracticeSubjectSchema.parse(e.target.value) : ""})}>
+        <option value="">全部科目</option>{PracticeSubjectSchema.options.map(s => <option key={s} value={s}>{s}</option>)}
+      </select></label>
+      <label>归属<select value={filters.scope} onChange={e => changeFilters({...filters,scope:e.target.value ? LearningScopeSchema.parse(e.target.value) : ""})}>
+        <option value="">全部归属</option>{LearningScopeSchema.options.map(s => <option key={s} value={s}>{scopeLabels[s]}</option>)}
+      </select></label>
+      <label>排序<select value={filters.sort} onChange={e => changeFilters({...filters,sort:MistakeSortSchema.parse(e.target.value)})}>
+        {MistakeSortSchema.options.map(s => <option key={s} value={s}>{mistakeSortLabels[s]}</option>)}
+      </select></label>
     </div>
     {data?.options&&data.analysis&&<MistakeInsights options={data.options} analysis={data.analysis} filters={filters.more??{}} change={more=>changeFilters({...filters,more})} indexing={data.indexing}/>}
     {error && <div className="form-error" role="alert">{error} <button type="button" className="text-button" onClick={() => {
@@ -401,17 +406,15 @@ export function MistakeBook({ canManage = false }: { canManage?: boolean }) {
       const scope = scopeLabels[item.scope || "unknown"];
       const source = mistakeSourceLabel(item, true);
       const summary = mistakeQuestionSummary(item.question);
-      const open = openId === item.id;
-      const detailsId = `mistake-details-${item.id}`;
       return <section className="mistake-entry" key={item.id}>
-        <button type="button" className="mistake-toggle" aria-expanded={open} aria-controls={detailsId}
-          onClick={() => setOpenId(open ? null : item.id)}>
+        <button type="button" className="mistake-toggle" aria-haspopup="dialog"
+          onClick={event => {opener.current=event.currentTarget; setOpenId(item.id);}}>
           <span className="mistake-summary">
             <strong>{summary.title}</strong>
             {summary.preview && <span className="mistake-stem-preview">{summary.preview}</span>}
-            <small>{item.date} · {item.subject}{item.tags?.form[0]&&item.tags.form[0]!=="待分类"?" · "+item.tags.form[0]:""}</small>
+            <small>{item.lastDate || "日期待补充"} · {item.subject}{filters.sort === "frequent" && ` · 收录${item.occurrences}次`}{item.tags?.form[0]&&item.tags.form[0]!=="待分类"?" · "+item.tags.form[0]:""}</small>
           </span>
-          {open ? <ChevronUp size={18} aria-hidden="true" /> : <ChevronDown size={18} aria-hidden="true" />}
+          <ChevronRight size={18} aria-hidden="true" />
         </button>
         <div className="mistake-scope">
           {canManage ? <button type="button" className="mistake-scope-edit" aria-label={`${scope}，更改本题归属`}
@@ -420,15 +423,18 @@ export function MistakeBook({ canManage = false }: { canManage?: boolean }) {
           </button> : <strong className="mistake-scope-chip">{scope}</strong>}
           <span className="mistake-origin" title={source}>{source}</span>
         </div>
-        <div id={detailsId} hidden={!open}>
-        {open && <>
-        <QuestionTags item={item} canManage={canManage} saved={()=>setRevision(n=>n+1)}/>
-        {item.retest && <p className="mistake-retest">复测{item.retest.rounds}轮 · 已判定{item.retest.attempts}题 · 通过率{item.retest.passRate === null ? "暂无" : `${item.retest.passRate}%`}{item.retest.uncertain ? ` · ${item.retest.uncertain}题待确认` : ""}{item.retest.blank ? ` · ${item.retest.blank}题未作答` : ""}{item.retest.lastDate ? ` · 最近${item.retest.lastDate}` : ""}。通过率只统计已确认的对错。</p>}
-        <QuestionCard question={item.question} date={item.date} subject={item.subject} pageId={item.pageId} imageUrl={item.imageUrl} displayLabel={summary.title} />
-        </>}
-        </div>
       </section>;
     })}
+    {selected && data && <GradeDetail label="错题详情" itemKey={selected.id} position={index} count={data.items.length}
+      move={n=>setOpenId(data.items[n].id)} close={()=>{
+        setOpenId(null);
+        requestAnimationFrame(() => (opener.current?.isConnected ? opener.current : heading.current)?.focus({preventScroll:true}));
+      }}>
+      <p className="grade-detail-source">{selected.date || "日期待补充"} · {selected.subject} · {mistakeSourceLabel(selected)}</p>
+        <QuestionCard key={selected.id} detailMode question={selected.question} date={selected.date} subject={selected.subject} pageId={selected.pageId} imageUrl={selected.imageUrl} displayLabel={mistakeQuestionSummary(selected.question).title} />
+        <QuestionTags key={selected.id} item={selected} canManage={canManage} saved={()=>setRevision(n=>n+1)}/>
+        {selected.retest && <p className="mistake-retest">复测{selected.retest.rounds}轮 · 已判定{selected.retest.attempts}题 · 通过率{selected.retest.passRate === null ? "暂无" : `${selected.retest.passRate}%`}{selected.retest.uncertain ? ` · ${selected.retest.uncertain}题待确认` : ""}{selected.retest.blank ? ` · ${selected.retest.blank}题未作答` : ""}{selected.retest.lastDate ? ` · 最近${selected.retest.lastDate}` : ""}。通过率只统计已确认的对错。</p>}
+    </GradeDetail>}
     {pageCount > 1 && <nav className="mistake-pagination" aria-label="错题本分页">
       <button type="button" className="button secondary compact" disabled={page === 0} onClick={() => changePage(page - 1)}>
         <ChevronLeft size={16} aria-hidden="true" />上一页

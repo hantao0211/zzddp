@@ -1,3 +1,4 @@
+import { MistakeSortSchema } from "../../domain/mistake-sort";
 import { noteFailure } from "../diagnostics/events";
 import { GradeReviewSchema } from "../../domain/grade-review";
 import { ConventionInput, FeedbackInput } from "./completion-feedback";
@@ -108,11 +109,13 @@ export class HomeworkHTTP {
           !Number.isSafeInteger(offset) || offset < 0 || offset > 100000 ||
           !Number.isSafeInteger(limit) || limit < 1 || limit > 30) throw new HomeworkError(400, "筛选条件无效。");
         const scope = url.searchParams.get("scope");
+        const sort = MistakeSortSchema.safeParse(url.searchParams.get("sort") ?? "newest");
+        if (!sort.success) throw new HomeworkError(400,"错题排序方式无效。");
         const parsedScope = LearningScopeSchema.safeParse(scope);
         if (scope && !parsedScope.success) throw new HomeworkError(400, "请选择课内、课外或待分类。");
         json(res, this.practice
           ? this.practice.mistakes(subject as PracticeSubject || undefined, parsedScope.data, offset, limit,url.searchParams)
-          : this.store.grading.mistakes(subject, offset, limit));
+          : this.store.grading.mistakes(subject, offset, limit, sort.data));
         return;
       }
       if (path === "/uploads" && req.method === "POST") {

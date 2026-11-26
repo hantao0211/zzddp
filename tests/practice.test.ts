@@ -526,3 +526,20 @@ test("ink detail pairs a coloured annotation with a graphite view and leaves a p
   assert.equal(pixels[at(graphiteX,50)],40);
   assert.ok(pixels[at(graphiteX+250,50)]<40);
 });
+
+test("mistake book sorts the filtered collection before slicing into pages",()=>{
+  const f=setup();
+  try {
+    const ids=Array.from({length:13},(_,i)=>f.seed("数学","课堂练习","sort-"+String(i).padStart(2,"0")));
+    ids.forEach((id,i)=>f.homework.db.prepare("UPDATE grading_mistakes SET last_date=? WHERE id=?").run("2026-11-"+String(i+1).padStart(2,"0"),id));
+    f.seed("英语","听写","another-subject");
+    const db=f.homework.db;
+    db.prepare("INSERT INTO grading_runs(id,date,primary_page_id,source,created_at,updated_at) VALUES('run-sort','2026-11-01','page','{}','','')").run();
+    for (const n of [1,2,3]) db.prepare("INSERT INTO grading_occurrences VALUES(?,?,?)").run(ids[0],"run-sort","q"+n);
+    const http=new PracticeHTTP(f.store);
+    const page=(sort:string,offset:number)=>http.mistakes("数学",undefined,offset,10,new URLSearchParams({sort})).items.map(item=>item.id);
+    assert.deepEqual(page("newest",10),ids.slice(0,3).reverse());
+    assert.deepEqual(page("oldest",10),ids.slice(10));
+    assert.deepEqual(page("frequent",0),[ids[0],...ids.slice(4).reverse()]);
+  } finally { f.close(); }
+});

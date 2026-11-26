@@ -68,3 +68,7 @@
 .grade-detail-tabs { display: flex; gap: 4px; margin-block: 14px; border-bottom: 1px solid var(--border); }
 .grade-detail-tabs button { min-height: 44px; padding: 0 10px; color: var(--muted); background: transparent; font: inherit; font-size: .9rem; border-bottom: 2px solid transparent; }
 .grade-detail-tabs button[aria-pressed=true] { color: var(--accent); border-color: currentColor; }
+
+.mistake-toolbar { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: clamp(4px, 1vw, 12px); max-width: 33rem; margin: 12px 0; }
+.mistake-toolbar label { display: grid; min-width: 0; gap: 3px; font-size: .8125rem; color: var(--muted); }
+.mistake-toolbar select { box-sizing: border-box; width: 100%; min-width: 0; min-height: 44px; font: inherit; font-size: .9375rem; color: var(--ink); background-color: var(--theme-surface); border: 1px solid var(--border); border-radius: 8px; padding-inline: 6px 0; }

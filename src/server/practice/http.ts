@@ -1,3 +1,4 @@
+import { compareMistakes, MistakeSortSchema } from "../../domain/mistake-sort";
 import { noteFailure } from "../diagnostics/events";
 import {z} from "zod";
 import {createReadStream} from "node:fs";
@@ -50,7 +51,8 @@ export class PracticeHTTP{
  }
  private mistakePage(subject: PracticeSubject | undefined,scope:LearningScope|undefined,offset:number,limit:number,params:URLSearchParams){
   const result=this.store.analysis.query(this.store.candidates(subject),params,subject,scope);
-  const items=result.list.sort((a,b)=>b.lastDate.localeCompare(a.lastDate)||a.id.localeCompare(b.id));
+  const order = MistakeSortSchema.parse(params.get("sort") ?? "newest");
+  const items=result.list.sort((a,b)=>compareMistakes(a,b,order));
   return {total:items.length,options:result.options,analysis:result.analysis,indexing:result.indexing,items:items.slice(offset,offset+limit).map(item=>{
     const edits=result.edits.get(item.id);return {...this.mistakeView(item),tags:result.byId.get(item.id)?.tags,tagRevision:edits?.revision??0,manualTags:edits?.tags??{}};
   })};

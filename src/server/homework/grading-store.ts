@@ -1,3 +1,4 @@
+import type { MistakeSort } from "../../domain/mistake-sort";
 import { isSignatureRecord, signatureRecord, signatureReview } from "../../domain/grading-signature";
 import type { HomeworkRule } from "../../domain/memory";
 import { LearnedMemories } from "./memory";
@@ -296,10 +297,11 @@ export class GradingStore {
     const row = this.store.db.prepare("SELECT code,stage,failed_at,source FROM grading_diagnostics WHERE run_id=?").get(runId) as { code: string; stage: GradingStage; failed_at: string; source: GradingFailure["source"] } | undefined;
     return row ? { code: row.code, stage: row.stage, failedAt: row.failed_at, source: row.source, ...gradingFailureText(row.code) } : null;
   }
-  mistakes(subject: string | null, offset = 0, limit = 30): { total: number; items: MistakeView[] } {
+  mistakes(subject: string | null, offset = 0, limit = 30, sort: MistakeSort = "newest"): { total: number; items: MistakeView[] } {
     const where = "status='verified'" + (subject ? " AND subject=?" : ""); const args = subject ? [subject] : [];
     const total = (this.store.db.prepare(`SELECT COUNT(*) AS n FROM grading_mistakes WHERE ${where}`).get(...args) as { n: number }).n;
-    const rows = this.store.db.prepare(`SELECT *, (SELECT COUNT(*) FROM grading_occurrences WHERE mistake_id=grading_mistakes.id) AS occurrences FROM grading_mistakes WHERE ${where} ORDER BY last_date DESC,rowid DESC LIMIT ? OFFSET ?`).all(...args, limit, offset) as { id: string; first_date: string; last_date: string; subject: string; title: string; page_id: string; payload: string; occurrences: number }[];
+    const ordering = sort === "frequent" ? "occurrences DESC, last_date DESC" : sort === "oldest" ? "last_date ASC" : "last_date DESC";
+    const rows = this.store.db.prepare(`SELECT *, (SELECT COUNT(*) FROM grading_occurrences WHERE mistake_id=grading_mistakes.id) AS occurrences FROM grading_mistakes WHERE ${where} ORDER BY ${ordering},id ASC LIMIT ? OFFSET ?`).all(...args, limit, offset) as { id: string; first_date: string; last_date: string; subject: string; title: string; page_id: string; payload: string; occurrences: number }[];
     return { total, items: rows.map(r => ({ id: r.id, date: r.first_date, lastDate: r.last_date, subject: r.subject, title: r.title, pageId: r.page_id, occurrences: r.occurrences, question: JSON.parse(r.payload) })) };
   }
 }

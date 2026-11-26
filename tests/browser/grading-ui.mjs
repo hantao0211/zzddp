@@ -54,7 +54,7 @@ try {
       assert.equal(limit, 10);
       const total = subject === "英语" ? 0 : subject === "数学" ? 1 : 301;
       const items = Array.from({ length: Math.min(limit, total - offset) }, (_, index) => {
-        const number = offset + index + 2;
+        const number = url.searchParams.get("sort") === "oldest" ? total + 1 - offset - index : offset + index + 2;
         const sample = legacyLabels[number - 4];
         const question = number === 2 ? questions[1] : q("wrong", number);
         if (sample) Object.assign(question, { label: sample[0], question: longStem });
@@ -217,6 +217,9 @@ try {
   await panel.getByRole('button',{name:'先看需要留意的题',pressed:true}).waitFor();
   await page.getByRole("button", { name: "错题本", exact: true }).click();
   const book = page.getByRole("region", { name: "错题本", exact: true });
+  const mistakeDetail=page.getByRole("dialog",{name:"错题详情"});
+  const toolbar=book.getByRole("group",{name:"错题筛选与排序"});
+  const sort=toolbar.getByRole("combobox",{name:/^排序/});
   const toggle = number => book.getByRole("button", { name: new RegExp(`^第${number}题 `) });
   await toggle(2).waitFor();
   assert.equal(await book.locator(".mistake-entry").count(), 10);
@@ -228,6 +231,9 @@ try {
   assert.equal(await stem.textContent(), longStem);
   for (const width of [320, 390, 1280]) {
     await page.setViewportSize({width, height: 670});
+    const boxes=await Promise.all((await toolbar.getByRole("combobox").all()).map(el=>el.boundingBox()));
+    assert.equal(boxes.length,3);
+    assert.ok(boxes.every(b=>b.height>=44 && Math.abs(b.y-boxes[0].y)<2));
     const layout = await stem.evaluate(element => ({
       overflow: document.documentElement.scrollWidth > innerWidth,
       fits: element.getBoundingClientRect().right < innerWidth,
@@ -239,13 +245,21 @@ try {
   await page.setViewportSize({width: 390, height: 670});
   await page.screenshot({path: output + "/mistake-title-summary-mobile.png", fullPage: true});
   await book.getByRole("button", { name: /^第4大题 · 第8小题/ }).click();
-  await book.getByRole("heading", { name: "第4大题 · 第8小题", exact: true }).waitFor();
-  assert.equal(await book.locator(".grade-stem").textContent(), longStem);
-  await toggle(2).click();
-  await toggle(3).click();
-  assert.equal(await toggle(2).getAttribute("aria-expanded"), "false");
-  assert.equal(await toggle(3).getAttribute("aria-expanded"), "true");
-  assert.equal(await book.locator(".grade-question").count(), 1);
+  await mistakeDetail.getByRole("heading",{name:"第4大题 · 第8小题",exact:true}).waitFor();
+  assert.equal(await mistakeDetail.locator(".grade-stem").textContent(),longStem);
+  await mistakeDetail.getByRole("button",{name:"上一条"}).click();
+  await mistakeDetail.getByRole("heading",{name:"第3题",exact:true}).waitFor();
+  await mistakeDetail.getByRole("button",{name:"返回列表"}).click();
+  await sort.selectOption("oldest");
+  await toggle(302).waitFor();
+  await book.getByRole("button",{name:"下一页",exact:true}).click();
+  await toggle(292).click();
+  await page.keyboard.press("Escape");
+  await mistakeDetail.waitFor({state:"hidden"});
+  assert.equal(await sort.inputValue(),"oldest");
+  await book.getByText("第2／31页").waitFor();
+  await sort.selectOption("newest");
+  await toggle(2).waitFor();
   await book.getByRole("button", { name: "下一页", exact: true }).click();
   await toggle(12).waitFor();
   assert.equal(await book.locator(".mistake-entry").count(), 10);
@@ -255,11 +269,10 @@ try {
   await toggle(2).waitFor();
   await book.getByRole("button", { name: "下一页", exact: true }).click();
   await toggle(12).waitFor();
-  await book.getByRole("button", { name: "数学", exact: true }).click();
+  await toolbar.getByRole("combobox",{name:/^科目/}).selectOption("数学");
   await toggle(2).click();
-  await book.getByText("查看详情", { exact: true }).click();
-  await book.getByText("可能的错因 · 计算错误", { exact: true }).waitFor();
-  assert.equal(await book.locator(".grade-question").count(), 1);
+  await mistakeDetail.getByText("可能的错因 · 计算错误",{exact:true}).waitFor();
+  await mistakeDetail.getByRole("button",{name:"返回列表"}).click();
   const sourceText = `来自作业 · ${fullAssignment}`;
   const row = book.locator(".mistake-scope").first();
   const editScope = row.getByRole("button", { name: /更改本题归属/ });
@@ -284,11 +297,12 @@ try {
   await scopeDialog.getByRole("button", { name: "取消", exact: true }).tap();
   await scopeDialog.waitFor({ state: "hidden" });
   await page.setViewportSize({ width: 390, height: 670 });
-  await book.getByRole("button", { name: "查看原题照片", exact: true }).click(); await book.locator("img").waitFor();
-  await book.locator("img").scrollIntoViewIfNeeded();await page.waitForFunction(()=>document.querySelector('.mistake-book img')?.naturalWidth>0||document.querySelector('.grade-photo img')?.naturalWidth>0);
-  assert.ok((await book.locator('img').getAttribute('src')).endsWith('?size=screen'));assert.ok((await book.getByRole('link',{name:'下载图片',exact:true}).getAttribute('href')).endsWith('?size=screen&download=1'));
+  await toggle(2).click();
+  await mistakeDetail.getByRole("button", { name: "原题照片", exact: true }).click(); await mistakeDetail.locator("img").waitFor();
+  await mistakeDetail.locator("img").scrollIntoViewIfNeeded();await page.waitForFunction(()=>document.querySelector('.mistake-book img')?.naturalWidth>0||document.querySelector('.grade-photo img')?.naturalWidth>0);
+  assert.ok((await mistakeDetail.locator('img').getAttribute('src')).endsWith('?size=screen'));assert.ok((await mistakeDetail.getByRole('link',{name:'下载图片',exact:true}).getAttribute('href')).endsWith('?size=screen&download=1'));
   assert.ok(photos >= 1);
-  const bigPhoto = book.getByRole('button', { name: '查看高清大图', exact: true });
+  const bigPhoto = mistakeDetail.getByRole('button', { name: '查看高清大图', exact: true });
   await bigPhoto.tap();
   const photoDialog = page.getByRole('dialog', { name: '照片预览', exact: true });
   await photoDialog.getByRole('img').waitFor();
@@ -296,17 +310,18 @@ try {
   await photoDialog.getByRole('button', { name: '关闭照片', exact: true }).tap();
   await photoDialog.waitFor({ state: 'hidden' });
   assert.ok(await bigPhoto.evaluate(button => document.activeElement === button));
-  await book.getByRole("button", { name: "收起原图", exact: true }).click();
+  await mistakeDetail.getByRole("button",{name:"返回列表"}).click();
   await page.screenshot({ path: output + "/mistake-book-mobile.png", fullPage: true });
-  await book.getByRole("button", { name: "英语", exact: true }).click();
+  await toolbar.getByRole("combobox",{name:/^科目/}).selectOption("英语");
   await book.getByText("这个分类暂时没有已核验的错题。", { exact: true }).waitFor();
-  await book.getByRole("button", { name: "数学", exact: true }).click();
+  await toolbar.getByRole("combobox",{name:/^科目/}).selectOption("数学");
   await toggle(2).click();
-  await book.getByRole("button", { name: "和小步聊这题", exact: true }).click();
+  await mistakeDetail.getByRole("button", { name: "和小步聊这题", exact: true }).click();
   await page.locator("#assistant-question").waitFor();
   assert.equal(await page.locator("#assistant-question").inputValue(), "");
   await page.getByRole("button", {name:"帮我看看这里有没有认错"}).waitFor();
   await page.getByRole("button", { name: "关闭小助手", exact: true }).click();
+  await mistakeDetail.getByRole("button",{name:"返回列表"}).click();
   failed = true; await page.getByRole("button", { name: "返回首页", exact: true }).click();
   await page.getByRole("button", { name: "查看未完成原因", exact: true }).click();
   const ungraded = categoryButton("未批改");
