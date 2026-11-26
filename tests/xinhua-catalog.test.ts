@@ -39,3 +39,16 @@ test("a failed detail page does not suppress valid results; all failed pages rem
  assert.equal((await lookupXinhua(query,request)).length,1);
  await assert.rejects(lookupXinhua(query,async input=>String(input).includes("search.xhsd")?html(search()):html("changed layout")),/unavailable/);
 });
+
+test("an explicit Xinhua miss stays a miss when both fallback catalogs are offline",async()=>{
+ const empty='<i class="icon-empty-search"></i><p class="desc">抱歉，没有找到与“'+isbn+'”相关的商品</p>';
+ const origins:string[]=[];
+ const results=await lookupBooks(isbn,async input=>{
+  const {hostname}=new URL(String(input));origins.push(hostname);
+  if(hostname==="search.xhsd.com")return html(empty);
+  throw Error("offline");
+ });
+ assert.deepEqual(results,[]);
+ assert.deepEqual(origins,["search.xhsd.com","www.googleapis.com","openlibrary.org"]);
+ assert.throws(()=>xinhuaCandidates(empty,{kind:"title",value:"另一项查询"}),/Unrecognized/);
+});

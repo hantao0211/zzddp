@@ -13,6 +13,11 @@ function entities(text:string):string {
 const plain=(html:string)=>entities(html.replace(/<[^>]*>/g," ")).replace(/\s+/g," ").trim();
 const normalized=(text:string)=>text.normalize("NFKC").replace(/[^\p{L}\p{N}]/gu,"").toLowerCase();
 export function xinhuaCandidates(html:string,query:{kind:"isbn"|"title";value:string}):string[]{
+ // The catalog omits its result list entirely on an explicit empty search.
+ if(/class=["'][^"']*\bicon-empty-search\b[^"']*["']/.test(html)){
+  const description=html.match(/<p\b[^>]*\bclass=["']desc["'][^>]*>([^<]*没有找到与[^<]*)<\/p>/)?.[1];
+  if(description && plain(description)===`抱歉，没有找到与“${query.value}”相关的商品`)return [];
+ }
  if(!/class=["'][^"']*\bshop-search-items-img-type\b/.test(html))throw new Error("Unrecognized catalog search page");
  const ids:string[]=[];
  for(const card of html.matchAll(/<li\b[^>]*\bclass=["'][^"']*\bjs-product\b[^"']*["'][^>]*>[\s\S]*?(?=<li\b[^>]*\bclass=["'][^"']*\bjs-product\b|$)/g)){
