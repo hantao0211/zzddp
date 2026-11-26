@@ -27,7 +27,12 @@ try{
     const url=new URL(route.request().url());
     const send=data=>route.fulfill({contentType:"application/json",body:JSON.stringify(data)});
     if(url.pathname.endsWith("/status"))return send({authenticated:true,available:true,accounts:true,viewer});
-    if(url.pathname.endsWith("/practice/exams"))return send({items:url.searchParams.has("latest")?exams.slice(0,1):exams,total:exams.length,stage:null});
+    const archiveItems=[...exams,...Array.from({length:6},(_,i)=>({...exams[1],id:"extra-"+i,title:i===5?"翻页验收卷":"模拟卷"+i}))];
+    if(url.pathname.endsWith("/practice/exams")){
+      const offset=Number(url.searchParams.get("offset"));
+      return send({items:url.searchParams.has("latest")?archiveItems.slice(0,1):archiveItems.slice(offset,offset+10),total:archiveItems.length,stage:null});
+    }
+    if(url.pathname.endsWith("/practice/exams/extra-5"))return send({exam:archiveItems.at(-1),pages:[],questions:[]});
     if(url.pathname.endsWith("/practice/exams/3"))return send({exam:exams[3],pages,questions});
     if(url.pathname.endsWith("/exam-pages/first-page/retry") && route.request().method()==="POST"){
       retries++;pages[0].status="queued";pages[0].note="";return send({saved:true});
@@ -43,6 +48,28 @@ try{
   await page.getByRole("button",{name:/全部试卷/}).click();
   const list=page.getByRole("dialog").locator(".exam-line");
   await list.nth(3).waitFor();
+  const archive=page.getByRole("dialog",{name:"试卷档案"});
+  const home=archive.getByRole("button",{name:"返回首页",exact:true});
+  assert.equal(await home.locator("svg.lucide-arrow-left").count(),1);
+  assert.equal(await archive.getByRole("button",{name:"关闭试卷档案"}).count(),0);
+  await archive.getByRole("button",{name:"下一页"}).click();
+  const last=archive.getByRole("button",{name:/翻页验收卷/});
+  await last.click();
+  await archive.getByRole("button",{name:"返回全部试卷"}).click();
+  await last.waitFor();
+  assert.ok(await archive.getByRole("button",{name:"下一页"}).isDisabled());
+  await archive.getByRole("button",{name:"上一页"}).click();
+  await list.nth(3).waitFor();
+  const body=archive.locator(":scope > .reading-dialog-body");
+  await page.setViewportSize({width:320,height:570});
+  await body.evaluate(el=>{el.scrollTop=150;});
+  const previousScroll=await body.evaluate(el=>el.scrollTop);
+  assert.ok(previousScroll>0);
+  await list.nth(3).click();
+  await archive.getByRole("button",{name:"返回全部试卷"}).click();
+  await page.waitForFunction(()=>document.activeElement?.getAttribute("data-exam-id")==="3");
+  assert.equal(await body.evaluate(el=>el.scrollTop),previousScroll);
+  await page.setViewportSize({width:320,height:844});
   const colors=[];
   for(let i=0;i<states.length;i++){
     const row=list.nth(i);
@@ -66,7 +93,8 @@ try{
   assert.equal(await list.first().evaluate(el=>getComputedStyle(el).backgroundColor),colors[1]);
   exams[3].status="已整理";exams[3].done=1;
   await list.nth(3).getByText("已整理",{exact:true}).waitFor({timeout:22000});
-  await page.getByRole("button",{name:"关闭试卷档案"}).click();
+  await home.click();
+  await archive.waitFor({state:"hidden"});
   await latest.getByText("已整理").waitFor();
   exams[3].status="识读未完成";
   for (const role of ["child","parent"]) {
@@ -94,11 +122,12 @@ try{
       if(full){assert.equal(bounds.y,0);assert.equal(bounds.height,height);assert.equal(bounds.width,width);}
       else assert.ok(bounds.width<width && bounds.height<height);
       const closeButton=modal.getByRole("button",{name:"关闭试卷档案"});
-      const closeBounds=await closeButton.boundingBox();
+      assert.ok(await closeButton.isVisible());
       await modal.getByRole("button",{name:"返回全部试卷"}).click();
       await modal.getByRole("heading",{name:"全部试卷"}).waitFor();
       assert.deepEqual(await modal.boundingBox(),bounds);
-      assert.deepEqual(await closeButton.boundingBox(),closeBounds);
+      assert.equal(await closeButton.count(),0);
+      assert.ok(await modal.getByRole("button",{name:"返回首页",exact:true}).isVisible());
       await modal.locator(".exam-line").nth(3).click();
       await failed.getByText("识读已停止",{exact:true}).waitFor();
       assert.deepEqual(await modal.boundingBox(),bounds);

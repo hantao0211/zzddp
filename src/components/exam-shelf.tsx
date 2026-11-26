@@ -51,7 +51,7 @@ export function ExamShelf({canManage,openMistakes,resume}:{canManage:boolean;ope
   function showMilestones(subject?:string){setMilestoneFromPaper(mode==="detail");setNotice("");setError("");setInitialSubject(subject);setMilestones(null);setMode("milestones");}
   const [error,setError]=useState(""),[busy,setBusy]=useState(""),[notice,setNotice]=useState("");
   const submitting=useRef(false),dialog=useRef<HTMLDialogElement>(null);
-  const body=useRef<HTMLDivElement>(null);
+  const body=useRef<HTMLDivElement>(null),listScroll=useRef(0);
   useEffect(()=>{const el=dialog.current;if(mode&&!el?.open)el?.showModal();if(!mode)el?.close();},[mode]);
   useEffect(()=>{
     const controller=new AbortController();let timer:ReturnType<typeof setTimeout>;
@@ -74,7 +74,7 @@ export function ExamShelf({canManage,openMistakes,resume}:{canManage:boolean;ope
     }catch(e){if(!controller.signal.aborted){setError(message(e));if(mode==="list"||!mode||mode==="detail")timer=setTimeout(load,15000);}}}
     void load();return ()=>{controller.abort();clearTimeout(timer);};
   },[mode,selected,offset,version]);
-  function openDetail(id:string){setOrigin(mode==="list"||mode==="milestones"?mode:null);setMilestoneFromPaper(false);setSelection(null);setPhoto(null);select(id);setNotice("");setDetail(null);setError("");setMode("detail");}
+  function openDetail(id:string){if(mode==="list")listScroll.current=body.current?.scrollTop??0;body.current?.scrollTo(0,0);setOrigin(mode==="list"||mode==="milestones"?mode:null);setMilestoneFromPaper(false);setSelection(null);setPhoto(null);select(id);setNotice("");setDetail(null);setError("");setMode("detail");}
   function close(){if(!submitting.current){setMode(null);setSelection(null);setPhoto(null);setOrigin(null);setMilestoneFromPaper(false);refresh(n=>n+1);}}
   const inQuestionForm=selection?.id&&selection.form&&selection.form!=="view";
   const backLabel=photo?(selection?"返回题目":"返回试卷"):inQuestionForm?"返回题目":selection?"返回题目列表":
@@ -88,7 +88,10 @@ export function ExamShelf({canManage,openMistakes,resume}:{canManage:boolean;ope
     if(selection){setSelection(null);return;}
     if(mode==="detail"&&origin){
       setMode(origin);
-      requestAnimationFrame(()=>dialog.current?.querySelector<HTMLButtonElement>('[data-exam-id="'+CSS.escape(selected)+'"]')?.focus());
+      requestAnimationFrame(()=>{
+        if(origin==="list")body.current?.scrollTo(0,listScroll.current);
+        dialog.current?.querySelector<HTMLButtonElement>('[data-exam-id="'+CSS.escape(selected)+'"]')?.focus({preventScroll:origin==="list"});
+      });
       return;
     }
     if(mode==="milestones"&&milestoneFromPaper){setMode("detail");setMilestoneFromPaper(false);return;}
@@ -120,7 +123,13 @@ export function ExamShelf({canManage,openMistakes,resume}:{canManage:boolean;ope
     {latestPaper&&<button className="text-button" onClick={()=>{setOffset(0);setError("");setNotice("");setMode("list");}}>全部试卷（{latest?.total}）</button>}
     {!mode&&error&&<p role="alert">{error} <button className="text-button" onClick={()=>{setError("");refresh(n=>n+1);}}>重试</button></p>}
     <dialog ref={dialog} className="reading-dialog exam-dialog" aria-label="试卷档案" onCancel={e=>{e.preventDefault();goBack();}}>
-      <header>{backLabel&&<button ref={backButton} type="button" className="text-button exam-nav-back" aria-label={backLabel} disabled={!!busy} onClick={goBack}><BackLabel>返回</BackLabel></button>}<h2>{photo?photo.alt:selection?(selection.id?"题目详情":"补录题目"):mode==="new"?"上传已批试卷":mode==="list"?"全部试卷":mode==="milestones"?"考试里程碑":detail?.exam.title||"试卷详情"}</h2><button className="icon-button" disabled={!!busy} aria-label="关闭试卷档案" onClick={close}><X/></button></header>
+      <header>
+        <button ref={backButton} type="button" className="text-button exam-nav-back" aria-label={backLabel??"返回首页"} disabled={!!busy} onClick={goBack}>
+          <BackLabel>{backLabel?"返回":"返回首页"}</BackLabel>
+        </button>
+        <h2>{photo?photo.alt:selection?(selection.id?"题目详情":"补录题目"):mode==="new"?"上传已批试卷":mode==="list"?"全部试卷":mode==="milestones"?"考试里程碑":detail?.exam.title||"试卷详情"}</h2>
+        {backLabel&&<button className="icon-button" disabled={!!busy} aria-label="关闭试卷档案" onClick={close}><X/></button>}
+      </header>
       <div ref={body} className="reading-dialog-body">
       {photo&&<div className="exam-photo-content"><PhotoPreviewContent {...photo}/></div>}
       <div hidden={!!photo}>

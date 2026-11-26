@@ -47,9 +47,9 @@ try{
  await dialog.getByRole("button",{name:"保存试卷资料"}).click();
  await dialog.getByText(/英语.*Unit 2/).waitFor();
  await dialog.getByRole("button",{name:"查看原卷"}).first().click();
- await page.getByRole("button",{name:"关闭照片"}).click();
+ await page.getByRole("button",{name:"返回试卷"}).click();
  assert.equal(await dialog.locator("summary").filter({hasText:"待核对"}).count(),2);
- await dialog.getByRole("button",{name:"关闭试卷档案"}).click();
+ await dialog.getByRole("button",{name:"返回首页"}).click();
  await page.locator(".exam-shelf .exam-line").waitFor();await checkSectionDivider();
  await page.getByRole("button",{name:"我的错题本",exact:true}).click();
  const book=page.getByRole("region",{name:"错题本",exact:true});

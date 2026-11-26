@@ -22,7 +22,7 @@ try{
  await page.reload();await page.getByRole("heading",{name:"我的课业手账"}).waitFor();
  const dialog=page.getByRole("dialog",{name:"试卷档案"});
  const enter=()=>page.getByRole("button",{name:"考试里程碑",exact:true}).click();
- const leave=()=>dialog.getByRole("button",{name:"关闭试卷档案"}).click();
+ const leave=()=>dialog.getByRole("button",{name:"返回首页"}).click();
  await enter();
  await dialog.getByRole("button",{name:"考前目标",exact:true}).click();
  await dialog.getByRole("button",{name:"定个目标"}).click();

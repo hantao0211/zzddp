@@ -54,13 +54,13 @@ try{
  await dialog.locator(".exam-question-text .v-correct").waitFor();
  await dialog.getByRole("button",{name:"返回题目列表",exact:true}).click();
  await dialog.getByText("已收录 1 道错题",{exact:true}).waitFor();
- await dialog.getByRole("button",{name:"关闭试卷档案"}).click();
+ await dialog.getByRole("button",{name:"返回首页"}).click();
  await page.getByRole("button",{name:/全部试卷/}).click();
  await dialog.locator(".exam-line").first().click();
  await dialog.getByRole("button",{name:/^全部 [0-9]+$/}).waitFor();
  await dialog.getByRole("button",{name:"返回全部试卷"}).click();
  await dialog.locator(".exam-line").first().waitFor();
- await dialog.getByRole("button",{name:"关闭试卷档案"}).click();
+ await dialog.getByRole("button",{name:"返回首页"}).click();
  assert.equal((await api("session","POST",{username:"exam-child",password})).status,200);
  await page.reload();await page.locator(".exam-shelf .exam-line").first().click();
  await dialog.locator(".exam-qrow").first().click();
