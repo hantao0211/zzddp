@@ -5,6 +5,7 @@ import { RedemptionInputSchema } from "../../domain/growth-economy";
 import { chatPhotos } from "../assistant/photos";
 import type {IncomingMessage,ServerResponse} from "node:http";
 import {z} from "zod";
+import {ShelfStatusSchema} from "../../domain/reading";
 import {DaySchema} from "../../domain/calendar";
 import {isParent,type Viewer} from "../../domain/accounts";
 import {ReadingStore,BookEditConflict} from "./store";
@@ -34,6 +35,11 @@ export class ReadingHTTP{
 
  if(path==="/books"&&req.method==="POST"){send(res,this.store.addBook(await body(),viewer.id));return;}
  const bookInfo=path.match(/^\/books\/([a-f0-9-]{36})$/);if(bookInfo){if(req.method==="GET"){send(res,this.store.book(bookInfo[1]));return;}if(req.method==="PATCH"){send(res,this.store.editBook(bookInfo[1],await body(),viewer.id));return;}}
+ const shelf=path.match(/^\/books\/([a-f0-9-]{36})\/status$/);
+ if(shelf&&req.method==="POST"){
+  const {status}=z.object({status:ShelfStatusSchema}).strict().parse(await body());
+  send(res,this.store.setShelfStatus(shelf[1],status,viewer.id));return;
+ }
  const book=path.match(/^\/books\/([a-f0-9-]{36})\/finished$/);if(book&&req.method==="POST"){const v=z.object({finished:z.boolean()}).strict().parse(await body());send(res,this.store.finishBook(book[1],v.finished,viewer.id));return;}
  if(path==="/logs"&&req.method==="POST"){send(res,this.store.save(await body(),viewer));return;}
  const log=path.match(/^\/logs\/([a-f0-9-]{36})(?:\/(retry))?$/);if(log){if(req.method==="DELETE"&&!log[2]){send(res,this.store.removeLog(log[1],await body(),viewer));return;}if(req.method==="GET"&&!log[2]){send(res,this.store.log(log[1],viewer));return;}if(req.method==="POST"&&log[2]){z.object({}).strict().parse(await body());send(res,this.store.retry(log[1],viewer));return;}}

@@ -340,3 +340,21 @@
 
 .hw-upload-status { flex-shrink: 0; gap: 4px; font-size: .8125rem; }
 .hw-upload-status > svg { width: 15px; height: 15px; }
+
+.reading-books article > div { flex: 1; }
+.reading-shelf-title { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 4px 10px; }
+.reading-shelf-title h3 { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.reading-add-status { display: flex; align-items: center; gap: 10px; }
+.reading-shelf-status {
+  position: relative; display: inline-flex; align-items: center; gap: 4px;
+  min-height: 30px; padding: 0 7px; border-radius: 7px; white-space: nowrap;
+  font-size: .8125rem; line-height: 1.3; font-weight: 600;
+  color: var(--muted); background: var(--field-bg);
+}
+.reading-shelf-status.shelf-wanted { color: var(--theme-purple-text,#694879); background: var(--theme-purple-soft,#f3ebf6); }
+.reading-shelf-status.shelf-reading { color: var(--theme-info-text,#375f7b); background: var(--theme-blue-soft,#eaf2f8); }
+.reading-shelf-status.shelf-finished { color: var(--theme-success-text,#386747); background: var(--theme-green-soft,#e8f2eb); }
+.reading-shelf-status:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+:root .reading-shelf-status select:not([multiple]):not([size]) {
+  position: absolute; inset: 0; width: 100%; height: 100%; min-height: 0; margin: 0; opacity: 0; cursor: pointer;
+}

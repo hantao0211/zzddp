@@ -20,7 +20,7 @@ export function operationLabels(path: string, method: string): OperationLabels |
   if (/^reading\/rewards\/[^/]+$/.test(p) && method.toUpperCase() === "DELETE") return {pending: "正在删除商品…", success: "商品已删除，已有兑换记录和约定保留。"};
   if (p === "reading/logs") return {pending: "正在保存阅读，请稍候…", success: "阅读已保存，AI评价在后台进行。"};
   if (/^reading\/logs\/[^/]+\/retry$/.test(p)) return {pending: "正在提交评价重试…", success: "已提交重试，打卡记录仍保留。"};
-  if (/^reading\/books(?:\/[^/]+(?:\/finished)?)?$/.test(p)) return {pending: "正在保存书籍…", success: "书籍信息已保存。"};
+  if (/^reading\/books(?:\/[^/]+(?:\/(?:finished|status))?)?$/.test(p)) return {pending: "正在保存书籍…", success: "书籍信息已保存。"};
   if (/^reading\/activities(?:\/[^/]+)?$/.test(p)) return {pending: "正在提交活动记录…", success: "活动记录已更新，可在成长页查看。"};
   if (/^reading\/redemptions(?:\/[^/]+)?$/.test(p)) return {pending: "正在提交兑换操作，请勿重复点击…", success: "兑换记录已更新，请查看申请状态。"};
   if (/^reading\/(?:wishes|rewards)(?:\/[^/]+(?:\/(?:icon|withdraw))?)?$/.test(p)) return {pending: "正在保存心愿商城信息…", success: "心愿商城信息已保存。"};

@@ -231,3 +231,34 @@ test("book streaks use full active history for a one-record snapshot and filtere
  assert.equal(f.store.log(inputs[19].id,child).bookStreak,1);
  assert.equal(f.store.balance(),balance);assert.equal((f.store.db.prepare("SELECT COUNT(*) AS n FROM review_jobs").get() as {n:number}).n,jobs);
 }finally{f.cleanup();}});
+
+test("shelf marks preserve legacy progress, advance on a new log, and survive restarts",()=>{
+ const f=fixture();
+ try{
+  const id=f.book.id;
+  assert.equal(f.store.book(id).shelfStatus,"unread");
+  const wanted=f.store.addBook({title:"下一本",shelfStatus:"wanted"},child.id);
+  assert.equal(f.store.addBook({title:"下一本"},child.id).shelfStatus,"wanted");
+  const saved=f.store.save({...f.input(),bookId:wanted.id},child);
+  assert.equal(saved.book.shelfStatus,"reading");
+  f.store.setShelfStatus(wanted.id,"unread",child.id);
+  f.store.save({...f.input(),id:saved.log.id,bookId:wanted.id,version:1,minutes:20},child);
+  assert.equal(f.store.book(wanted.id).shelfStatus,"unread");
+  f.store.save(f.input(),child);
+  assert.equal(f.store.book(id).shelfStatus,"reading");
+  f.store.finishBook(id,true,child.id);
+  assert.equal(f.store.save({...f.input(),separateSession:true},child).book.shelfStatus,"finished");
+  assert.equal(f.store.snapshot(child).stats.booksFinished,1);
+  const balance=f.store.balance();
+  f.store.finishBook(id,false,child.id);
+  assert.equal(f.store.book(id).shelfStatus,"reading");
+  f.store.setShelfStatus(id,"wanted",parent.id);
+  const reopened=new ReadingStore(f.directory);
+  try{
+   assert.equal(reopened.book(id).shelfStatus,"wanted");
+   assert.equal(reopened.book(id).logCount,2);
+   assert.equal(reopened.snapshot(parent).stats.booksFinished,0);
+   assert.equal(reopened.balance(),balance);
+  }finally{reopened.close();}
+ }finally{f.cleanup();}
+});
