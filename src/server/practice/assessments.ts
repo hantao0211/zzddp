@@ -6,7 +6,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import type { IncomingMessage } from "node:http";
 import { z } from "zod";
-import { examReadingChecks, examReread, emptyExam, readExamHints, examMeta, examManifest, markedPage, observation, type ExamMeta, type ExamRecord, type ExamPage, type ExamDetail, type Observation } from "../../domain/assessment";
+import { checkRereadEvidence, examReadingChecks, examReread, emptyExam, readExamHints, examMeta, examManifest, markedPage, observation, type ExamMeta, type ExamRecord, type ExamPage, type ExamDetail, type Observation } from "../../domain/assessment";
 import { AIServiceError, type AIImage, type StructuredAI } from "../ai/provider";
 import { detectMime } from "../homework/images";
 import { HomeworkError } from "../homework/store";
@@ -64,7 +64,7 @@ export class Assessments {
     const questions=this.store.db.prepare("SELECT q.id,q.page_id,q.revision,q.payload,f.id feedback_id,f.revision feedback_revision,f.note,f.status,f.result,f.learned_subject FROM exam_questions q JOIN exam_pages p ON q.page_id=p.id LEFT JOIN exam_explanations f ON f.rowid=(SELECT max(rowid) FROM exam_explanations WHERE question_id=q.id) WHERE p.exam_id=? ORDER BY p.number,q.rowid").all(id);
     const savedChecks=this.store.db.prepare("SELECT f.id,q.page_id pageId,f.learned_subject subject,json_extract(f.result,'$.check') AS method FROM exam_explanations f JOIN exam_questions q ON q.id=f.question_id JOIN exam_pages p ON p.id=q.page_id WHERE p.exam_id=? AND f.learned_subject IS NOT NULL ORDER BY f.rowid").all(id).map(row=>({id:String(row.id),pageId:String(row.pageId),subject:String(row.subject),check:row.method as keyof typeof examReadingChecks}));
     return {exam,pages,savedChecks,questions:questions.map(q=>({...JSON.parse(String(q.payload)),id:q.id,pageId:q.page_id,revision:q.revision,feedback:q.feedback_id?{
-      id:q.feedback_id,revision:q.feedback_revision,note:q.note,status:q.status,result:q.result?JSON.parse(String(q.result)):null,learned:!!q.learned_subject
+      id:q.feedback_id,revision:q.feedback_revision,note:q.note,status:q.status,result:q.result?checkRereadEvidence(JSON.parse(String(q.result)),JSON.parse(String(q.payload)).question):null,learned:!!q.learned_subject
     }:undefined}))};
   }
   reserve(input:unknown) {
@@ -199,9 +199,10 @@ export class Assessments {
     }
     return {questions,metadata,coverage,note:[...notes].filter(Boolean).join(" ").slice(0,500)};
   }
-  private async aiImage(pageId:string) {
-    const {stdout}=await convert("/usr/bin/convert",["-limit","memory","64MiB","-limit","map","128MiB","-limit","disk","512MiB",join(this.directory,pageId)+"[0]","-auto-orient","-resize","1800x2400>","-background","white","-alpha","remove","-strip","-quality","85","jpeg:-"],{encoding:"buffer",timeout:60000,maxBuffer:3*1024*1024});
-    return {fileId:pageId,mimeType:"image/jpeg" as const,base64:stdout.toString("base64")};
+  private async aiImage(pageId:string,corner?:"NorthWest"|"NorthEast"|"SouthWest"|"SouthEast") {
+    const crop=corner?["-gravity",corner,"-crop","56%x56%+0+0","+repage"]:[];
+    const {stdout}=await convert("/usr/bin/convert",["-limit","memory","64MiB","-limit","map","128MiB","-limit","disk","512MiB",join(this.directory,pageId)+"[0]","-auto-orient",...crop,"-resize",corner?"1600x1800>":"1800x2400>","-background","white","-alpha","remove","-strip","-quality","85","jpeg:-"],{encoding:"buffer",timeout:60000,maxBuffer:3*1024*1024});
+    return {fileId:corner?pageId+"-"+corner:pageId,mimeType:"image/jpeg" as const,base64:stdout.toString("base64")};
   }
   readingChecks(subject:ExamMeta["subject"]){
     if(!subject)return [];
@@ -223,10 +224,10 @@ export class Assessments {
   learn(pageId:string,raw:unknown){
     const {id,enabled}=z.object({id:z.string().uuid(),enabled:z.boolean()}).parse(raw);
     const db=this.store.db;
-    const row=db.prepare("SELECT f.result,e.metadata FROM exam_explanations f JOIN exam_questions q ON q.id=f.question_id JOIN exam_pages p ON p.id=q.page_id JOIN exams e ON e.id=p.exam_id WHERE f.id=? AND p.id=?").get(id,pageId);
+    const row=db.prepare("SELECT f.result,e.metadata,q.payload FROM exam_explanations f JOIN exam_questions q ON q.id=f.question_id JOIN exam_pages p ON p.id=q.page_id JOIN exams e ON e.id=p.exam_id WHERE f.id=? AND p.id=?").get(id,pageId);
     if(!row)throw new HomeworkError(404,"找不到这次说明。");
     const subject=(JSON.parse(String(row.metadata)) as ExamMeta).subject;
-    const result=row.result?examReread.parse(JSON.parse(String(row.result))):null;
+    const result=row.result?checkRereadEvidence(examReread.parse(JSON.parse(String(row.result))),JSON.parse(String(row.payload)).question):null;
     if(enabled&&(!subject||!result?.located||!result.check||!result.evidence))throw new HomeworkError(400,"请先补充科目，并核实原卷依据。");
     db.prepare("UPDATE exam_explanations SET learned_subject=? WHERE id=?").run(enabled?subject:null,id);
     return {saved:true};
@@ -240,10 +241,16 @@ export class Assessments {
       if(row.current_revision!==row.revision)throw new HomeworkError(409,"题目已更新。");
       const meta=JSON.parse(row.metadata) as ExamMeta;
       const ai=execution.forJob(undefined,undefined,{date:meta.date??this.store.today(),title:"试卷说明复读",pageId:row.page_id,runId:row.id});
-      const result=await ai.run("explain_exam_reading",examReread,{subject:meta.subject,questionId:row.question_id,original:JSON.parse(row.payload),familyNote:row.note,readingChecks:this.readingChecks(meta.subject)},[await this.aiImage(row.page_id)]);
-      if(result.questionId!==row.question_id)throw new HomeworkError(422,"原图定位未对应。");
-      if(!result.located||!result.evidence){result.check=null;result.change=null;}
-      if(result.change&&!result.change.teacherMark.trim())result.change.verdict="uncertain";
+      const original=JSON.parse(row.payload) as Observation;
+      const images=[await this.aiImage(row.page_id)];
+      // Crop from the uploaded file before resizing. Overlap keeps answers beside column boundaries visible.
+      for(const corner of ["NorthWest","NorthEast","SouthWest","SouthEast"] as const){
+        images.push(await this.aiImage(row.page_id,corner));
+      }
+      const schema=examReread.required({answerMarks:true});
+      const reread=await ai.run("explain_exam_reading",schema,{subject:meta.subject,questionId:row.question_id,original,familyNote:row.note,readingChecks:this.readingChecks(meta.subject)},images);
+      if(reread.questionId!==row.question_id)throw new HomeworkError(422,"原图定位未对应。");
+      const result=!reread.located||!reread.evidence?{...reread,change:null,check:null}:checkRereadEvidence(reread,original.question);
       db.prepare("UPDATE exam_explanations SET status='done',result=? WHERE id=?").run(JSON.stringify(result),row.id);
     }catch(e){
       record({event:"exam.explain",error:true,code:failureCode(e)});

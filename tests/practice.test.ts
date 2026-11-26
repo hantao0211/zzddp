@@ -1,3 +1,4 @@
+import { checkRereadEvidence } from "../src/domain/assessment";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { AIServiceError } from "../src/server/ai/provider";
@@ -362,8 +363,8 @@ test("exam explanations use the selected photo, keep the verdict independent and
     const ai:StructuredAI={async run(task,schema,raw,images){
       const input=raw as {questionId:string;familyNote:string;readingChecks:string[]};
       if(task==="explain_exam_reading"){
-        assert.equal(input.familyNote,cmd.note);assert.equal(images?.[0].fileId,pageId);
-        return schema.parse({questionId:q.id,located:true,reply:"红勾在这题作答下方。",evidence:"第2小题答案下方有勾。",check:"marks",change:{...value,verdict:"correct",teacherMark:"作答下方有勾"}});
+        assert.equal(input.familyNote,cmd.note);assert.equal(images?.[0].fileId,pageId);assert.equal(images?.length,5);
+        return schema.parse({answerMarks:[{position:"作答处",handwriting:"两种写法",mark:"tick"}],questionId:q.id,located:true,reply:"红勾在这题作答下方。",evidence:"第2小题答案下方有勾。",check:"marks",change:{...value,verdict:"correct",teacherMark:"作答下方有勾"}});
       }
       assert.equal(task,"read_marked_exam");seen.push(input.readingChecks);
       assert.ok(!JSON.stringify(input).includes(cmd.note));
@@ -413,4 +414,17 @@ test("milestones keep partial distributions, protect revisions, and credit an ac
     milestones.settle(better,confirm,parent.id);assert.equal(f.reading.balance(),balance+5);
     milestones.settle(rank,{action:"cancel"},parent.id);assert.equal(milestones.snapshot().goals.find(g=>g.id===rank)?.status,"cancelled");
   }finally{f.close();}
+});
+
+test("mixed teacher marks take precedence over a proposed all-correct reread and unread handwriting stays unknown",()=>{
+  const change={question:"甲=( )，乙=( )",studentAnswer:"推断值",teacherMark:"有红勾",correction:"",verdict:"correct" as const};
+  const old={questionId:"a",located:true,reply:"全对",evidence:"有勾",change,check:null};
+  assert.equal(checkRereadEvidence(old,change.question).change,null);
+  const first={position:"甲",handwriting:"12",mark:"tick" as const};
+  const second={position:"乙",handwriting:"",mark:"cross" as const};
+  const review=checkRereadEvidence({...old,answerMarks:[first,second]},change.question);
+  assert.equal(review.change?.verdict,"wrong");
+  assert.equal(review.change?.studentAnswer,"甲：12；乙：原答看不清");
+  assert.equal(checkRereadEvidence({...old,answerMarks:[first,{...second,mark:"tick"}]},change.question).change?.verdict,"correct");
+  assert.equal(checkRereadEvidence({...old,answerMarks:[first]},change.question).change,null);
 });

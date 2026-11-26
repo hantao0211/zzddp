@@ -82,7 +82,13 @@ export const examReadingChecks = {
   answers: "区分孩子的初答、订正和老师的笔迹",
   layout: "按题号及版面核对题干和对应作答",
 } as const;
+const answerMark = z.object({
+  position:z.string().trim().min(1).max(80),
+  handwriting:z.string().trim().max(160),
+  mark:z.enum(["tick","cross","unclear","unmarked","blank"]),
+});
 export const examReread = z.object({
+  answerMarks:z.array(answerMark).max(80).optional(),
   questionId: z.string(), located: z.boolean(), reply: z.string().trim().min(1).max(200),
   evidence: z.string().trim().max(200), check: z.enum(["marks","answers","layout"]).nullable(),
   change: observation.pick({question:true,studentAnswer:true,teacherMark:true,correction:true,verdict:true}).nullable(),
@@ -91,3 +97,32 @@ export type ExamFeedback = {
   id:string; revision:number; note:string; status:"queued"|"running"|"done"|"failed";
   result:z.infer<typeof examReread>|null; learned:boolean;
 };
+
+type RereadResult = z.infer<typeof examReread>;
+function printedBlankCount(question:string){
+  return question.normalize("NFKC").match(/\(\s*\)|_{2,}/g)?.length??0;
+}
+
+export function checkRereadEvidence(result:RereadResult,originalQuestion:string):RereadResult {
+  const {change,answerMarks}=result;
+  if(!result.located||!result.evidence)return {...result,check:null,change:null};
+  if(!change&&!answerMarks?.length)return result;
+
+  const expected=Math.max(printedBlankCount(originalQuestion),printedBlankCount(change?.question??""));
+  if(!answerMarks && expected<2)return result; // Historical single-answer records.
+  if(!answerMarks?.length || answerMarks.length<expected ||
+    new Set(answerMarks.map(a=>a.position)).size!==answerMarks.length){
+    return {...result,reply:"这次回复缺少逐处核对的记录，原判保留。",evidence:"",change:null,check:null};
+  }
+  const labels={tick:"勾",cross:"叉",unclear:"标记不清",unmarked:"未见批注",blank:"老师标为漏答"};
+  const evidence=answerMarks.map(a=>a.position+"："+labels[a.mark]).join("；");
+  const handwriting=answerMarks.map(a=>a.position+"："+(a.handwriting||"原答看不清")).join("；");
+  if(!change)return answerMarks.length>1?{...result,evidence:evidence.slice(0,200),reply:evidence.slice(0,200)}:result;
+  const verdict=answerMarks.some(a=>a.mark==="cross")?"wrong":
+    answerMarks.every(a=>a.mark==="blank")?"blank":
+    answerMarks.some(a=>a.mark==="blank")?"wrong":
+    answerMarks.every(a=>a.mark==="tick")?"correct":"uncertain";
+  return {...result,evidence:evidence.slice(0,200),
+    reply:(answerMarks.length>1||verdict!==change.verdict)?evidence.slice(0,200):result.reply,
+    change:{...change,studentAnswer:handwriting.slice(0,1200),teacherMark:evidence.slice(0,500),verdict}};
+}
