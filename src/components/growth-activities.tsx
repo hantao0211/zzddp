@@ -19,8 +19,8 @@ function ActivityIcon({rule,size=18}:{rule:ActivityRule;size?:number}) {
   return <Icon size={size} aria-hidden="true"/>;
 }
 
-function ActivityIconPicker({rule,disabled,onChange}:{rule:ActivityRule;disabled:boolean;onChange:(icon:ActivityIconId)=>void}) {
-  const [open,setOpen]=useState(false);
+function ActivityIconPicker({rule,disabled,initiallyOpen,onChange}:{rule:ActivityRule;disabled:boolean;initiallyOpen:boolean;onChange:(icon:ActivityIconId)=>void}) {
+  const [open,setOpen]=useState(initiallyOpen);
   const trigger=useRef<HTMLButtonElement>(null);
   const selected=iconFor(rule);
   return <div className="activity-icon-picker">
@@ -78,7 +78,7 @@ function ActivityRuleDialog({action,close,refresh}:Pick<Props,"refresh">&{action
   <form className="reading-dialog-body" onSubmit={save}>
    {deleting?<p>删除「{before?.title}」后，孩子将无法继续打卡。已有活动记录、小脚步和待确认申请都将保留。</p>:<>
     <label>活动名称<input autoFocus required maxLength={60} value={draft.title} onChange={e=>setDraft({...draft,title:e.target.value})}/></label>
-    <ActivityIconPicker rule={draft} disabled={busy} onChange={icon=>setDraft({...draft,icon})}/>
+    <ActivityIconPicker rule={draft} initiallyOpen={action.kind==="add"} disabled={busy} onChange={icon=>setDraft({...draft,icon})}/>
     <label>奖励小脚步<input required type="number" min="0" max="100" defaultValue={draft.points} onChange={e=>setDraft({...draft,points:e.target.valueAsNumber})}/></label>
     <label>记录频率<select disabled={draft.key==="housework"} value={weeklyActivity(draft)?"weekly":"daily"} onChange={e=>setDraft({...draft,frequency:e.target.value as "daily"|"weekly"})}>
      <option value="daily">每天一次</option><option value="weekly">每周一次</option></select></label>
@@ -87,7 +87,7 @@ function ActivityRuleDialog({action,close,refresh}:Pick<Props,"refresh">&{action
     <label className="reading-checkbox"><input type="checkbox" checked={draft.enabled} onChange={e=>setDraft({...draft,enabled:e.target.checked})}/>启用活动</label>
    </>}
    {error&&<p role="alert" className="form-error">{error}</p>}
-   <div className="economy-actions"><button type="submit" className="button primary" disabled={busy||(!deleting&&!draft.title.trim())}>{busy?"正在保存…":deleting?"确认删除":"保存活动"}</button>
+   <div className="economy-actions"><button type="submit" className={deleting?"button danger":"button primary activity-rule-save"} disabled={busy||(!deleting&&!draft.title.trim())}>{busy?"正在保存…":deleting?"确认删除":"保存活动"}</button>
     <button type="button" className="text-button" disabled={busy} onClick={close}>取消</button></div>
   </form>
  </dialog>;

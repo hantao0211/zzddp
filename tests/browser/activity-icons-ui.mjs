@@ -26,10 +26,25 @@ try {
   const panel = page.locator(".activity-management");
   await panel.getByRole("button",{name:"新增活动"}).tap();
   const add = page.getByRole("dialog",{name:"新增活动"});
-  await add.getByLabel("活动名称").fill("模拟写字课");
-  await add.getByRole("button",{name:/活动图标.*星光/}).tap();
+  const save = add.getByRole("button",{name:"保存活动",exact:true});
+  const background = button => button.evaluate(async el => {
+    await Promise.all(el.getAnimations().map(animation => animation.finished));
+    const ctx = document.createElement("canvas").getContext("2d");
+    ctx.fillStyle = getComputedStyle(el).backgroundColor;
+    ctx.fillRect(0,0,1,1);
+    return Array.from(ctx.getImageData(0,0,1,1).data).join(",");
+  });
+  assert.ok(await save.isDisabled());
+  const mutedRose = await background(save);
+  assert.equal(await add.getByRole("group",{name:"选择活动图标"}).getByRole("button").count(),8);
   await add.getByRole("button",{name:"书写",exact:true}).tap();
-  await add.getByRole("button",{name:"保存活动"}).tap();
+  assert.ok(await save.isDisabled());
+  await add.getByLabel("活动名称").fill("模拟写字课");
+  assert.ok(await save.isEnabled());
+  assert.notEqual(await background(save),mutedRose);
+  const primaryColor = await background(panel.getByRole("button",{name:"新增活动"}));
+  assert.equal(await background(save), primaryColor);
+  await save.tap();
   await add.waitFor({state:"hidden"});
   const editButton = panel.getByRole("button",{name:"编辑模拟写字课"});
   const edit = page.getByRole("dialog",{name:"编辑活动"});
