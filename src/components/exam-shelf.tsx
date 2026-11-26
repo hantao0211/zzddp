@@ -51,6 +51,7 @@ export function ExamShelf({canManage,openMistakes,resume}:{canManage:boolean;ope
   function showMilestones(subject?:string){setMilestoneFromPaper(mode==="detail");setNotice("");setError("");setInitialSubject(subject);setMilestones(null);setMode("milestones");}
   const [error,setError]=useState(""),[busy,setBusy]=useState(""),[notice,setNotice]=useState("");
   const submitting=useRef(false),dialog=useRef<HTMLDialogElement>(null);
+  const body=useRef<HTMLDivElement>(null);
   useEffect(()=>{const el=dialog.current;if(mode&&!el?.open)el?.showModal();if(!mode)el?.close();},[mode]);
   useEffect(()=>{
     const controller=new AbortController();let timer:ReturnType<typeof setTimeout>;
@@ -95,7 +96,7 @@ export function ExamShelf({canManage,openMistakes,resume}:{canManage:boolean;ope
   }
   function openPhoto(value:ExamPhoto,trigger:HTMLButtonElement){
     photoTrigger.current=trigger;setPhoto(value);
-    requestAnimationFrame(()=>{dialog.current?.scrollTo(0,0);backButton.current?.focus();});
+    requestAnimationFrame(()=>{body.current?.scrollTo(0,0);backButton.current?.focus();});
   }
   async function act(fn:()=>Promise<void>){if(submitting.current)return;submitting.current=true;setBusy("正在保存…");setError("");setNotice("");
     try{await fn();refresh(n=>n+1);}catch(e){setError(message(e));}finally{submitting.current=false;setBusy("");}}
@@ -118,9 +119,9 @@ export function ExamShelf({canManage,openMistakes,resume}:{canManage:boolean;ope
     <button className="button secondary compact plum-action mile-home" onClick={()=>showMilestones()}><Flag size={16}/>考试里程碑</button>
     {latestPaper&&<button className="text-button" onClick={()=>{setOffset(0);setError("");setNotice("");setMode("list");}}>全部试卷（{latest?.total}）</button>}
     {!mode&&error&&<p role="alert">{error} <button className="text-button" onClick={()=>{setError("");refresh(n=>n+1);}}>重试</button></p>}
-    <dialog ref={dialog} className="reading-dialog exam-dialog" aria-label="试卷档案" onCancel={e=>{e.preventDefault();goBack();}}>
+    <dialog ref={dialog} className={`reading-dialog exam-dialog${mode==="detail"?" exam-detail-dialog":""}`} aria-label="试卷档案" onCancel={e=>{e.preventDefault();goBack();}}>
       <header>{backLabel&&<button ref={backButton} type="button" className="text-button exam-nav-back" aria-label={backLabel} disabled={!!busy} onClick={goBack}><BackLabel>返回</BackLabel></button>}<h2>{photo?photo.alt:selection?(selection.id?"题目详情":"补录题目"):mode==="new"?"上传已批试卷":mode==="list"?"全部试卷":mode==="milestones"?"考试里程碑":detail?.exam.title||"试卷详情"}</h2><button className="icon-button" disabled={!!busy} aria-label="关闭试卷档案" onClick={close}><X/></button></header>
-      <div className="reading-dialog-body">
+      <div ref={body} className="reading-dialog-body">
       {photo&&<div className="exam-photo-content"><PhotoPreviewContent {...photo}/></div>}
       <div hidden={!!photo}>
       {notice&&<p className="exam-notice" role="status">{notice}</p>}{error&&<p className="form-error" role="alert">{error}</p>}

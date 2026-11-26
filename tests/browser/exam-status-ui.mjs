@@ -20,6 +20,7 @@ try{
     {id:"first-page",number:1,status:"failed",note:"原图已保存，可重试本页。",coverage:"partial"},
     {id:"second-page",number:2,status:"done",note:"",coverage:"complete"}
   ];
+  const questions=Array.from({length:24},(_,i)=>({id:"q"+i,pageId:"second-page",label:String(i+1),question:"模拟填空题",verdict:i<3?"uncertain":"correct"}));
   let retries=0;
   page.on("pageerror",e=>errors.push(e.message));
   await page.context().route("**/assistant-api/**",route=>{
@@ -27,7 +28,7 @@ try{
     const send=data=>route.fulfill({contentType:"application/json",body:JSON.stringify(data)});
     if(url.pathname.endsWith("/status"))return send({authenticated:true,available:true,accounts:true,viewer});
     if(url.pathname.endsWith("/practice/exams"))return send({items:url.searchParams.has("latest")?exams.slice(0,1):exams,total:exams.length,stage:null});
-    if(url.pathname.endsWith("/practice/exams/3"))return send({exam:exams[3],pages,questions:[]});
+    if(url.pathname.endsWith("/practice/exams/3"))return send({exam:exams[3],pages,questions});
     if(url.pathname.endsWith("/exam-pages/first-page/retry") && route.request().method()==="POST"){
       retries++;pages[0].status="queued";pages[0].note="";return send({saved:true});
     }
@@ -85,6 +86,27 @@ try{
       assert.equal(await actions.count(),0);
       continue;
     }
+    const body=modal.locator(":scope > .reading-dialog-body");
+    const header=modal.locator(":scope > header");
+    for (const [width,height,full] of [[320,670,true],[390,844,true],[844,390,true],[1024,844,false]]) {
+      await page.setViewportSize({width,height});
+      const bounds=await modal.boundingBox();
+      if(full){assert.equal(bounds.y,0);assert.equal(bounds.height,height);assert.equal(bounds.width,width);}
+      else assert.ok(bounds.width<width && bounds.height<height);
+      const headerBefore=await header.boundingBox();
+      await body.evaluate(el=>{el.scrollTop=el.scrollHeight;});
+      assert.ok(await body.evaluate(el=>el.scrollTop>0));
+      assert.deepEqual(await header.boundingBox(),headerBefore);
+      for(const filter of ["待核对 3","错题 0","全部 24"]) {
+        await modal.getByRole("button",{name:filter,exact:true}).click();
+        if(filter==="错题 0")await modal.getByText("没有已收录的错题。").waitFor();
+        if(width===390 && filter==="错题 0" && process.env.SMOKE_OUTPUT_DIR){
+          await modal.screenshot({path:process.env.SMOKE_OUTPUT_DIR+"/exam-empty-fullscreen.png"});
+        }
+        assert.deepEqual(await modal.boundingBox(),bounds);
+        assert.deepEqual(await header.boundingBox(),headerBefore);
+      }
+    }
     const retry=actions.getByRole("button",{name:"重试本页"}),add=actions.getByRole("button",{name:"手动补题"});
     for(const width of [320,390,1024]){
       await page.setViewportSize({width,height:844});
@@ -94,7 +116,7 @@ try{
       if(width===390 && process.env.SMOKE_OUTPUT_DIR)await modal.screenshot({path:process.env.SMOKE_OUTPUT_DIR+"/page-actions.png"});
     }
     await add.click();
-    await modal.getByRole("heading",{name:"补录题目"}).waitFor();
+    await modal.getByRole("heading",{name:"补录题目",level:2}).waitFor();
     await modal.getByRole("button",{name:"取消",exact:true}).click();
     assert.ok(await add.evaluate(el=>el===document.activeElement));
     await retry.click();
