@@ -329,3 +329,11 @@
   }
   .study-heading-date:focus-within { outline: 2px solid var(--accent); outline-offset: 3px; }
 }
+
+.hw-task-count { color: var(--muted); font-size: .8125rem; white-space: nowrap; }
+.hw-task .subject-icon { background: var(--field-bg); color: var(--muted); }
+.hw-task .hw-task-status {
+  gap: 4px; padding: 3px 7px; border-radius: 6px;
+  background: var(--status-bg); font-size: .8125rem;
+}
+.hw-task-status > svg { width: 15px; height: 15px; }

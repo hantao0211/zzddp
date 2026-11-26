@@ -64,15 +64,15 @@ export function reconcileQuestion(id: string, first: z.infer<typeof GradingQuest
   return { ...first, ...second, id, verification: "agreed", cause: first.cause === second.cause ? second.cause : "原因待确认", causeExplanation: first.cause === second.cause ? second.causeExplanation : "已确认答案有误，但仅凭这次作答还不能确定错因。" };
 }
 
-export function taskGradingLabel(t?: GradingCounts & { pending: number; failed: number; incomplete: number }) {
+export function taskGradingStatus(t?: GradingCounts & { pending: number; failed: number; incomplete: number }) {
   if (!t) return null;
-  if (t.pending) return "批改中";
-  if (t.failed) return "批改未完成";
-  if (t.wrong) return `${t.wrong}道错题`;
-  if (t.uncertain) return `${t.uncertain}题尚未确认`;
-  if (t.blank) return `${t.blank}题未作答`;
-  if (t.passedWithNote) return `${t.passedWithNote}题通过但存疑`;
-  if (t.incomplete) return "部分题未完整识别";
-  if (t.feedback) return "已给出点评";
-  return t.correct ? "已批改，均正确" : "未发现需批改的题";
+  if (t.pending) return { kind: "pending", label: "批改中" } as const;
+  if (t.failed) return { kind: "wrong", label: "批改未完成" } as const;
+  if (t.wrong) return { kind: "wrong", label: `${t.wrong}道错题` } as const;
+  if (t.uncertain) return { kind: "uncertain", label: `${t.uncertain}题尚未确认` } as const;
+  if (t.blank) return { kind: "blank", label: `${t.blank}题未作答` } as const;
+  if (t.passedWithNote) return { kind: "uncertain", label: `${t.passedWithNote}题通过但存疑` } as const;
+  if (t.incomplete) return { kind: "uncertain", label: "部分题未完整识别" } as const;
+  if (t.feedback) return { kind: "feedback", label: "已给出点评" } as const;
+  return t.correct ? { kind: "correct", label: "已批改，均正确" } as const : { kind: "neutral", label: "未发现需批改的题" } as const;
 }
