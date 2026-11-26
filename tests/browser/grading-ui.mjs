@@ -220,6 +220,12 @@ try {
   const mistakeDetail=page.getByRole("dialog",{name:"错题详情"});
   const toolbar=book.getByRole("group",{name:"错题筛选与排序"});
   const sort=toolbar.getByRole("combobox",{name:/^排序/});
+  const subject=toolbar.getByRole("combobox",{name:/^科目/});
+  async function pick(trigger,label) {
+    await trigger.click();
+    await toolbar.getByRole("option",{name:label,exact:true}).click();
+    await toolbar.getByRole("listbox").waitFor({state:"hidden"});
+  }
   const toggle = number => book.getByRole("button", { name: new RegExp(`^第${number}题 `) });
   await toggle(2).waitFor();
   assert.equal(await book.locator(".mistake-entry").count(), 10);
@@ -231,6 +237,28 @@ try {
   assert.equal(await stem.textContent(), longStem);
   for (const width of [320, 390, 1280]) {
     await page.setViewportSize({width, height: 670});
+    for (const trigger of await toolbar.getByRole("combobox").all()) {
+      await trigger.click();
+      const menu=toolbar.getByRole("listbox");
+      const styles=await menu.evaluate(el=>{
+        const chip=el.parentElement.querySelector(".mistake-filter-chip span");
+        const rect=el.getBoundingClientRect();
+        return {
+          sameFont:getComputedStyle(chip).fontSize===getComputedStyle(el.querySelector("[role=option]")).fontSize,
+          sameTint:getComputedStyle(chip).backgroundColor===getComputedStyle(el).backgroundColor,
+          fits:rect.left>=0 && rect.right<=innerWidth
+        };
+      });
+      assert.ok(styles.sameFont && styles.sameTint && styles.fits,JSON.stringify(styles));
+      assert.equal(await menu.getByRole("option",{selected:true}).count(),1);
+      if(width===390 && (await trigger.getAttribute("aria-label")).startsWith("科目")){
+        await trigger.scrollIntoViewIfNeeded();
+        const t=await toolbar.boundingBox(),m=await menu.boundingBox();
+        await page.screenshot({path:output+"/mistake-open-menu.png",clip:{x:t.x,y:t.y,width:t.width,height:m.y+m.height-t.y+4}});
+      }
+      await page.keyboard.press("Escape");
+      await menu.waitFor({state:"hidden"});
+    }
     const boxes=await Promise.all((await toolbar.getByRole("combobox").all()).map(el=>el.boundingBox()));
     assert.equal(boxes.length,3);
     const chips=await toolbar.locator(".mistake-filter-chip > span").evaluateAll(spans=>spans.map(span=>{
@@ -268,12 +296,15 @@ try {
   assert.equal(await direction.getAttribute("aria-label"),"升序，切换为降序");
   await book.getByText("第2／31页").waitFor();
   const leastRequest=page.waitForRequest(req=>new URL(req.url()).searchParams.get("sort")==="leastFrequent");
-  await sort.selectOption("occurrences");
+  await sort.focus();
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("End");
+  await page.keyboard.press("Enter");
   await leastRequest;
   const frequentRequest=page.waitForRequest(req=>new URL(req.url()).searchParams.get("sort")==="frequent");
   await direction.click();
   await frequentRequest;
-  await sort.selectOption("date");
+  await pick(sort,"收录日期");
   await toggle(2).waitFor();
   await book.getByRole("button", { name: "下一页", exact: true }).click();
   await toggle(12).waitFor();
@@ -284,7 +315,7 @@ try {
   await toggle(2).waitFor();
   await book.getByRole("button", { name: "下一页", exact: true }).click();
   await toggle(12).waitFor();
-  await toolbar.getByRole("combobox",{name:/^科目/}).selectOption("数学");
+  await pick(subject,"数学");
   await toggle(2).click();
   await mistakeDetail.getByText("可能的错因 · 计算错误",{exact:true}).waitFor();
   await mistakeDetail.getByRole("button",{name:"返回列表"}).click();
@@ -327,9 +358,9 @@ try {
   assert.ok(await bigPhoto.evaluate(button => document.activeElement === button));
   await mistakeDetail.getByRole("button",{name:"返回列表"}).click();
   await page.screenshot({ path: output + "/mistake-book-mobile.png", fullPage: true });
-  await toolbar.getByRole("combobox",{name:/^科目/}).selectOption("英语");
+  await pick(subject,"英语");
   await book.getByText("这个分类暂时没有已核验的错题。", { exact: true }).waitFor();
-  await toolbar.getByRole("combobox",{name:/^科目/}).selectOption("数学");
+  await pick(subject,"数学");
   await toggle(2).click();
   await mistakeDetail.getByRole("button", { name: "和小步聊这题", exact: true }).click();
   await page.locator("#assistant-question").waitFor();

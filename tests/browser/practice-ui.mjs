@@ -119,7 +119,9 @@ try{
  const subjects=list.getByRole('combobox',{name:/^科目/});
  const changeFilter=async(button,query)=>{
   const response=parent.waitForResponse(r=>{const u=new URL(r.url());return u.pathname.endsWith('/learning/mistakes')&&u.searchParams.get(query[0])===query[1]&&r.ok();});
-  await button.selectOption(query[1]);
+  await button.tap();
+  const label=({extracurricular:'课外',unknown:'待分类'})[query[1]]??query[1];
+  await list.getByRole('option',{name:label,exact:true}).tap();
   await response;
  };
  await changeFilter(subjects,['subject','英语']);
@@ -127,7 +129,7 @@ try{
  await list.getByRole('heading',{name:'我的错题本 · 1题',exact:true}).waitFor();
  assert.equal(await list.locator('.mistake-scope .mistake-scope-chip').textContent(),'课外');
  assert.equal(await list.getByRole('group',{name:'错题筛选与排序'}).getByRole('combobox').count(),3);
- assert.equal(await scopeFilters.inputValue(),'extracurricular');
+ assert.equal(await scopeFilters.textContent(),'课外');
  await navigation.getByRole('button',{name:'小练习',exact:true}).tap();
  const englishPractice=parent.locator('.practice-subjects article').filter({has:parent.getByRole('heading',{name:'英语',exact:true})});
  assert.equal(await englishPractice.getByRole('button',{name:'准备这科练习',exact:true}).isEnabled(),true);
