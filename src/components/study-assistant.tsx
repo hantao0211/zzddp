@@ -209,7 +209,7 @@ export function StudyAssistant({ studyDate, launcherTarget, readingMode = false,
 
   async function login(event: React.FormEvent) {
     event.preventDefault(); const task = controller(); setPending("login"); setError("");
-    try { await request("session", { method: "POST", ...json({ code }), signal: task.signal }); if (!task.signal.aborted) { await loadContext(task, selectedDate || studyDate, true); await loadMemories(task); setStatus("ready"); sessionChanged(); setCode(""); } }
+    try { await request("session", { method: "POST", ...json({ code }), signal: task.signal }); if (!task.signal.aborted) { await loadContext(task, selectedDate || studyDate, !gradingTopic); await loadMemories(task); setStatus("ready"); sessionChanged(); setCode(""); } }
     catch (cause) { report(cause); } finally { if (!task.signal.aborted) setPending(null); }
   }
   async function logout() {
@@ -233,7 +233,7 @@ export function StudyAssistant({ studyDate, launcherTarget, readingMode = false,
       const previous = preview ? messages.slice(0, messages.findIndex(m => m.id === revisit?.id)) : messages;
       for (const { role, content } of previous.slice(preview ? -7 : -8).reverse()) { if (length + content.length > (preview ? 11000 : 12000)) break; history.unshift({ role, content }); length += content.length; }
       if (preview) history.push({ role: "assistant", content: `这是一条尚未保存的旧预览。之前讨论的是「${preview.before.subject || ""} · ${preview.before.title}」。请依据最新清单重新核对接下来的家庭原话，目标不明确时先问清楚。` });
-      const result = await (await request("chat", { method: "POST", ...json({ question, history, ...(!preview && gradingTopic ? { gradingTopic } : {}), reviewPhotos: preview ? false : reviewPhotos || (!!gradingTopic && shortcut !== "给我讲讲这道题"), ...(attached.length ? { photos: attached, photoOrigin: photos.length ? "current" : "previous" } : {}), ...(readingMode ? { readingMode: true, ...(readingLogId ? { readingLogId } : {}) } : {}), ...(preview ? { studyDate: preview.date } : homeworkContext ? { studyDate: selectedDate } : {}) }), signal: task.signal })).json();
+      const result = await (await request("chat", { method: "POST", ...json({ question, history, ...(!preview && gradingTopic ? { gradingTopic } : {}), reviewPhotos: preview ? false : reviewPhotos || (!!gradingTopic && shortcut !== "给我讲讲这道题" && shortcut !== "这页批改到哪一步了？"), ...(attached.length ? { photos: attached, photoOrigin: photos.length ? "current" : "previous" } : {}), ...(readingMode ? { readingMode: true, ...(readingLogId ? { readingLogId } : {}) } : {}), ...(preview ? { studyDate: preview.date } : homeworkContext || gradingTopic ? { studyDate: selectedDate } : {}) }), signal: task.signal })).json();
       if (task.signal.aborted) return;
       answer = { role: "assistant", content: result.answer, id: result.id, spokenAnswer: result.spokenAnswer, proposal: result.proposal, photoReview: result.photoReview, memoriesSaved: result.memoriesSaved, memoryNotices: result.memoryNotices, gradePreview: result.gradePreview, changeStatus: gradingTopic ? undefined : result.changeStatus };
       if (preview && answer.proposal) {
@@ -341,7 +341,7 @@ export function StudyAssistant({ studyDate, launcherTarget, readingMode = false,
         <div className="assistant-messages" inert={toolsOpen || !!previewPhoto} ref={transcript} role="log" aria-live="polite" aria-label="小助手对话">
           {!messages.length && !pendingQuestion && gradingTopic && <div className="assistant-intro">
             <h3>{gradingTopic.label}</h3><p>{gradingTopic.stem}</p>
-            <div>{["帮我看看这里有没有认错", "给我讲讲这道题"].map(text =>
+            <div>{("batchId" in gradingTopic ? ["这页批改到哪一步了？", "帮我看看这页原图"] : ["帮我看看这里有没有认错", "给我讲讲这道题"]).map(text =>
               <button key={text} disabled={!!pending || recording || !!input.trim()} onClick={() => void sendQuestion(undefined, text)}>{text}</button>)}</div>
           </div>}
           {!messages.length && !pendingQuestion && !gradingTopic && <div className="assistant-intro"><span className="assistant-avatar assistant-rabbit"><XiaobuMascot/></span><h3>你好，我是小步。</h3><p>不会操作、看不懂提示，或者学习卡住了，<br />都可以来问我，也可以拍张图。</p><div>{(readingMode ? ["怎样记录今天的阅读？", "我想聊聊今天读的内容", "怎样许愿和兑换奖励？"] : ["怎么上传今天的备忘录和作业？", "系统对这天的作业还有什么疑问？", "小数减法退位时，我总是弄错"]).map((question) => <button key={question} onClick={() => setInput(question)}>{question}</button>)}</div></div>}

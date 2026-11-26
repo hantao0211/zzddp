@@ -12,10 +12,14 @@ export const ChatPhotoSchema = z.object({
   base64: z.string().min(32).max(600_000).regex(/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/),
 }).strict();
 export type ChatPhoto = z.infer<typeof ChatPhotoSchema>;
-const GradingTopicSchema = z.object({
-  pageId: z.string().min(1).max(200), questionId: z.string().min(1).max(200),
+const GradingTopicBase = z.object({
+  pageId: z.string().min(1).max(200),
   label: z.string().min(1).max(400), stem: z.string().max(600),
 }).strict();
+const GradingTopicSchema = z.union([
+  GradingTopicBase.extend({ questionId: z.string().min(1).max(200) }),
+  GradingTopicBase.extend({ batchId: z.string().min(1).max(200) }),
+]);
 export type GradingTopic = z.infer<typeof GradingTopicSchema>;
 export const ChatInputSchema = z.object({
   studyDate: DaySchema.optional(),

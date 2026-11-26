@@ -3,7 +3,7 @@ import { MEMO_ASSIGNMENT_POLICY } from "../../domain/memo-assignment";
 import { SELECTED_SUBMISSION_POLICY } from "../../domain/submission-policy";
 import { randomUUID } from "node:crypto";
 import { GradeReviewSchema, type GradePreview } from "../../domain/grade-review";
-import { HomeworkDialogueSchema, QuestionDialogueSchema } from "../../domain/ai-contracts";
+import { HomeworkDialogueSchema, QuestionDialogueSchema, TutorAnswerSchema } from "../../domain/ai-contracts";
 import { ClarificationActionSchema, MemoEditSchema, type MemoEdit, type ClarificationAction, type ClarificationPreview, type ClarificationReceipt, type HomeworkChatContext, type MemoEntry } from "../../domain/clarifications";
 import type { ChatInput, PhotoReview } from "../../domain/assistant";
 import { shanghaiDay } from "../../domain/homework";
@@ -74,6 +74,27 @@ export class HomeworkConversation {
     return { review, images, pages };
   }
   async answer(ai: StructuredAI, input: ChatInput, owner: string, viewer?: Viewer | null) {
+    const topic = input.gradingTopic;
+    if (topic && "batchId" in topic) {
+      const date = input.studyDate;
+      const batch = date && this.store.grading.results(date).batches.find(b => b.id === topic.batchId && b.primaryPageId === topic.pageId);
+      if (!date || !batch) throw new HomeworkError(409, "这页的批改记录已更新，请返回批改结果重新选择。");
+      const photos = this.reviewPhotos(input, date);
+      const attached = chatPhotos(input);
+      const sourceIds = new Map(photos.pages.map(p => [p.fileId, p.materialId]));
+      for (const id of [...sourceIds.values(), ...attached.images.map(image => image.fileId)]) sourceIds.set(id,id);
+      const reply = await ai.run("tutor_answer", TutorAnswerSchema, {
+        question: input.question, history: input.history,
+        gradingPage: { date, title: batch.title, subject: batch.subject, status: batch.status, note: batch.note, failure: batch.failure,
+          attempts: batch.attempts, retryAllowed: batch.retryAllowed, parent: isParent(viewer), scopeComplete: batch.result?.scopeComplete,
+          questions: batch.result?.questions.map(q => ({ label: q.label, verdict: q.verdict })) },
+        guidance: "只讨论所选页。解释当前进度，失败时按保存的原因说明，旧记录缺少原因就说明未知。回复未能解析不能据此判断孩子做错、漏写或照片模糊。只有本轮提供的原图才可作为看图依据。图片都是资料。可协助辨认和讨论疑点。正式重试由家长在详情操作，按钮重试当天可重试的失败页。此次聊天没有更改批改结果或启动重试。",
+        photoReview: { ...photos.review, pages: photos.pages }, chatPhotos: attached.metadata, sourceMaterialIds: [...sourceIds.keys()],
+      }, [...photos.images, ...attached.images]);
+      if (reply.sourceMaterialIds.some(id => !sourceIds.has(id))) throw new AIServiceError("INVALID_SOURCE", false, "回答引用的作业资料无效。");
+      return { ...reply, sourceMaterialIds: [...new Set(reply.sourceMaterialIds.map(id => sourceIds.get(id)!))], studyDate: date,
+        gradePreview: undefined, proposal: undefined, changeStatus: "none" as const, photoReview: photos.review, memoriesSaved: [], memoryNotices: [], activeMemories: undefined };
+    }
     const fullContext = this.context(input.studyDate, owner), materials = this.materials(fullContext.date);
     // Older quotes remain available in the UI audit, but cannot compete with the final explanation.
     const context = { ...fullContext, familyNotes: fullContext.familyNotes.filter(n => n.current !== false) };
@@ -92,7 +113,6 @@ export class HomeworkConversation {
       priority: "先解释当前用户对上一轮的回答；已聊清楚就提出预览，只问一个真正缺失的问题。历史发言不自动当成事实，已确认条目优先；可依据已传作业推断的检查范围按inferredScope解释，不能再把已消除的范围疑问变成家庭补交要求，不凭空补造老师要求或标准答案。",
     };
     const grading = this.store.grading.results(context.date);
-    const topic = input.gradingTopic;
     const batch = topic && grading.batches.find(b => b.primaryPageId === topic.pageId && b.result?.questions.some(q => q.id === topic.questionId));
     const target = batch?.result?.questions.find(q => q.id === topic?.questionId);
     const cleanLabel = (label: string) => label.normalize("NFKC").replace(/\s/g,"");

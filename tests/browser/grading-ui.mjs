@@ -32,6 +32,14 @@ try {
   await page.route("**/assistant-api/**", async route => {
     const url = new URL(route.request().url()), path = url.pathname;
     const json = data => route.fulfill({ contentType: "application/json", body: JSON.stringify(data) });
+    if (path.endsWith("/chat")) {
+      const body = route.request().postDataJSON();
+      assert.equal(body.gradingTopic.batchId, "synthetic-run");
+      assert.equal(body.gradingTopic.pageId, "synthetic-page");
+      assert.equal(body.studyDate, selectedDate);
+      assert.equal(body.reviewPhotos, true);
+      return json({id:"synthetic-chat", answer:"已收到这页的问题。"});
+    }
     if (path.endsWith("/practice/exams")) return json({items:[],total:0,stage:{grade:4,semester:1}});
     if (path.endsWith("/reading/state")) return json(null);
     if (path.endsWith("/status")) return json({ authenticated: true, available: true, speech: true, accounts: true, viewer: { id: "11111111-1111-4111-8111-111111111111", name: "模拟成员", username: "synthetic", role: child ? "child" : "admin" } });
@@ -463,6 +471,11 @@ try {
   const failures = detail.getByRole("region",{name:"本页批改情况"});
   await failures.getByText("AI返回的内容未能正常解析，没能读到可用的批改回复。",{exact:true}).waitFor();
   assert.match(await failures.innerText(),/已尝试3次.*独立复核/);
+  await failures.getByRole("button",{name:"和小步聊这页"}).click();
+  assert.equal(await page.getByLabel("想问小步的问题").inputValue(),"");
+  await page.getByRole("button",{name:"帮我看看这页原图"}).click();
+  await page.getByText("已收到这页的问题。",{exact:true}).waitFor();
+  await page.getByRole("button",{name:"关闭小助手"}).click();
   await failures.getByRole("button",{name:"查看原题照片"}).click();
   await failures.locator("img").waitFor();
   await failures.getByRole("button",{name:"重试当天失败页"}).click();
@@ -475,6 +488,9 @@ try {
   await rows.first().click();
   assert.equal(await failures.getByRole("button",{name:"重试当天失败页"}).count(),0);
   await failures.getByText("请家长处理重试，已有结果仍可查看。").waitFor();
+  await failures.getByRole("button",{name:"和小步聊这页"}).click();
+  await page.getByRole("button",{name:"这页批改到哪一步了？"}).waitFor();
+  await page.getByRole("button",{name:"关闭小助手"}).click();
   child=false; failed=false; signatureCase=true;
   await page.goto(base,{waitUntil:"networkidle"});
   await page.getByRole("button",{name:"查看批改",exact:true}).click();

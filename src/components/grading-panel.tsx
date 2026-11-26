@@ -221,6 +221,9 @@ export function GradingPanel({ date, canManage = true, focusFailures = false }: 
                 {!canManage && <p>请家长处理重试，已有结果仍可查看。</p>}
               </> : <p>{selectedBatch.note || (selectedBatch.status === "done" ? selectedBatch.result?.scopeComplete ? "本页已完成批改。" : "本页已有部分结果，可在全部题目中查看。" : progressText)}</p>}
               {error && <p role="alert">{error}</p>}
+              <button className="text-button" type="button" onClick={() => window.dispatchEvent(new CustomEvent("xiaobu:ask-homework", { detail: {
+                date, gradingTopic: { batchId: selectedBatch.id, pageId: selectedBatch.primaryPageId, label: `${selectedBatch.subject} · ${selectedBatch.title}`.slice(0,400), stem: pageStatus(selectedBatch) },
+              } }))}><MessageCircle size={17} aria-hidden="true" />和小步聊这页</button>
               <Photo key={selectedBatch.id} id={selectedBatch.primaryPageId} />
             </section>}
           {(selectedBatch.note || selectedBatch.result?.note) && <details className="grade-batch-note"><summary>查看这页的批改说明</summary><p>{selectedBatch.result?.note || selectedBatch.note}</p></details>}

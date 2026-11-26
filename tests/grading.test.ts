@@ -148,6 +148,35 @@ test("grading failure reasons and stages persist, are safe to show, and survive 
   } finally { f.close(); }
 });
 
+test("a page discussion uses the saved diagnostic and only the selected original, including without a question", async () => {
+  const { HomeworkConversation } = await import("../src/server/homework/conversation");
+  const f = fixture();
+  try {
+    const run = f.store.grading.claim()!;
+    f.store.grading.fail(run, false, false, {code:"INVALID_ENVELOPE", stage:"verification"});
+    const batch = f.store.grading.results(date).batches[0];
+    const file = f.u.files[0].id;
+    f.store.setPages(file, [f.page, file + "-p2"].map((id,i) => ({id,file_id:file,number:i+1})));
+    const service = new HomeworkConversation(f.store, {images: pages => pages.map(p => ({fileId:p.id,mimeType:"image/png",base64:"synthetic"}))});
+    const topic = {pageId:f.page, batchId:batch.id, label:"其他作业", stem:"其他状态"};
+    const input = {question:"请看这页",history:[],studyDate:date,reviewPhotos:true,gradingTopic:topic};
+    const ai: StructuredAI = {async run(task,schema,data,images) {
+      assert.equal(task,"tutor_answer");
+      const context = data as {gradingPage:typeof batch};
+      assert.equal(context.gradingPage.title,batch.title);
+      assert.equal(context.gradingPage.failure?.stage,"verification");
+      assert.deepEqual(images?.map(image => image.fileId), [f.page]);
+      return schema.parse({answer:"原件已保存。",spokenAnswer:"原件已保存。",sourceMaterialIds:[f.page],hint:null,followUpQuestion:null});
+    }};
+    const reply = await service.answer(ai,input,"test");
+    assert.deepEqual(reply.sourceMaterialIds,[f.u.id]);
+    assert.equal(reply.photoReview.providedPages,1);
+    assert.deepEqual(f.store.grading.results(date).batches[0],batch);
+    await assert.rejects(service.answer(ai,{...input,gradingTopic:{...topic,pageId:file+"-p2"}},"test"),/重新选择/);
+    await assert.rejects(service.answer(ai,{...input,studyDate:"2026-11-18"},"test"),/重新选择/);
+  } finally { f.close(); }
+});
+
 test("a medium-confidence Chinese glyph is not turned into a wrong-book entry by four repeated OCR readings", async () => {
   const f = fixture(); let calls = 0;
   const sourceRow = f.store.db.prepare('SELECT id,source FROM grading_runs LIMIT 1').get() as {id:string;source:string};
