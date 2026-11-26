@@ -117,12 +117,13 @@ export function checkRereadEvidence(result:RereadResult,originalQuestion:string)
   const labels={tick:"勾",cross:"叉",unclear:"标记不清",unmarked:"未见批注",blank:"老师标为漏答"};
   const evidence=answerMarks.map(a=>a.position+"："+labels[a.mark]).join("；");
   const handwriting=answerMarks.map(a=>a.position+"："+(a.handwriting||"原答看不清")).join("；");
-  if(!change)return answerMarks.length>1?{...result,evidence:evidence.slice(0,200),reply:evidence.slice(0,200)}:result;
+  const reading=answerMarks.map(a=>a.position+"："+(a.handwriting||"原答看不清")+"（"+labels[a.mark]+"）").join("；").slice(0,200);
+  if(!change)return answerMarks.length>1?{...result,evidence:evidence.slice(0,200),reply:reading}:result;
   const verdict=answerMarks.some(a=>a.mark==="cross")?"wrong":
     answerMarks.every(a=>a.mark==="blank")?"blank":
     answerMarks.some(a=>a.mark==="blank")?"wrong":
     answerMarks.every(a=>a.mark==="tick")?"correct":"uncertain";
   return {...result,evidence:evidence.slice(0,200),
-    reply:(answerMarks.length>1||verdict!==change.verdict)?evidence.slice(0,200):result.reply,
+    reply:(answerMarks.length>1||verdict!==change.verdict)?reading:result.reply,
     change:{...change,studentAnswer:handwriting.slice(0,1200),teacherMark:evidence.slice(0,500),verdict}};
 }

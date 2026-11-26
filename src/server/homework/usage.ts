@@ -9,7 +9,7 @@ const record = (value: unknown): Record<string, unknown> => value && typeof valu
 function phaseOf(task: AITask, metadata: unknown): HomeworkPhase {
   if (task==="index_curriculum") return "curriculum";
   if (["generate_practice","verify_practice","grade_practice"].includes(task)) return "practice";
-  if (task === "locate_exam_answers" || task === "transcribe_exam_answers" || task === "index_exam_page" || task === "explain_exam_reading" || task === "read_marked_exam" || task === "recognize_memo" || task === "extract_homework") return "recognition";
+  if (task === "recover_exam_handwriting" || task === "locate_exam_answers" || task === "transcribe_exam_answers" || task === "index_exam_page" || task === "explain_exam_reading" || task === "read_marked_exam" || task === "recognize_memo" || task === "extract_homework") return "recognition";
   if (task === "organize_homework") return "organization";
   if (["inspect_study_traces", "assess_written_completion", "recheck_written_parts"].includes(task)) return "completion";
   if (task === "grade_homework") return "inspection";

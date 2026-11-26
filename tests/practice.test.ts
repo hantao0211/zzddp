@@ -1,3 +1,5 @@
+import { inkDetailSheet } from "../src/server/practice/exam-ink-detail";
+import { inflateSync } from "node:zlib";
 import { questionFromParts, assembleReadings, cropGeometry } from "../src/server/practice/exam-local-reading";
 import { checkRereadEvidence } from "../src/domain/assessment";
 import assert from "node:assert/strict";
@@ -392,7 +394,7 @@ test("exam explanations use the selected photo, keep the verdict independent and
     const worker=new PracticeWorker(f.store,()=>ai);await worker.tick();
     const feedback=question().feedback!;
     assert.equal(feedback.status,"done");assert.equal(question().verdict,"uncertain");
-    assert.equal(feedback.result?.change?.studentAnswer,"1处：两种写法");
+    assert.equal(feedback.result?.change?.studentAnswer,"第1处：两种写法");
     assert.equal(feedback.result?.change?.verdict,"correct");
     assert.deepEqual(exams.readingChecks("数学"),[]);
     exams.learn(pageId,{id:feedback.id,enabled:true});
@@ -403,6 +405,42 @@ test("exam explanations use the selected photo, keep the verdict independent and
     exams.review(pageId,{id:q.id,revision:1,value:{...value,...feedback.result!.change,confident:true}},parent.id);
     assert.equal(question().verdict,"correct");
     assert.throws(()=>exams.explain(pageId,{...cmd,requestId:randomUUID()},child.id),/已更新/);
+  }finally{f.close();}
+});
+
+test("recovery reads only unresolved handwriting and preserves clear marks, blank answers and other fields",async t=>{
+  const f=setup();
+  try{
+    const {exams}=f.store;
+    const paper=exams.reserve({pages:[{sha:"e".repeat(64),bytes:100}]});
+    const page=paper.pages[0];
+    const value={label:"按图填写",question:"看图填写三项",studentAnswer:"待辨",
+      teacherMark:"批注",expectedAnswer:"",correction:"",verdict:"uncertain",confident:false,knowledgePoints:[],cause:"原因待确认",causeExplanation:""};
+    exams.savePage(page.id,{coverage:"complete",note:"",questions:[value]});
+    const q=exams.detail(paper.exam.id).questions[0];
+    t.mock.method(exams as unknown as {aiImage:(id:string)=>unknown},"aiImage",
+      async(id:string,_view?:unknown,pencil=false)=>({fileId:id,base64:pencil?"pencil":"original",mimeType:"image/jpeg"}));
+    const ai:StructuredAI={async run(task,schema,raw,images){
+      if(task==="locate_exam_answers")return schema.parse({targets:[{label:value.label,anchor:value.question,box:[10,20,340,150],slots:3}],coverage:"complete",note:""});
+      if(task==="transcribe_exam_answers")return schema.parse({groups:[{targetId:1,located:true,questions:[
+        {...value,part:"甲",mark:"tick",studentAnswer:"月"},{...value,part:"乙",mark:"cross",studentAnswer:""},
+        {...value,part:"丙",mark:"blank",studentAnswer:""},{...value,part:"丁",mark:"cross",studentAnswer:"旧读"}]}]});
+      if(task==="recover_exam_handwriting"){
+        assert.deepEqual(raw,{positions:[{targetId:1,index:2,position:"乙"},{targetId:1,index:4,position:"丁"}]});
+        assert.deepEqual(images?.map(i=>i.base64),["original","pencil"]);
+        return schema.parse({items:[{targetId:1,index:2,handwriting:"日",strokes:"方框内一横"},
+          {targetId:1,index:4,handwriting:"目",strokes:"框中两横"},{targetId:1,index:1,handwriting:"多余",strokes:"多余"}]});
+      }
+      assert.equal(task,"explain_exam_reading");
+      return schema.parse({questionId:q.id,located:true,answerMarks:[],evidence:"纸面可见",reply:"已读",
+        check:null,change:{...value,verdict:"correct"}});
+    }};
+    exams.explain(page.id,{questionId:q.id,revision:q.revision,requestId:randomUUID(),note:"请再读"},child.id);
+    await new PracticeWorker(f.store,()=>ai).tick();
+    const result=exams.detail(paper.exam.id).questions[0].feedback!.result!;
+    assert.deepEqual(result.answerMarks?.map(m=>[m.handwriting,m.mark]),[["月","tick"],["日","cross"],["","blank"],["目","cross"]]);
+    assert.equal(result.change?.verdict,"wrong");
+    assert.match(result.reply,/日（叉）/);
   }finally{f.close();}
 });
 
@@ -466,4 +504,25 @@ test("local exam transcription keeps visible ink independent from marks and the 
   assert.equal(read([base]).questions[0].verdict,"uncertain");
   assert.equal(read([base,{...base,part:"乙",mark:"unmarked",teacherMark:""}]).questions[1].verdict,"uncertain");
   assert.equal(cropGeometry([0,0,1000,1000],1900,2700),"1900x2700+0+0");
+});
+
+test("ink detail pairs a coloured annotation with a graphite view and leaves a page without red alone",()=>{
+  const w=30,h=30,header=Buffer.from("P6\n30 30\n255\n"),rgb=Buffer.alloc(w*h*3,200);
+  assert.equal(inkDetailSheet(Buffer.concat([header,rgb])),undefined);
+  for(let y=8;y<20;y++)for(let x=8;x<20;x++){
+    const i=(y*w+x)*3;
+    rgb[i]=180;rgb[i+1]=20;rgb[i+2]=15;
+  }
+  rgb.fill(40,(14*w+21)*3,(14*w+22)*3);
+  const sheet=inkDetailSheet(Buffer.concat([header,rgb]))!;
+  assert.equal(sheet.readUInt32BE(16),500);
+  assert.equal(sheet.readUInt32BE(20),100);
+  const idat=sheet.indexOf("IDAT");
+  const pixels=inflateSync(sheet.subarray(idat+4,idat+4+sheet.readUInt32BE(idat-4)));
+  const at=(x:number,y:number)=>y*(500*3+1)+1+x*3;
+  assert.equal(pixels[at(125,50)+1],20);
+  assert.equal(pixels[at(375,50)+1],245);
+  const graphiteX=125+Math.round((21-13.5)*58/11);
+  assert.equal(pixels[at(graphiteX,50)],40);
+  assert.ok(pixels[at(graphiteX+250,50)]<40);
 });

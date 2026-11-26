@@ -160,7 +160,7 @@ export class Assessments {
       printedBlankCount(q.question)>1||/难辨|疑似|未辨清|看不清/.test(q.teacherMark+q.studentAnswer));
     if(first&&!review?.length)return first;
     const requested=review?.map(q=>({label:q.label,anchor:q.question,slots:Math.max(1,printedBlankCount(q.question))}));
-    const prefix="exam-located-v2:"+key+":"+digest(JSON.stringify(requested??null));
+    const prefix="exam-located-v3:"+key+":"+digest(JSON.stringify(requested??null));
     const layout=await execution.cached(prefix+":layout",()=>ai.run("locate_exam_answers",paperLayout,{...context,requested},[image]));
     const targetsToRead=requested?layout.targets.flatMap(t=>{
       const matches=requested.filter(q=>q.label===t.label);
@@ -212,15 +212,45 @@ export class Assessments {
   }
   private async transcribeTargets(ai:StructuredAI,pageId:string,context:object,targets:ReadingTarget[],expand:boolean){
     const images:AIImage[]=[];
+    const regions:Region[]=[];
     for(const target of targets){
       const [left,top,right,bottom]=target.box;
       const area:Region=expand?[Math.max(0,left-90),Math.max(0,top-85),Math.min(1000,right+90),Math.min(1000,bottom+85)]:target.box;
+      regions.push(area);
       const crop=await this.aiImage(pageId,area);
       images.push({...crop,fileId:"target-"+target.targetId});
     }
-    return ai.run("transcribe_exam_answers",localReadings,{
+    const read=await ai.run("transcribe_exam_answers",localReadings,{
       ...context,targets:targets.map(({box,...location})=>location)
     },images);
+    assembleReadings(targets,read);
+    const pending=read.groups.filter(g=>g.located).flatMap(group=>group.questions.flatMap((part,i)=>{
+      const missing=!part.studentAnswer.trim()||/^(?:原答|笔迹|字迹|手写)?(?:看不清|不清晰?|未辨清|无法辨认|未辨认)[。！]?$/.test(part.studentAnswer.trim());
+      const checkInk=part.mark==="cross"||(missing&&part.mark!=="blank");
+      return checkInk?[{targetId:group.targetId,index:i+1,position:part.part}]:[];
+    }));
+    if(!pending.length)return read;
+    const views:AIImage[]=[];
+    for(const [i,target] of targets.entries()){
+      if(!pending.some(p=>p.targetId===target.targetId))continue;
+      views.push(images[i],{...await this.aiImage(pageId,regions[i],true),fileId:"pencil-"+target.targetId});
+    }
+    const schema=z.object({items:z.array(z.object({targetId:z.number().int(),index:z.number().int(),
+      handwriting:z.string().trim().max(160),strokes:z.string().trim().max(180)})).max(400)});
+    let extra:z.infer<typeof schema>;
+    try{
+      extra=await ai.run("recover_exam_handwriting",schema,{positions:pending},views);
+    }catch(error){
+      if(error instanceof AIServiceError)return read;
+      throw error;
+    }
+    for(const entry of pending){
+      const matches=extra.items.filter(x=>x.targetId===entry.targetId&&x.index===entry.index);
+      if(matches.length!==1||!matches[0].strokes||!matches[0].handwriting)continue;
+      const group=read.groups.find(g=>g.targetId===entry.targetId)!;
+      group.questions[entry.index-1].studentAnswer=matches[0].handwriting;
+    }
+    return read;
   }
   private async readPageInGroups(execution:HomeworkExecution,ai:StructuredAI,image:AIImage,key:string,context:object) {
     const pageKey="marked-groups-v1:"+key;
@@ -266,8 +296,8 @@ export class Assessments {
     }
     return {questions,metadata,coverage,note:[...notes].filter(Boolean).join(" ").slice(0,500)};
   }
-  private aiImage(pageId:string,view?:ExamView){
-    return examImage(join(this.directory,pageId),pageId,view);
+  private aiImage(pageId:string,view?:ExamView,pencil=false){
+    return examImage(join(this.directory,pageId),pageId,view,pencil);
   }
   readingChecks(subject:ExamMeta["subject"]){
     if(!subject)return [];
@@ -325,7 +355,7 @@ export class Assessments {
           }
         }
       }
-      const marks=parts.map((part,i)=>({position:(i+1)+(part.part?" "+part.part:"处"),handwriting:part.studentAnswer.slice(0,160),mark:part.teacherMark.trim()?part.mark:"unclear" as const}));
+      const marks=parts.map((part,i)=>({position:part.part&&parts.filter(p=>p.part===part.part).length===1?part.part:("第"+(i+1)+"处"),handwriting:part.studentAnswer.slice(0,160),mark:part.teacherMark.trim()?part.mark:"unclear" as const}));
       const canRead=target&&marks.length>=target.slots;
       const schema=examReread.required({answerMarks:true});
       const reread=canRead?await ai.run("explain_exam_reading",schema,{
