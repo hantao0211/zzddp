@@ -9,6 +9,21 @@ export function blankCount(stem: string) {
   return stem.normalize("NFKC").match(/\(\s*(?:_{2,}\s*)?\)|_{2,}/g)?.length || 0;
 }
 
+// Only a printed arithmetic expression with one result can exclude a list as out of scope.
+export function singleCalculation(stem: string) {
+  const expression = stem.normalize("NFKC").trim().replace(/^(?:用简便方法计算|简便计算|计算|巧算)\s*[:、]?\s*/, "").replace(/^\(\d+\)\s*/, "").replace(/[。.]$/, "").trim();
+  return !blankCount(expression) && !/[\d)]\s+[\d(]|[\d)]\s*\(|\)\s*\d/.test(expression) && /^[\d.\s()+*/×÷−-]+$/u.test(expression) && /\d\s*[+×÷−*/-]\s*\d/u.test(expression);
+}
+
+export function mixedCalculationReading(reading: Pick<GradingReading, "studentAnswer" | "expectedAnswer">) {
+  return !!(numericSlots(reading.studentAnswer) || numericSlots(reading.expectedAnswer));
+}
+
+function numericResult(text: string) {
+  const value = text.normalize("NFKC").split("=").at(-1)?.trim();
+  return value && /^-?\d{1,12}(?:\/[1-9]\d{0,11})?$/.test(value) ? value : null;
+}
+
 function answer(text: string) {
   const slots = numericSlots(text);
   if (slots) return slots.join(",");
@@ -33,6 +48,21 @@ function quote(text: string) {
 /** Settle completed objective reviews from the two independent, question-specific observations. */
 export function settleReviewedQuestion(q: GradedQuestion, readings: GradingReading[]): GradedQuestion {
   if (q.kind !== "objective" || q.verdict !== "uncertain") return q;
+  if (singleCalculation(q.question) && readings.some(mixedCalculationReading)) {
+    const scoped = readings.filter(r => !mixedCalculationReading(r));
+    const [first, second] = scoped;
+    const written = first && numericResult(first.studentAnswer), expected = first && numericResult(first.expectedAnswer);
+    if (scoped.length === 2 && first.stage !== second.stage && scoped.every(r => r.verdict === "wrong" && r.confidence === "high")
+        && written && expected && written === numericResult(second.studentAnswer) && expected === numericResult(second.expectedAnswer)) {
+      const [a, b = "1"] = written.split("/"), [c, d = "1"] = expected.split("/");
+      if (BigInt(a) * BigInt(d) !== BigInt(c) * BigInt(b)) {
+        return { ...q, verdict: "wrong", verification: "agreed", confidence: "high", studentAnswer: written, expectedAnswer: expected,
+          explanation: `最后一步写成了 ${written}，应为 ${expected}。`, cause: "原因待确认", causeExplanation: "", nextStep: "检查最后一步。" };
+      }
+    }
+    return { ...q, studentAnswer: numericSlots(q.studentAnswer) ? "" : q.studentAnswer, expectedAnswer: numericSlots(q.expectedAnswer) ? "" : q.expectedAnswer,
+      explanation: "有一次复核混入了其他数值，这一小题的结果还需核对。" };
+  }
   const a = readings.find(r => r.stage === "focusOne"), b = readings.find(r => r.stage === "focusTwo");
   if (!a || !b || q.explanation.startsWith("有填写位置还没核对齐")) return q;
   const x = answer(a.studentAnswer), y = answer(b.studentAnswer);

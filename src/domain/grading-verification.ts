@@ -8,6 +8,7 @@ export function blindGradingQuestions(questions: Question[], selected: Pick<Ques
   return selected.map(q => ({ questionId: q.id, locator: {
     order: questions.findIndex(item => item.id === q.id) + 1,
     numbers: q.label.match(/\d+/g)?.slice(0, 5) || [],
+    ...(/^[ABC]级第\d+题[（(]\d+[）)]$/u.test(q.label) ? { printedLabel: q.label } : {}),
     part: q.label.match(/涂色|画图|填空|选择|计算|判断|默写|听写|抄写|作文/)?.[0] || null,
     pages: q.evidence.map(e => ({ fileId: e.fileId, page: e.page })),
   } }));

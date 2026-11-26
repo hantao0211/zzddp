@@ -1,7 +1,7 @@
 import type { HomeworkRule } from "../../domain/memory";
 import { LearnedMemories } from "./memory";
 import { reviewReadings } from "./grading-readings";
-import { settleReviewedQuestion } from "../../domain/grading-decision";
+import { mixedCalculationReading, singleCalculation, settleReviewedQuestion } from "../../domain/grading-decision";
 import { isWrittenTask } from "../../domain/written-completion";
 import { automaticAttemptLimit } from "../../domain/homework-usage";
 import { selectedSubmissionReport } from "./selected-submission";
@@ -222,7 +222,18 @@ export class GradingStore {
   results(date: string): { summary: GradingSummary; batches: GradingBatchView[] } {
     return { summary: this.summary(date), batches: (this.store.db.prepare("SELECT * FROM grading_runs WHERE date=? AND active=1 ORDER BY rowid").all(date) as (GradingRun & { primary_page_id: string })[]).map(run => { const source = JSON.parse(run.source) as GradingSource;
       const result = run.result ? GradingResultSchema.parse(JSON.parse(run.result)) : null;
-      return { readings: reviewReadings(this.store.db, run.id, result), attempts: run.attempts, retryAllowed: run.status === "failed" && run.attempts < 6, failure: run.status === "done" ? null : this.failure(run.id), id: run.id, subject: source.subject, title: source.title, status: run.status, note: run.note, primaryPageId: run.primary_page_id, result }; }) };
+      const readings = reviewReadings(this.store.db, run.id, result);
+      for (const question of result?.questions || []) {
+        const observations = readings?.[question.id];
+        if (readings && observations && singleCalculation(question.question) && observations.some(mixedCalculationReading)) {
+          readings[question.id] = observations.filter(r => !mixedCalculationReading(r));
+          if (question.verdict === "uncertain") {
+            question.explanation = "有一次复核混入了其他数值，这一小题的结果还需核对。";
+            if (mixedCalculationReading(question)) { question.studentAnswer = ""; question.expectedAnswer = ""; }
+          }
+        }
+      }
+      return { readings, attempts: run.attempts, retryAllowed: run.status === "failed" && run.attempts < 6, failure: run.status === "done" ? null : this.failure(run.id), id: run.id, subject: source.subject, title: source.title, status: run.status, note: run.note, primaryPageId: run.primary_page_id, result }; }) };
   }
   private failure(runId: string): GradingFailure | null {
     const row = this.store.db.prepare("SELECT code,stage,failed_at,source FROM grading_diagnostics WHERE run_id=?").get(runId) as { code: string; stage: GradingStage; failed_at: string; source: GradingFailure["source"] } | undefined;

@@ -87,3 +87,17 @@ test("numeric fill-ins keep each slot, including a denominator", () => {
  assert.equal(reconcileFocusedQuestion({...original,question:"3/8 里有（ ）个 1/8，再添（ ）个 1/8 就是 1。"},partial,partial,"数学").verdict,"wrong");
  assert.equal(equivalentAnswer("1,23","12,3"),false);
 });
+
+test("side-by-side calculations use the numbered subquestion and its own result", () => {
+ const q = { ...first, label:"A级第3题(2)", question:"巧算：(2) 7/8-2/8。", verdict:"uncertain" as const, verification:"uncertain" as const };
+ assert.equal(blindGradingQuestions([q])[0].locator.printedLabel,q.label);
+ const one = { ...GradingVerificationSchema.shape.checks.element.parse(check), stage:"verification", studentAnswer:"7/8-2/8=4/8", expectedAnswer:"5/8" } as const;
+ const two = { ...one, stage:"focusOne", studentAnswer:"=4/8" } as const;
+ const mixed = { ...one, stage:"focusTwo", studentAnswer:"9，4/8",expectedAnswer:"9，5/8",confidence:"medium" } as const;
+ const checked=settleReviewedQuestion(q,[one,two,mixed]);
+ assert.equal(checked.verdict,"wrong"); assert.equal(checked.studentAnswer,"4/8"); assert.equal(checked.expectedAnswer,"5/8");
+ assert.equal(settleReviewedQuestion(q,[one,{...two,studentAnswer:"3/8"},mixed]).verdict,"uncertain");
+ assert.equal(settleReviewedQuestion({...q,question:"填空：（ ），（ ）。"},[one,two,mixed]).verdict,"uncertain");
+ assert.equal(settleReviewedQuestion(q,[one,{...two,expectedAnswer:"1/2"},{...mixed}]).verdict,"uncertain");
+ assert.equal(reconcileFocusedQuestion(q,mixed,mixed,"数学").verdict,"uncertain");
+});

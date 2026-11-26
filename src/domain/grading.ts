@@ -1,4 +1,4 @@
-import { blankCount, matchingCorrectAnswer, numericSlots } from "./grading-decision";
+import { blankCount, matchingCorrectAnswer, mixedCalculationReading, numericSlots, singleCalculation } from "./grading-decision";
 import type { GradingFailure } from "./grading-failure";
 import { z } from "zod";
 import { EvidenceSchema } from "./ai-contracts";
@@ -39,6 +39,11 @@ export function equivalentAnswer(a: string, b: string) {
 }
 export function reconcileQuestion(id: string, first: z.infer<typeof GradingQuestionSchema>, second: z.infer<typeof GradingVerificationSchema>["checks"][number]): GradedQuestion {
   if (first.kind === "subjective" || second.kind === "subjective") return { ...first, id, verdict: "feedback", confidence: "medium", explanation: second.explanation || first.explanation, verification: "subjective", cause: "原因待确认" };
+  if (singleCalculation(first.question) && [first, second].some(mixedCalculationReading)) {
+    const scoped = [first, second].find(r => !mixedCalculationReading(r));
+    return { ...first, id, studentAnswer: scoped?.studentAnswer || "", expectedAnswer: scoped?.expectedAnswer || "",
+      verdict: "uncertain", verification: "uncertain", confidence: "low", explanation: "有一次复核混入了其他数值，这一小题的结果还需核对。" };
+  }
   const count = blankCount(first.question);
   const ordered = [first.studentAnswer, first.expectedAnswer, second.studentAnswer, second.expectedAnswer].map(numericSlots);
   if (count >= 2 && ordered.some(values => values && values.length !== count))
