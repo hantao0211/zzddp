@@ -7,7 +7,7 @@ const base=process.env.SMOKE_BASE_URL,output=process.env.SMOKE_OUTPUT_DIR;assert
 const viewer={id:'11111111-1111-4111-8111-111111111111',name:'模拟孩子',username:'qa-child',role:'child'},bookId='22222222-2222-4222-8222-222222222222';
 let book={id:bookId,revision:'a'.repeat(64),title:'模拟书名（待更正）',author:'模拟作者',publisher:'模拟出版社',isbn:'',totalPages:241,catalogId:null,description:'',sourceUrl:'https://example.org/book',createdAt:'2026-11-22T00:00:00Z',finished:false,lastReadPage:48,uniquePages:22,minutes:25,logCount:1},failNext=true,conflictNext=false;
 const log={id:'33333333-3333-4333-8333-333333333333',bookId,version:1,date:'2026-11-22',startPage:27,endPage:48,minutes:25,summary:'人物遇到困难后，和朋友一起想办法。',chapter:'',reflection:'',excerpt:'',imageId:null,actorId:viewer.id,backfilled:false,createdAt:'',updatedAt:'',reviewStatus:'done',canEdit:true,review:{summaryFeedback:'你把遇到的事情说明白了。',strengths:[],nextStep:'',followUpQuestion:'',expression:'clear',comparison:'insufficient_evidence',comparisonReason:'仅评价你的概括。',evidenceQuote:'',evidenceReadable:false,basis:'none',timingNote:'时长是阅读记录。'}};
-const state=()=>({today:'2026-11-23',viewer,books:[book,{...book,id:'44444444-4444-4444-8444-444444444444',title:'一本有很长很长书名的探险故事',totalPages:258,shelfStatus:'finished',finished:true,uniquePages:0,minutes:0,logCount:0,lastReadPage:0}],logs:[log],rules:{dailyPoints:2,backfillCounts:false,milestones:[]},stats:{days:1,minutes:25,pages:22,currentStreak:1,bestStreak:1,booksFinished:0},growth:{balance:2,earned:2,ledger:[]},wishes:[],rewards:[],redemptions:[],calendar:[],reviewBudget:{used:0,limit:20},hasMore:false});
+const state=()=>({today:'2026-11-23',viewer,books:[book,{...book,id:'44444444-4444-4444-8444-444444444444',title:'一本有很长很长书名的探险故事',totalPages:258,shelfStatus:'finished',finished:true,uniquePages:0,minutes:0,logCount:0,lastReadPage:0},{...book,id:'55555555-5555-4555-8555-555555555555',title:'模拟探险故事',uniquePages:0,minutes:0,logCount:0,lastReadPage:0,shelfStatus:'unread'}],logs:[log],rules:{dailyPoints:2,backfillCounts:false,milestones:[]},stats:{days:1,minutes:25,pages:22,currentStreak:1,bestStreak:1,booksFinished:0},growth:{balance:2,earned:2,ledger:[]},wishes:[],rewards:[],redemptions:[],calendar:[],reviewBudget:{used:0,limit:20},hasMore:false});
 const writes=[],errors=[],browser=await (process.env.SMOKE_BROWSER==='webkit'?webkit:chromium).launch({headless:true});
 try{
  const page=await browser.newPage({ ignoreHTTPSErrors:true, colorScheme:process.env.SMOKE_COLOR_SCHEME || 'light',viewport:{width:390,height:844},hasTouch:true,isMobile:true});page.on('pageerror',e=>errors.push(e.message));
@@ -115,7 +115,7 @@ try{
  const gridView=page.getByRole('button',{name:'方块视图',exact:true});
  const listView=page.getByRole('button',{name:'列表视图',exact:true});
  assert.equal(await listView.getAttribute('aria-pressed'),'true');
- assert.equal(await shelf.locator('.shelf-book-icon:visible').count(),2);
+ assert.equal(await shelf.locator('.shelf-book-icon:visible').count(),3);
  for(const width of [320,390,768,1280]){
   await page.setViewportSize({width,height:844});
   const rows=await shelf.locator('article').evaluateAll(items=>items.map(el=>Math.round(el.getBoundingClientRect().height)));
@@ -134,7 +134,17 @@ try{
   assert.ok(await cover.evaluate(el=>{
     const r=el.getBoundingClientRect();return !!document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)?.closest('.shelf-book-open');
   }));
-  if(width===390)await page.locator('.reading-library').screenshot({path:output+'/shelf-grid.png'});
+  if(width===390){
+    const colors=await shelf.evaluate(el=>{
+      const paper=document.createElement('span');paper.style.backgroundColor='var(--journal-paper)';el.append(paper);
+      const bg=node=>getComputedStyle(node).backgroundColor;
+      const cards=[...el.querySelectorAll('article')].map(card=>({fill:bg(card),cover:bg(card.querySelector('.shelf-book-icon'))}));
+      const page=bg(paper);paper.remove();return {page,cards};
+    });
+    assert.ok(colors.cards.every(card=>card.fill!==colors.page && card.fill!==card.cover));
+    assert.equal(new Set(colors.cards.map(card=>card.fill)).size,3);
+    await page.locator('.reading-library').screenshot({path:output+'/shelf-grid.png'});
+  }
   await listView.click();
  }
  await page.setViewportSize({width:390,height:844});

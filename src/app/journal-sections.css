@@ -84,16 +84,22 @@
     grid-template-areas: "cover copy status"; gap: 7px; padding: 8px 0; border: 0; border-radius: 0;
   }
   .study-shell .reading-books > article + article { border-top: 1px solid var(--border); }
+  .reading-books > article {
+    --shelf-card-paper: var(--journal-sage);
+    --shelf-spine-ink: var(--journal-green);
+  }
+  .reading-books > article:nth-child(3n + 2) {
+    --shelf-card-paper: var(--journal-lilac);
+    --shelf-spine-ink: var(--theme-purple-text, #694879);
+  }
+  .reading-books > article:nth-child(3n) {
+    --shelf-card-paper: var(--journal-yellow);
+    --shelf-spine-ink: var(--theme-warm-text, #775522);
+  }
   .shelf-book-icon {
     grid-area: cover; display: grid; place-items: center; width: 24px; height: 33px;
-    color: var(--journal-green); background: var(--journal-sage);
+    color: var(--shelf-spine-ink); background: var(--shelf-card-paper);
     border-inline-start: 3px solid currentColor; border-radius: 2px 6px 6px 2px;
-  }
-  .reading-books article:nth-child(3n + 2) .shelf-book-icon {
-    background: var(--theme-purple-soft); color: var(--theme-purple-text);
-  }
-  .reading-books article:nth-child(3n) .shelf-book-icon {
-    background: var(--theme-warm-soft); color: var(--theme-warm-text);
   }
   .shelf-book-copy { grid-area: copy; min-width: 0; padding-block: 3px; }
   .reading-books .reading-shelf-status { grid-area: status; z-index: 1; justify-self: end; }
@@ -103,9 +109,10 @@
   .study-shell .reading-books[data-view=grid] > article {
     grid-template-columns: minmax(0,1fr) auto; grid-template-areas: "cover status" "copy copy";
     align-content: space-between; align-items: start; aspect-ratio: 1; padding: clamp(8px, 2vw, 14px);
-    border: 1px solid var(--border); border-radius: 12px; background: var(--journal-paper);
+    border: 1px solid var(--border); border-radius: 12px; background: var(--shelf-card-paper);
   }
-  .reading-books[data-view=grid] .shelf-book-icon { width: 32px; height: 43px; }
+  .reading-books[data-view=grid] .shelf-book-icon { width: 32px; height: 43px; background: var(--journal-paper); }
+  .reading-books[data-view=grid] .shelf-book-copy p { color: var(--muted); }
   .reading-books[data-view=grid] .shelf-book-icon svg { width: 20px; height: 20px; }
   .reading-books[data-view=grid] .reading-shelf-status { gap: 2px; padding-inline: 4px; font-size: 12px; }
   @media(max-width:360px) {
