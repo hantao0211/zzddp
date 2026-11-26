@@ -23,6 +23,7 @@ try {
     const json = (data, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(data) });
     if (path.endsWith("/reading/state")) return json(null);
     if (path.endsWith("/learning/state")) return json(snapshot(url.searchParams.get("date")));
+ if(path.endsWith('/practice/exams'))return json({items:[],total:0});
     if (path.endsWith("/status")) return json({ authenticated: true, available: true, speech: true });
     if (path.endsWith("/memories")) return json({ items: [] });
     if (path.endsWith("/homework-context")) { const date = url.searchParams.get("date"); return json({ date, revision: 1, availableDates: [date], hasMaterials: true, pending: false, status: "processed", note: "Synthetic fixture", taskCount: 1, unclassifiedCount: 0, entries: [], uncertainties: [], familyNotes: [] }); }
@@ -83,12 +84,14 @@ try {
   await page.getByRole("button", { name: "查看详情", exact: true }).click();
   await page.getByRole("button", { name: "刷新作业状态", exact: true }).click();
   await page.locator(".hw-task").waitFor();
-  assert.ok((await page.locator(".hw-family-notes").innerText()).includes("模拟家庭补充说明"));
+  await page.locator(".hw-family-notes button").click();
+  assert.ok((await page.getByRole("dialog").innerText()).includes("模拟家庭补充说明"));
+  await page.getByRole("dialog").getByRole("button",{name:"返回列表"}).click();
   const nav=page.getByRole("navigation",{name:"学习资料导航"});
   const archive=nav.getByRole("button",{name:"历史资料",exact:true});
   if(!await archive.isVisible())await nav.getByRole("button",{name:"更多",exact:true}).click();
   await archive.click();
-  await page.getByRole("button", { name: "2026-11-16", exact: true }).click();
+  await page.getByLabel("有记录的日期").selectOption("2026-11-16");
   assert.equal(await page.locator(".hw-details-heading input").inputValue(), "2026-11-16");
   await page.getByRole("button", { name: "返回首页", exact: true }).click();
   assert.equal(await page.locator(".hw-simple-home input").inputValue(), "2026-11-16");
@@ -128,8 +131,10 @@ try {
     await page.getByRole("button", { name: "刷新作业状态", exact: true }).click();
     await page.getByText(state === "marked" ? "已做（有痕迹）" : "未做（无痕迹）", { exact: true }).waitFor();
     assert.ok((await page.locator(".hw-task-card .section-heading").innerText()).includes("共 1 项作业"));
-    await page.locator(".hw-activity-evidence summary").click();
+    await page.locator(".hw-task").first().click();
+    await page.getByRole("dialog").getByText(/完成情况 ·/).waitFor();
     await page.screenshot({ path: output + `/review-${state}-mobile.png`, fullPage: true });
+    await page.getByRole("dialog").getByRole("button",{name:"返回列表"}).click();
     await page.getByRole("button", { name: "返回首页", exact: true }).click();
     if (state === "blank") await page.getByText("预习复习还有未动笔的内容，做好后再拍照。", { exact: true }).waitFor();
   }
@@ -184,7 +189,7 @@ try {
     await page.screenshot({ path: output + `/written-${state}-home.png`, fullPage: true });
     await page.getByRole("button", { name: "查看详情", exact: true }).click();
     await page.getByText(state === "done" ? "已做完（未批改）" : "未做完", { exact: true }).waitFor();
-    if (state === "incomplete") await page.getByText("第2题：未作答", { exact: true }).waitFor();
+    if (state === "incomplete") { await page.locator(".hw-task").first().click(); await page.getByRole("dialog").locator("li").filter({hasText:/第2题.*未作答/}).first().waitFor(); }
   }
   scenario = "pending";
   await page.reload({ waitUntil: "networkidle" });

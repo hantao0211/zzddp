@@ -1,4 +1,5 @@
 "use client";
+import { HomeworkUploadList } from "./homework-upload-list";
 import { BackLabel } from "./back-label";
 import { PracticeCenter } from "./practice-center";
 import { HomeworkScopeForm, HomeworkScopeSelect } from "./homework-scope-field";
@@ -10,7 +11,7 @@ import { resolveHomeworkDayPlan } from "@/domain/homework-calendar";
 import { taskSubmission } from "@/domain/task-submission";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { HomeworkNavigation, type HomeworkTab } from "./homework-navigation";
-import { BookOpen, Camera, ClipboardList, Download, FolderOpen, Heart, ImagePlus, LoaderCircle, LogOut, ShieldCheck, Sparkles, Sprout, Upload, X, MessageCircle, Pencil, CalendarDays, Sun } from "lucide-react";
+import { BookOpen, ChevronRight, Camera, ClipboardList, Download, FolderOpen, Heart, ImagePlus, LoaderCircle, LogOut, ShieldCheck, Sparkles, Sprout, Upload, X, MessageCircle, Pencil, CalendarDays, Sun } from "lucide-react";
 import type { DailyReport, HomeworkSnapshot, UploadView, UploadTarget } from "@/domain/homework";
 import { DaySchema, shanghaiDay } from "@/domain/homework";
 import { reviewActivityLabel, needsReviewTraceUpdate } from "@/domain/review-policy";
@@ -75,10 +76,10 @@ function taskListStatus(task: DailyReport["tasks"][number], snapshot: HomeworkSn
   } as const)[task.coverage];
 }
 
-function Dialog({ title, close, children }: { title: string; close: () => void; children: ReactNode }) {
+function Dialog({ title, close, children, listDetail = false, backLabel = "返回列表" }: { backLabel?: string; listDetail?: boolean; title: string; close: () => void; children: ReactNode }) {
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => { const d = ref.current; d?.showModal(); return () => d?.close(); }, []);
-  return <dialog className="dialog hw-dialog" ref={ref} onCancel={(e) => { e.preventDefault(); close(); }} aria-label={title}><div className="dialog-header"><h2>{title}</h2><button className="icon-button" onClick={close} aria-label="关闭"><X size={22} /></button></div><div className="dialog-body">{children}</div></dialog>;
+  return <dialog className={`dialog hw-dialog${listDetail ? " hw-list-detail" : ""}`} ref={ref} onCancel={(e) => { e.preventDefault(); close(); }} aria-label={title}><div className="dialog-header">{listDetail && <button className="text-button hw-back" onClick={close}><BackLabel>{backLabel}</BackLabel></button>}<h2>{title}</h2><button className="icon-button" onClick={close} aria-label="关闭"><X size={22} /></button></div><div className="dialog-body">{children}</div></dialog>;
 }
 function errorText(error: unknown) { return error instanceof Error ? error.message : "操作暂未完成，请稍后重试。"; }
 
@@ -141,13 +142,14 @@ export function HomeworkApp({ onDemo, onDateChange, active=true }: { onDemo: () 
   const picker = useRef<HTMLInputElement>(null), pickedKind = useRef<"memo" | "homework">("homework");
   const [scopeEditing, setScopeEditing] = useState<HomeworkScopeSource | null>(null);
   const [memoEdit, setMemoEdit] = useState<{ title?: string; subject?: string } | null>(null);
+  const [notesOpen,setNotesOpen]=useState(false);
   const [rowStatusId, setRowStatusId] = useState<string | null>(null);
   const [daySettingsOpen, setDaySettingsOpen] = useState(false);
   const [dayPlanBusy, setDayPlanBusy] = useState(false);
   const [dayPlanError, setDayPlanError] = useState("");
   const [dayPlanChoice, setDayPlanChoice] = useState<{ context: string; noHomework: boolean } | null>(null);
   const [undoEdit, setUndoEdit] = useState<string | null>(null);
-  useEffect(() => { setMemoEdit(null); setRowStatusId(null); setUndoEdit(null); setDaySettingsOpen(false); setDayPlanError(""); setDayPlanChoice(null); }, [date, viewer?.id]);
+  useEffect(() => { setMemoEdit(null); setRowStatusId(null); setNotesOpen(false); setUndoEdit(null); setDaySettingsOpen(false); setDayPlanError(""); setDayPlanChoice(null); }, [date, viewer?.id]);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [legacy, setLegacy] = useState(false);
   const requestId = useRef(0), pendingReads=useRef(0), previousActive=useRef(active);
@@ -235,8 +237,14 @@ export function HomeworkApp({ onDemo, onDateChange, active=true }: { onDemo: () 
   }
   function askAboutDay() { window.dispatchEvent(new CustomEvent("xiaobu:ask-homework", { detail: { date } })); }
   const tasks = snapshot?.report?.tasks || [];
+  const report = snapshot?.report;
+  const noteCount = (report?.familyNotes?.length || 0) + (report?.uncertainties.length || 0) + (report?.unassigned.length || 0) + (report?.unclassified?.length || 0);
+  const notesTitle = report?.uncertainties.length || report?.unassigned.length || report?.unclassified?.length ? "说明与待确认事项" : "家庭补充说明";
   const oldReviewTasks = tasks.filter((task) => needsReviewTraceUpdate(task, snapshot?.reviewPolicy));
   const filtered = snapshot?.uploads.filter((u) => subject === "全部" || u.subjects.includes(subject as "数学" | "英语" | "语文")) || [];
+  const selectedTask = tasks.find(task => task.id === rowStatusId);
+  const linkedUploads = selectedTask ? snapshot?.uploads.filter(upload => (upload.id === report?.memoId && selectedTask.memoEvidence.length > 0) ||
+    upload.files.some(file => file.pages.some(page => selectedTask.evidence.some(item => item.fileId === page.id)))) : [];
   const detail = snapshot?.uploads.find((u) => u.id === detailId);
   async function retryDay() { try { await homeworkPost("/retry-day", { date }); await refresh(); } catch (e) { setNotice(errorText(e)); } }
   return <StudyShell viewer={viewer} page="home" className="hw-app" date={date} name={viewer?.name} roleLabel={viewer?ROLE_LABELS[viewer.role]:undefined} parent={isParent(viewer)} onLogout={auth==="ready"?async()=>{try{await homeworkRequest("/assistant-api/session",{method:"DELETE"});sessionChanged();await refresh();}catch(e){setNotice(errorText(e));}}:undefined}>
@@ -281,16 +289,28 @@ export function HomeworkApp({ onDemo, onDateChange, active=true }: { onDemo: () 
         <HomeworkNavigation tab={tab} grading={!!snapshot?.grading?.enabled} change={setTab} refresh={()=>void refresh()} />
         {(tab === "today" || tab === "archive") && snapshot && <div className={`hw-status ${snapshot.status === "failed" ? "hw-status-error" : ""}`} role="status">{snapshot.pending ? <LoaderCircle size={20} className="spin" /> : <Sparkles size={20} />}<div><strong>{labels[snapshot.status] || "正在整理"}</strong><p>{snapshot.note}</p>{snapshot.pending && snapshot.report && <p>下方暂时展示上一次结果，新资料整理完成后会自动更新。</p>}</div>{snapshot.status === "failed" && canManage && <button className="button primary compact" onClick={retryDay}>重新查缺</button>}</div>}
         {(tab === "today" || tab === "archive") && snapshot?.reviewPolicy && <section className="hw-review-policy"><details><summary>预习复习按学习痕迹检查</summary><p>{snapshot.reviewPolicy.description}</p></details>{canManage && <button className="button primary compact" onClick={retryDay}>重新整理</button>}{oldReviewTasks.length > 0 && !snapshot.pending && <p>部分预习、复习还是旧版结果，尚未按新规则判断。重新整理会由AI检查已上传照片，无需重新上传。</p>}</section>}
-        {tab === "today" && <div className="hw-grid"><section className="card hw-task-card"><div className="section-heading"><h2><ClipboardList size={21} /> 作业清单</h2>{tasks.length > 0 && <small className="hw-task-count">共 {tasks.length} 项作业</small>}<button className="text-button study-edit-list" onClick={() => setMemoEdit({})}><Pencil size={15} />修改清单</button></div><p className="section-description">每项作业分别显示照片是否收到；预习、复习还会显示有没有动笔痕迹。</p>{!tasks.length ? <div className="hw-empty"><BookOpen size={38} /><h3>{snapshot?.uploads.some((u) => u.kind === "memo") ? "正在等待清晰的作业清单" : "从一张备忘录开始"}</h3><p>不用手动填写科目或任务。<br />已经上传的作业会保留，备忘录识别后自动关联。</p></div> : <div className="hw-tasks">{tasks.map((task) => {
+        {tab === "today" && <div className="hw-checklist-section"><section className="card hw-task-card"><div className="section-heading"><h2><ClipboardList size={21} /> 作业清单</h2>{tasks.length > 0 && <small className="hw-task-count">共 {tasks.length} 项作业</small>}<button className="text-button study-edit-list" onClick={() => setMemoEdit({})}><Pencil size={15} />修改清单</button></div>{!tasks.length ? <div className="hw-empty"><BookOpen size={38} /><h3>{snapshot?.uploads.some((u) => u.kind === "memo") ? "正在等待清晰的作业清单" : "从一张备忘录开始"}</h3><p>不用手动填写科目或任务。<br />已经上传的作业会保留，备忘录识别后自动关联。</p></div> : <div className="hw-tasks">{tasks.map((task) => {
           const status = taskListStatus(task, snapshot);
-          return <article key={task.id} className="hw-task"><span className="subject-icon">{task.subject.slice(0, 1)}</span><div className="hw-task-content"><div><h3>{task.inferredMeaning?.displayTitle||task.title}</h3><StatusIndicator kind={status.kind} className="hw-task-status">{status.label}</StatusIndicator></div><p>{task.inferredMeaning?.description||task.inferredScope?.description||task.requirement}</p>{task.inferredScope&&<div className="task-inferred-scope"><strong><Sparkles size={15} aria-hidden="true"/>根据作业推断</strong>{task.inferredMeaning&&<p>{task.inferredScope.description}</p>}<p>{task.inferredScope.note}</p><details><summary>查看备忘录原要求</summary><p>原记：{task.title}</p><p>{task.requirement}</p></details></div>}{snapshot?.completionFeedback?.[task.id]?.latest?.status === "confirmed" && <p>家长已核对并确认这项作业写完。</p>}{snapshot?.completionFeedback?.[task.id]?.latest?.status !== "confirmed" && task.writtenCompletion && <details className="hw-activity-evidence" open={task.writtenCompletion.status === "incomplete" || task.writtenCompletion.status === "unclear"}><summary>作答完成检查依据</summary><p>{task.writtenCompletion.reason}</p>{task.writtenCompletion.parts.some(p => p.status !== "answered") && <ul>{task.writtenCompletion.parts.filter(p => p.status !== "answered").map((part, i) => <li key={i}>{part.label}：{part.status === "blank" ? "未作答" : "AI未看清"}</li>)}</ul>}</details>}{task.reviewActivity && <details className="hw-activity-evidence"><summary>{task.reviewActivity.status === "unclear" ? "AI没看清的原因" : "学习痕迹依据"}</summary><p>{task.reviewActivity.reason}</p></details>}{taskSubmission(task) !== "self" && needsReviewTraceUpdate(task, snapshot?.reviewPolicy) && <p className="hw-secondary">这项仍是旧版结果，AI尚未按圈画、批注等动笔痕迹重新判断。无需补充朗读、笔记或复习过程证明。</p>}{taskSubmission(task) !== "self" && !needsReviewTraceUpdate(task, snapshot?.reviewPolicy) && task.missing.length > 0 && <ul>{task.missing.map((text, i) => <li key={i}>{text}</li>)}</ul>}<div className="hw-evidence">{taskUploadButton(summary?.rows.find(row => row.id === task.id))}{snapshot?.completionFeedback?.[task.id] && <button className="text-button" onClick={()=>setRowStatusId(task.id)}>查看或反馈完成情况</button>}{snapshot?.taskScopeSources?.[task.id] && <span className="hw-task-scope">
-      作业归属 · {scopeLabels[snapshot.taskScopeSources[task.id].scope]}
-      {canManage && <button type="button" className="text-button" onClick={() => setScopeEditing(snapshot.taskScopeSources![task.id])}>修改作业归属</button>}
-    </span>}{task.memoEvidence.length > 0 && <button className="text-button" onClick={() => setDetailId(snapshot!.report!.memoId)}>备忘录依据</button>}{task.evidence.map((ev, i) => { const owner = snapshot?.uploads.find((u) => u.files.some((f) => f.pages.some((p) => p.id === ev.fileId))); return <button className="text-button" key={i} title={ev.excerpt} onClick={() => owner && setDetailId(owner.id)}>查看作业依据 {i + 1}</button>; })}</div></div></article>;
-        })}</div>}{!!snapshot?.report?.unclassified?.length && <section className="hw-unclassified"><h3>备忘录中尚未确定科目的条目</h3>{snapshot.report.unclassified.map((a, i) => <div key={i}><strong>{a.title}</strong><p>{a.requirement}</p></div>)}<p className="hw-secondary">原文已保留，下面这些作业的科目还没确定。可以直接告诉小助手这条是什么意思，或补拍更清晰的备忘录。</p></section>}<button className="button secondary hw-discuss" onClick={() => window.dispatchEvent(new CustomEvent("xiaobu:ask-homework", { detail: { date } }))}>和小助手说说这些疑问</button><div className="hw-task-note"><ShieldCheck size={17} /><span>{snapshot?.reviewPolicy ? "非书面作业可以直接确认完成，照片为补充参考；书面作业仍检查对应资料，完成与答对分开判断。" : "找到照片表示已收到对应内容，不代表答案已经批改正确。"}</span></div></section><aside>{!!snapshot?.report?.uncertainties.length && <section className="card hw-uncertainties"><h2>识别说明</h2><p>AI无法确定的地方会保留说明。</p><details><summary>查看 {snapshot.report.uncertainties.length} 条说明</summary><ul>{snapshot.report.uncertainties.map((u, i) => <li key={i}>{u}</li>)}</ul></details></section>}{!!snapshot?.report?.unassigned.length && <section className="card hw-uncertainties"><h2>暂未对应到清单</h2><ul>{snapshot.report.unassigned.map((u, i) => <li key={i}>{u.reason}</li>)}</ul><p>这些原件仍在学习档案中。</p></section>}</aside></div>}
+          return <button type="button" key={task.id} className="hw-task hw-record-row" aria-haspopup="dialog" onClick={()=>setRowStatusId(task.id)}>
+            <span className="hw-record-main"><small>{task.subject}</small><strong>{task.inferredMeaning?.displayTitle || task.title}</strong></span>
+            <StatusIndicator kind={status.kind} className="hw-task-status">{status.label}</StatusIndicator>
+            <ChevronRight className="hw-record-arrow" size={15} aria-hidden="true"/>
+          </button>;
+        })}</div>}<button className="text-button hw-list-ask" onClick={() => window.dispatchEvent(new CustomEvent("xiaobu:ask-homework", { detail: { date } }))}>和小助手说说这些疑问</button></section></div>}
         {tab === "grading" && <GradingPanel date={date} canManage={canManage} focusFailures={focusGradingFailures} />}{tab === "mistakes" && <MistakeBook canManage={canManage} />}
         {tab === "practice" && <PracticeCenter active={active} openSource={canManage ? openSourceAssignment : undefined} />}{tab === "materials" && <CurriculumLibrary active={active} canManage={canManage} />}
-        {(tab === "today" || tab === "archive") && <>{!!snapshot?.report?.familyNotes?.length && <section className="card hw-family-notes"><h2>家庭补充说明</h2><FamilyNotes notes={snapshot.report.familyNotes} /><span className="hw-secondary">以上是当前理解，较早的原话保留在历史里。</span></section>}<section className="card hw-archive"><div className="section-heading"><h2><FolderOpen size={21} /> {tab === "today" ? "已收到的资料" : "历史资料"}</h2><span className="count-label">{snapshot?.uploads.length || 0}</span></div>{tab === "archive" && <><div className="hw-history" aria-label="有记录的日期">{snapshot?.dates.map((d) => <button key={d} className={d === date ? "selected" : ""} onClick={() => setDate(d)}>{d}</button>)}</div><div className="tabs">{["全部", "数学", "英语", "语文"].map((s) => <button className={subject === s ? "selected" : ""} key={s} onClick={() => setSubject(s)}>{s}</button>)}</div></>}{(tab === "today" ? snapshot?.uploads || [] : filtered).map((u) => <button className="hw-file-row" key={u.id} onClick={() => setDetailId(u.id)}><span className="file-icon">{u.kind === "memo" ? <ClipboardList size={23} /> : <BookOpen size={23} />}</span><div><h3>{u.kind === "memo" ? "作业备忘录" : "作业照片／扫描件"}</h3><p>{u.subjects.length ? u.subjects.join("、") : "科目待识别"} · {u.files.length} 个原件</p><small>{u.note || "原件尚在上传，请重新选择同一批文件继续。"}</small></div><UploadStatusLabel status={u.status} /></button>)}{!snapshot?.uploads.length && <p className="hw-no-files">这一天还没有收到资料。</p>}</section>
+        {(tab === "today" || tab === "archive") && <>
+          <HomeworkUploadList key={JSON.stringify([tab,date,tab==="archive"?subject:""])} title={tab==="today" ? "已收到的资料" : "历史资料"}
+            uploads={tab==="today" ? snapshot?.uploads || [] : filtered} filtered={tab==="archive" && subject!=="全部"}
+            open={setDetailId} status={upload=><UploadStatusLabel status={upload.status}/>}>
+            {tab==="archive" && <div className="hw-archive-filters"><label>日期<select aria-label="有记录的日期" value={date} onChange={event=>changeStudyDate(event.target.value)}>
+              {Array.from(new Set([date,...(snapshot?.dates||[])])).map(day=><option key={day}>{day}</option>)}</select></label>
+              <label>科目<select aria-label="资料科目" value={subject} onChange={event=>setSubject(event.target.value)}>{["全部","数学","英语","语文"].map(value=><option key={value}>{value}</option>)}</select></label>
+            </div>}
+          </HomeworkUploadList>
+          {noteCount > 0 && <section className="card hw-family-notes">
+            <button type="button" className="hw-record-row" aria-haspopup="dialog" onClick={()=>setNotesOpen(true)}><strong>{notesTitle} · {noteCount} 条</strong><ChevronRight size={15}/></button>
+          </section>}
         </>}
         <div className="hw-storage"><ShieldCheck size={18} /><span>原件和整理结果保存在家庭服务器，通过家庭访问码保护。家长和孩子使用独立账号权限，旧家庭访问码只进入孩子学习空间。</span></div>
         </section>}
@@ -301,18 +321,26 @@ export function HomeworkApp({ onDemo, onDateChange, active=true }: { onDemo: () 
     </main>
     {auth === "ready" && <input className="visually-hidden" ref={picker} type="file" multiple accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif,application/pdf" aria-label="选择备忘录或作业照片" onChange={(e) => { const files = Array.from(e.target.files || []); e.target.value = ""; if (files.length) setUpload({ kind: pickedKind.current, files, target: pickedTarget.current }); }} />}
     {upload && <HomeworkUpload target={upload.target} kind={upload.kind} initialFiles={upload.files} date={date} close={() => setUpload(null)} onSaved={async (u) => { setUpload(null); setDate(u.date); setNotice(""); await refresh(); }} />}
-    {detail && <UploadDetail canManage={canManage} upload={detail} close={() => setDetailId(null)} refresh={refresh} onDate={(d) => { setDate(d); setDetailId(null); }} />}
+    {notesOpen && snapshot?.report && <Dialog title={notesTitle} listDetail close={()=>setNotesOpen(false)}>{!!snapshot?.report?.unclassified?.length && <section className="hw-unclassified"><h3>备忘录中尚未确定科目的条目</h3>{snapshot.report.unclassified.map((a, i) => <div key={i}><strong>{a.title}</strong><p>{a.requirement}</p></div>)}<p className="hw-secondary">原文已保留，下面这些作业的科目还没确定。可以直接告诉小助手这条是什么意思，或补拍更清晰的备忘录。</p></section>}{!!snapshot?.report?.uncertainties.length && <section className="hw-uncertainties"><h2>识别说明</h2><p>AI无法确定的地方会保留说明。</p><details><summary>查看 {snapshot.report.uncertainties.length} 条说明</summary><ul>{snapshot.report.uncertainties.map((u, i) => <li key={i}>{u}</li>)}</ul></details></section>}{!!snapshot?.report?.unassigned.length && <section className="hw-uncertainties"><h2>暂未对应到清单</h2><ul>{snapshot.report.unassigned.map((u, i) => <li key={i}>{u.reason}</li>)}</ul><p>这些原件仍在学习档案中。</p></section>}<FamilyNotes notes={snapshot.report.familyNotes || []}/></Dialog>}
+    {detail && <UploadDetail backLabel={rowStatus ? "返回作业" : "返回列表"} canManage={canManage} upload={detail} close={() => setDetailId(null)} refresh={refresh} onDate={(d) => { setDate(d); setDetailId(null); }} />}
     {memoEdit && auth === "ready" && <MemoEditor date={date} canManage={canManage} scopeSaved={() => void refresh()} {...memoEdit} close={() => setMemoEdit(null)} saved={receipt => { setMemoEdit(null); setUndoEdit(receipt.id); setNotice("修改已保存，小步正在按新清单重新整理。"); void refresh(); }} />}
     {scopeEditing && canManage && <Dialog title="原作业归属" close={() => setScopeEditing(null)}>
       <p>{scopeEditing.date} · {scopeEditing.title}</p>
       <HomeworkScopeForm key={scopeEditing.id} source={scopeEditing} saved={() => { setScopeEditing(current => current?.id === scopeEditing.id ? null : current); void refresh(); }} />
     </Dialog>}
-    {rowStatus && snapshot && auth === "ready" && <Dialog title="这项作业的情况" close={() => setRowStatusId(null)}><HomeworkTaskStatus key={rowStatus.id} canManage={isParent(viewer)} snapshot={snapshot} row={rowStatus} onUpload={uploadTarget(rowStatus) && !rowStatus.memoEdited ? () => {
+    {rowStatus && snapshot && auth === "ready" && <Dialog title="这项作业的情况" listDetail={detailsOpen} close={() => setRowStatusId(null)}><HomeworkTaskStatus key={rowStatus.id} canManage={isParent(viewer)} snapshot={snapshot} row={rowStatus} onUpload={uploadTarget(rowStatus) && !rowStatus.memoEdited ? () => {
       const target = uploadTarget(rowStatus);
       if (!target) return;
       setRowStatusId(null);
       setUpload({ kind: "homework", files: [], target });
-    } : undefined} saved={() => refresh()} allUploads={() => { setRowStatusId(null); setSubject("全部"); setTab("archive"); showDetails(true); }} /><div className="study-status-actions">
+    } : undefined} saved={() => refresh()} allUploads={() => { setRowStatusId(null); setSubject("全部"); setTab("archive"); showDetails(true); }} />
+      {!!linkedUploads?.length && <details className="hw-date-edit"><summary>查看关联原件 · {linkedUploads.length} 份</summary>
+        {linkedUploads.map(upload=><button className="text-button" key={upload.id} onClick={()=>setDetailId(upload.id)}>{upload.kind==="memo" ? "备忘录依据" : upload.files.map(file=>file.name).join("、") || "作业原件"}</button>)}
+      </details>}
+      {snapshot.taskScopeSources?.[rowStatus.id] && <details className="hw-date-edit"><summary>作业归属 · {scopeLabels[snapshot.taskScopeSources[rowStatus.id].scope]}</summary>
+        {canManage ? <HomeworkScopeForm source={snapshot.taskScopeSources[rowStatus.id]} saved={()=>void refresh()}/> : <p>{rowStatus.title}</p>}
+      </details>}
+      <div className="study-status-actions">
       <button className="button secondary" onClick={() => { setMemoEdit({ title: rowStatus.title, subject: rowStatus.subject }); setRowStatusId(null); }}><Pencil size={17} />识别有误，修改这项</button><button className="text-button" onClick={() => { const task = snapshot.report?.tasks.find(t => t.id === rowStatus.id); const question = rowStatus.selfTask ? `关于“${rowStatus.title}”：这项通常非书面，当前${rowStatus.activity.text}。请结合已有要求解释怎么做，不要让我上传照片来证明完成；完成记录可以在清单点“我完成了”。` : `关于“${rowStatus.title}”：照片显示${rowStatus.photo.text}，完成情况显示${rowStatus.activity.text}。${task?.missing.length ? `系统记录的疑点：${task.missing.join("；")}。` : ""}请结合这项已上传照片和已有记录，解释具体原因；不要笼统让我补齐，也不要增加原作业没有的要求。`; setRowStatusId(null); window.dispatchEvent(new CustomEvent("xiaobu:ask-homework", { detail: { date, question } })); }}>问问小步</button></div></Dialog>}
     {legacy && <LegacyMigration close={() => setLegacy(false)} refresh={refresh} />}
   </StudyShell>;
@@ -348,10 +376,10 @@ function HomeworkUpload({ kind, date, initialFiles, close, onSaved, target }: { 
   </form></Dialog>;
 }
 
-function UploadDetail({ upload, close, refresh, onDate, canManage }: { canManage: boolean; upload: UploadView; close: () => void; refresh: () => Promise<void>; onDate: (d: string) => void }) {
+function UploadDetail({ upload, close, refresh, onDate, canManage, backLabel }: { backLabel:string; canManage: boolean; upload: UploadView; close: () => void; refresh: () => Promise<void>; onDate: (d: string) => void }) {
   const [error, setError] = useState(""), [busy, setBusy] = useState(false), [date, setDate] = useState(upload.date);
   const act = async (path: string, value = {}) => { setBusy(true); setError(""); try { await homeworkPost(path, value); await refresh(); } catch (e) { setError(errorText(e)); } finally { setBusy(false); } };
-  return <Dialog title={upload.kind === "memo" ? "作业备忘录" : "作业照片／扫描件"} close={close}><div className="hw-detail-meta"><span>{upload.date}</span><UploadStatusLabel status={upload.status} /><span>{upload.subjects.join("、")}</span></div>{upload.target && <p className="hw-upload-target"><ClipboardList size={18} aria-hidden="true" />上传到：{upload.target.subject} · {upload.target.title}</p>}{upload.scopeSource && <details className="hw-date-edit">
+  return <Dialog listDetail backLabel={backLabel} title={upload.kind === "memo" ? "作业备忘录" : "作业照片／扫描件"} close={close}><div className="hw-detail-meta"><span>{upload.date}</span><UploadStatusLabel status={upload.status} /><span>{upload.subjects.join("、")}</span></div>{upload.target && <p className="hw-upload-target"><ClipboardList size={18} aria-hidden="true" />上传到：{upload.target.subject} · {upload.target.title}</p>}{upload.scopeSource && <details className="hw-date-edit">
       <summary>作业归属 · {scopeLabels[upload.scopeSource.scope]}</summary>
       {canManage && <HomeworkScopeForm key={upload.scopeSource.id} source={upload.scopeSource} saved={() => void refresh()} />}
     </details>}<p>{upload.note || "上传尚未完成，请重新选择同一批文件上传以继续。"}</p>{!!upload.issues?.filter((i) => !i.pageId).length && <details className="hw-page-issues"><summary>备忘录识别说明</summary><ul>{upload.issues.filter((i) => !i.pageId).map((i, n) => <li key={n}>{i.message}</li>)}</ul></details>}{upload.aiMs > 0 && <p className="hw-secondary">最近识别累计用时 {Math.max(1, Math.round(upload.aiMs / 1000))} 秒（不含排队和当天合并查缺）</p>}{upload.status === "failed" && <button className="button primary" disabled={busy} onClick={() => act(`/uploads/${upload.id}/retry`)}>重试这份资料</button>}{canManage && <details className="hw-date-edit"><summary>调整这份资料的作业日期</summary><p>整理结束后可以调整。清单和关联会重新计算，原件保留。</p><input type="date" aria-label="调整作业日期" value={date} onChange={(e) => setDate(e.target.value)} /><button className="button primary compact" disabled={busy || !date || date === upload.date} onClick={async () => { setBusy(true); try { await homeworkPost(`/uploads/${upload.id}/date`, { date }); onDate(date); } catch (e) { setError(errorText(e)); } finally { setBusy(false); } }}>保存日期</button></details>}{error && <p className="form-error" role="alert">{error}</p>}{upload.files.map((file) => <section className="hw-original" key={file.id}><div><strong>{file.name}</strong>{file.stored && <a className="text-button" href={`/assistant-api/learning/files/${file.id}`}><Download size={16} /> 下载原件</a>}</div>{file.pages.map((p) => <figure key={p.id}><PhotoPreviewButton className="photo-preview-thumbnail" src={pagePhotoUrl(p.id, "full")} label={`查看第${p.number}页高清图片`} alt={`${file.name} 第${p.number}页`}><HomeworkPhoto pageId={p.id} alt={`${file.name} 第${p.number}页`} /></PhotoPreviewButton><figcaption>原件第 {p.number} 页<a className="text-button" href={pagePhotoUrl(p.id,"screen",true)}><Download size={15} aria-hidden="true" />下载图片</a></figcaption>{!!upload.issues?.some((i) => i.pageId === p.id) && <details className="hw-page-issues"><summary>这一页的识别说明</summary><ul>{upload.issues.filter((i) => i.pageId === p.id).map((i, n) => <li key={n}>{i.message}</li>)}</ul></details>}</figure>)}{!file.pages.length && <p className="hw-secondary">{file.stored ? "原件已保存，预览将在页面转换完成后显示。" : "这个文件尚未上传成功。"}</p>}</section>)}</Dialog>;

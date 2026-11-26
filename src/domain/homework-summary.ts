@@ -8,7 +8,7 @@ import { needsReviewTraceUpdate, usesReviewTraces } from "./review-policy";
 type State = { text: string; tone: "good" | "attention" | "muted" };
 export type HomeworkSummaryRow = { id: string; title: string; subject: string; photo: State; activity: State; photoDetail: string; activityDetail: string; uploadLabel?: "上传作业" | "选传作业" | "补传照片"; photoCount?: number; selfTask?: boolean; completionToken?: string; selfConfirmed?: boolean; updating?: boolean; memoEdited?: boolean; inferred?:boolean; displayTitle?:string };
 export function homeworkSummary(snapshot: HomeworkSnapshot | null) {
-  if (!snapshot?.uploads.length) return null;
+  if (!snapshot || (!snapshot.uploads.length && !snapshot.report?.tasks.length)) return null;
   const receipt = (kind: "memo" | "homework") => {
     const uploads = snapshot.uploads.filter(u => u.kind === kind);
     const count = uploads.flatMap(u => u.files).filter(f => f.stored).length;

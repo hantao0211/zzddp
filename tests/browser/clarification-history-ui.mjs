@@ -15,7 +15,9 @@ try {
  await page.route('**/assistant-api/**',async route=>{
   const url=new URL(route.request().url()), path=url.pathname,date=url.searchParams.get('date')||'2026-11-15';
   const send=data=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(data)});
-  if(path.endsWith('/status'))return send({authenticated:true,available:true,speech:true});
+  if(path.endsWith('/reading/state'))return send(null);
+ if(path.endsWith('/practice/exams'))return send({items:[],total:0});
+ if(path.endsWith('/status'))return send({authenticated:true,available:true,speech:true});
   if(path.endsWith('/memories'))return send({items:[]});
   if(path.endsWith('/homework-context'))return send({date,revision:2,availableDates:[date],hasMaterials:true,pending:false,status:'processed',note:'',taskCount:1,unclassifiedCount:0,entries:[],uncertainties:[],familyNotes:notes(date)});
   if(path.endsWith('/learning/state'))return send({date,status:'processed',pending:false,note:'',dates:[date],quota:{calls:0,limit:60},uploads:[{id:'memo',kind:'memo',date,createdAt:'',status:'processed',note:'模拟备忘录',subjects:['语文'],files:[{id:'file',name:'synthetic.png',size:1,stored:true,pages:[]}],issues:[]}],report:{date,memoId:'memo',updatedAt:'',familyNotes:notes(date),tasks:[{id:'t',subject:'语文',title:'复习第27课',requirement:current,format:'other',memoEvidence:[],evidence:[],coverage:'complete',missing:[],reviewActivity:{status:'marked',reason:'模拟圈画'},writtenCompletion:null}],unclassified:[],unassigned:[],uncertainties:[]}});
@@ -23,7 +25,8 @@ try {
  });
  await page.goto(base,{waitUntil:'networkidle'});
  await page.getByRole('button',{name:'查看详情',exact:true}).click();
- const home=page.locator('.hw-family-notes');
+ await page.locator('.hw-family-notes button').click();
+ const home=page.getByRole('dialog',{name:'家庭补充说明'});
  assert.ok((await home.innerText()).includes(current)); assert.ok(!(await home.innerText()).includes(history));
  await home.getByText('查看较早的说明（以当前理解为准）',{exact:true}).click(); assert.ok((await home.innerText()).includes(history));
  await home.getByText('查看较早的说明（以当前理解为准）',{exact:true}).click();
