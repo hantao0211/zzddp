@@ -112,8 +112,13 @@ try{
  parent.on('request',request=>{
   if(request.method()==='PATCH'&&new URL(request.url()).pathname.includes('/practice/scopes/')) scopeWrites.push(request);
  });
+ async function chooseTab(nav,name){
+   const button=nav.getByRole('button',{name,exact:true});
+   if(!await button.isVisible())await nav.getByRole('button',{name:'更多',exact:true}).tap();
+   await button.tap();
+ }
  const navigation=parent.getByRole('navigation',{name:'学习资料导航'});
- await navigation.getByRole('button',{name:'错题本',exact:true}).tap();
+ await chooseTab(navigation,'错题本');
  const list=parent.getByRole('region',{name:'错题本'});
  const scopeFilters=list.getByRole('combobox',{name:/^归属/});
  const subjects=list.getByRole('combobox',{name:/^科目/});
@@ -130,12 +135,12 @@ try{
  assert.equal(await list.locator('.mistake-scope .mistake-scope-chip').textContent(),'课外');
  assert.equal(await list.getByRole('group',{name:'错题筛选与排序'}).getByRole('combobox').count(),3);
  assert.equal(await scopeFilters.textContent(),'课外');
- await navigation.getByRole('button',{name:'小练习',exact:true}).tap();
+ await chooseTab(navigation,'小练习');
  const englishPractice=parent.locator('.practice-subjects article').filter({has:parent.getByRole('heading',{name:'英语',exact:true})});
  assert.equal(await englishPractice.getByRole('button',{name:'准备这科练习',exact:true}).isEnabled(),true);
  assert.deepEqual(await getPracticeSubjects(),baseline);
  assert.equal(scopeWrites.length,0);
- await navigation.getByRole('button',{name:'错题本',exact:true}).tap();
+ await chooseTab(navigation,'错题本');
  await changeFilter(subjects,['subject','英语']);
  await changeFilter(scopeFilters,['scope','unknown']);
  await list.locator('.mistake-scope .mistake-scope-chip').filter({hasText:/^待分类$/}).waitFor();
@@ -159,10 +164,10 @@ try{
  assert.equal(scopeWrites.length,1);
  const after=await getPracticeSubjects();
  assert.deepEqual(after,baseline.map(s=>s.subject==='英语'?{...s,curricular:s.curricular+1,unknown:s.unknown-1}:s));
- await navigation.getByRole('button',{name:'小练习',exact:true}).tap();
+ await chooseTab(navigation,'小练习');
  await englishPractice.getByText('2道课内错题 · 0道待分类',{exact:true}).waitFor();
  const childNavigation=page.getByRole('navigation',{name:'学习资料导航'});
- await childNavigation.getByRole('button',{name:'错题本',exact:true}).tap();
+ await chooseTab(childNavigation,'错题本');
  await page.locator('.mistake-entry').first().waitFor();
  assert.equal(await page.getByRole('button',{name:/更改本题归属/}).count(),0);
  const fromLegacy=await getPracticeSubjects();
@@ -177,13 +182,13 @@ try{
  await sourceDialog.getByLabel('作业归属').selectOption('curricular');
  await sourceDialog.getByRole('button',{name:'保存作业归属',exact:true}).tap();
  await sourceDialog.waitFor({state:'hidden'});
- await navigation.getByRole('button',{name:'小练习',exact:true}).tap();
+ await chooseTab(navigation,'小练习');
  await chinesePractice.getByText('3道课内错题 · 1道待分类',{exact:true}).waitFor();
  assert.equal(chinese(await getPracticeSubjects()).curricular,chinese(fromLegacy).curricular+2);
  assert.equal(chinese(await getPracticeSubjects()).unknown,chinese(fromLegacy).unknown-2);
  console.log('HOMEWORK_SCOPE_SOURCE_OK=true source-link,once-per-assignment,two-mistakes,child-permission');
  console.log('PRINT_GRADE_PARENT_REVIEW_SCOPE_OK');
- await parent.getByRole('button',{name:'课程资料库',exact:true}).tap();await parent.getByRole('button',{name:'添加教材或练习册'}).tap();const editor=parent.getByRole('dialog',{name:'添加课程资料',exact:true});await editor.getByLabel('资料名称',{exact:false}).fill('模拟数学课程');await editor.getByLabel('学科',{exact:false}).selectOption('数学');await editor.getByLabel('教材版本／出版社（选填）').fill('模拟版本');await editor.getByLabel('当前单元或章节（选填）').fill('第一单元');await editor.getByRole('button',{name:'保存资料信息'}).tap();await editor.waitFor({state:'hidden'});
+ await chooseTab(navigation,'课程资料库');await parent.getByRole('button',{name:'添加教材或练习册'}).tap();const editor=parent.getByRole('dialog',{name:'添加课程资料',exact:true});await editor.getByLabel('资料名称',{exact:false}).fill('模拟数学课程');await editor.getByLabel('学科',{exact:false}).selectOption('数学');await editor.getByLabel('教材版本／出版社（选填）').fill('模拟版本');await editor.getByLabel('当前单元或章节（选填）').fill('第一单元');await editor.getByRole('button',{name:'保存资料信息'}).tap();await editor.waitFor({state:'hidden'});
  const card=parent.locator('.curriculum-card').filter({hasText:'模拟数学课程'});await card.locator('input[type=file]').setInputFiles({name:'synthetic-page.jpg',mimeType:'image/jpeg',buffer:Buffer.from(photo,'base64')});await card.getByText('已保存1个原件 · 已整理0页。未整理页面仅保存原件，不声称系统已读过。',{exact:true}).waitFor();await card.getByText('选择需要AI整理的原件页码',{exact:true}).tap();await card.getByRole('button',{name:'整理这些页',exact:true}).tap();await card.getByText(/已保存1个原件 · 已整理1页/).waitFor({timeout:25000});await card.getByRole('button',{name:'查看已整理内容与来源'}).tap();await card.getByRole('heading',{name:'synthetic-page.jpg · 原件第1页'}).waitFor();await card.getByRole('button',{name:'修正这页整理内容'}).tap();const correction=parent.getByRole('dialog',{name:'核对原件第1页'});await correction.getByLabel('整理内容',{exact:false}).fill('模拟家长更正：整数加法知识。');await correction.getByRole('button',{name:'保存原页更正'}).tap();await correction.waitFor({state:'hidden'});await card.getByText('模拟家长更正：整数加法知识。',{exact:true}).waitFor();
  console.log('CURRICULUM_IMAGE_AND_CORRECTION_OK');
  const pdf=syntheticPDF();await card.locator('input[type=file]').setInputFiles({name:'synthetic-book.pdf',mimeType:'application/pdf',buffer:pdf});await card.getByText(/已保存2个原件 · 已整理1页/).waitFor();await card.getByLabel('选择原件',{exact:false}).selectOption({label:'synthetic-book.pdf'});await card.getByLabel('结束原件页',{exact:false}).fill('2');await card.getByRole('button',{name:'整理这些页',exact:true}).tap();await card.getByText(/已保存2个原件 · 已整理3页/).waitFor({timeout:25000});const materials=(await api(parent,'learning/practice/materials')).data.items,m=materials.find(v=>v.title==='模拟数学课程'),storedPDF=m.files.find(f=>f.name==='synthetic-book.pdf');const original=await parent.request.get(base+'/assistant-api/learning/practice/files/'+storedPDF.id);assert.deepEqual(await original.body(),pdf);const jobs=m.jobs.length;await card.getByRole('button',{name:'整理这些页',exact:true}).tap();assert.equal((await api(parent,'learning/practice/materials')).data.items.find(v=>v.id===m.id).jobs.length,jobs);console.log('CHECKING_CSRF');assert.equal((await parent.request.post(base+'/assistant-api/learning/practice/generate',{headers:{Origin:'https://untrusted.invalid'},data:{subject:'语文'}})).status(),403);

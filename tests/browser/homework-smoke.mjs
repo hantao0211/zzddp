@@ -68,7 +68,10 @@ try {
   await page.reload({ waitUntil: "networkidle" }); await page.locator(".hw-heading").waitFor();
   assert.equal((await state()).uploads.length, count);
   await page.getByRole("button", { name: "查看详情", exact: true }).click();
-  await page.getByRole("button", { name: "历史资料", exact: true }).click();
+  const nav=page.getByRole("navigation",{name:"学习资料导航"});
+  const archive=nav.getByRole("button",{name:"历史资料",exact:true});
+  if(!await archive.isVisible())await nav.getByRole("button",{name:"更多",exact:true}).click();
+  await archive.click();
   await page.locator(".hw-file-row").filter({ hasText: "作业备忘录" }).click();
   const detail = page.getByRole("dialog", { name: "作业备忘录", exact: true });
   await detail.locator("img").first().waitFor();

@@ -14,8 +14,9 @@ import { useEffect, useRef, useState } from "react";
 import { homeworkPost, homeworkRequest } from "@/services/homework-gateway";
 import type { GradedQuestion, GradingReading, GradingBatchView, GradingSummary, MistakeView } from "@/domain/grading";
 import { Image, ChevronLeft, ChevronRight, ChevronUp, MessageCircle, PencilLine, Lightbulb, X } from "lucide-react";
-import { mistakeOrders, type MistakeSort } from "@/domain/mistake-sort";
+import type { MistakeSort } from "@/domain/mistake-sort";
 import { isSignatureRecord } from "@/domain/grading-signature";
+import { MistakeSortControls } from "./mistake-sort-controls";
 import { MistakeFilterMenu } from "./mistake-filter-menu";
 import { GradingFilters, filterLabels, type GradingFilter } from "./grading-filters";
 import { StatusIndicator } from "./status-indicator";
@@ -383,7 +384,6 @@ export function MistakeBook({ canManage = false }: { canManage?: boolean }) {
   const index = data?.items.findIndex(item => item.id === openId) ?? -1;
   const selected = data?.items[index];
   const sortField = filters.sort === "oldest" || filters.sort === "newest" ? "date" : "occurrences";
-  const ascending = filters.sort === mistakeOrders[sortField].ascending;
   const pageCount = Math.ceil((data?.total ?? 0) / MISTAKE_PAGE_SIZE);
   return <section className="card grade-panel mistake-book" aria-label="错题本">
     <h2 ref={heading} tabIndex={-1}>我的错题本{data ? ` · ${data.total}题` : ""}</h2>
@@ -394,14 +394,7 @@ export function MistakeBook({ canManage = false }: { canManage?: boolean }) {
       <MistakeFilterMenu<LearningScope | ""> name="归属" caption={filters.scope ? scopeLabels[filters.scope] : "归属"} value={filters.scope} active={!!filters.scope}
         choices={[{value:"",label:"全部归属"}, ...LearningScopeSchema.options.map(value=>({value,label:scopeLabels[value]}))]}
         onChange={scope=>changeFilters({...filters, scope})} />
-      <MistakeFilterMenu<keyof typeof mistakeOrders> name="排序依据" caption={sortField==="date" ? "日期" : "次数"} value={sortField} active={sortField==="occurrences"}
-        choices={[{value:"date",label:"收录日期"},{value:"occurrences",label:"收录次数"}]}
-        onChange={field=>changeFilters({...filters,sort:mistakeOrders[field][ascending ? "ascending" : "descending"]})} />
-      <button type="button" className="mistake-sort-direction"
-        aria-label={ascending ? "升序，切换为降序" : "降序，切换为升序"}
-        onClick={() => changeFilters({...filters, sort: mistakeOrders[sortField][ascending ? "descending" : "ascending"]})}>
-        <span>{ascending ? "↑ 升序" : "↓ 降序"}</span>
-      </button>
+      <MistakeSortControls value={filters.sort} onChange={sort=>changeFilters({...filters,sort})}/>
     </div>
     {data?.options&&data.analysis&&<MistakeInsights options={data.options} analysis={data.analysis} filters={filters.more??{}} change={more=>changeFilters({...filters,more})} indexing={data.indexing}/>}
     {error && <div className="form-error" role="alert">{error} <button type="button" className="text-button" onClick={() => {

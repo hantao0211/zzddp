@@ -58,7 +58,7 @@ export function MistakeFilterMenu<T extends string>({name, caption, value, choic
       {choices.map((choice,index)=><div key={choice.value} id={id+"-"+index} role="option"
         aria-selected={index===selected} data-current={cursor===index}
         onMouseDown={e=>e.preventDefault()} onClick={()=>choose(index)}>
-        {choice.label}{index===selected && <Check size={14} aria-hidden="true" />}
+        <span className="mistake-option-pill">{choice.label}{index===selected && <Check size={14} aria-hidden="true" />}</span>
       </div>)}
     </div>}
   </div>;

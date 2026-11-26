@@ -84,7 +84,10 @@ try {
   await page.getByRole("button", { name: "刷新作业状态", exact: true }).click();
   await page.locator(".hw-task").waitFor();
   assert.ok((await page.locator(".hw-family-notes").innerText()).includes("模拟家庭补充说明"));
-  await page.getByRole("button", { name: "历史资料", exact: true }).click();
+  const nav=page.getByRole("navigation",{name:"学习资料导航"});
+  const archive=nav.getByRole("button",{name:"历史资料",exact:true});
+  if(!await archive.isVisible())await nav.getByRole("button",{name:"更多",exact:true}).click();
+  await archive.click();
   await page.getByRole("button", { name: "2026-11-16", exact: true }).click();
   assert.equal(await page.locator(".hw-details-heading input").inputValue(), "2026-11-16");
   await page.getByRole("button", { name: "返回首页", exact: true }).click();

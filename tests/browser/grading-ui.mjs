@@ -176,7 +176,7 @@ try {
   for (const width of [320,390,768,1280]) {
     await page.setViewportSize({width,height:800});
     await page.waitForFunction(()=>document.documentElement.scrollWidth<=innerWidth,null,{timeout:4000}).catch(async error=>{
-      console.error("Overflow after resize", width, await page.locator(".grade-filter-bar").evaluate(el=>({
+      console.error("Overflow after resize", width, await panel.locator(".grade-filter-bar").evaluate(el=>({
         viewport:innerWidth, page:document.documentElement.scrollWidth, bar:el.clientWidth,
         items:[...el.children].map(child=>[child.textContent, Math.round(child.getBoundingClientRect().width)])
       })));
@@ -215,7 +215,32 @@ try {
   await page.setViewportSize({width:390,height:670});
   await page.locator('.hw-date input').fill('2026-11-21');
   await panel.getByRole('button',{name:'先看需要留意的题',pressed:true}).waitFor();
-  await page.getByRole("button", { name: "错题本", exact: true }).click();
+  const nav=page.getByRole("navigation",{name:"学习资料导航"});
+  const navMore=nav.getByRole("button",{name:"更多",exact:true});
+  for(const width of [320,390,1280]){
+    await page.setViewportSize({width,height:670});
+    if(width<400){
+      await navMore.click();
+      const menu=nav.getByRole("group",{name:"更多课业页签"});
+      await menu.getByRole("button",{name:"课程资料库",exact:true}).waitFor();
+      if(width===390){
+        await nav.scrollIntoViewIfNeeded();
+        const t=await nav.boundingBox(),m=await menu.boundingBox();
+        await page.screenshot({path:output+"/homework-nav-more.png",clip:{x:t.x,y:t.y,width:t.width,height:m.y+m.height-t.y+4}});
+      }
+      await page.keyboard.press("Escape");
+      await menu.waitFor({state:"hidden"});
+      const rect=await nav.boundingBox();
+      assert.ok(rect.height<60 && rect.x+rect.width<=width);
+    }else{
+      await navMore.waitFor({state:"hidden"});
+      await nav.getByRole("button",{name:"课程资料库",exact:true}).waitFor();
+    }
+  }
+  await page.setViewportSize({width:390,height:670});
+  const mistakesTab=nav.getByRole("button",{name:"错题本",exact:true});
+  if(!await mistakesTab.isVisible())await navMore.click();
+  await mistakesTab.click();
   const book = page.getByRole("region", { name: "错题本", exact: true });
   const mistakeDetail=page.getByRole("dialog",{name:"错题详情"});
   const toolbar=book.getByRole("group",{name:"错题筛选与排序"});
@@ -245,7 +270,7 @@ try {
         const rect=el.getBoundingClientRect();
         return {
           sameFont:getComputedStyle(chip).fontSize===getComputedStyle(el.querySelector("[role=option]")).fontSize,
-          sameTint:getComputedStyle(chip).backgroundColor===getComputedStyle(el).backgroundColor,
+          sameTint:getComputedStyle(chip).backgroundColor===getComputedStyle(el.querySelector(".mistake-option-pill")).backgroundColor,
           fits:rect.left>=0 && rect.right<=innerWidth
         };
       });
@@ -279,6 +304,15 @@ try {
     assert.ok(!layout.overflow && layout.fits && layout.ellipsis && (width > 390 || layout.clipped), JSON.stringify(layout));
   }
   await page.setViewportSize({width: 390, height: 670});
+  await toolbar.evaluate(el=>el.style.maxWidth="165px");
+  const moreSort=toolbar.getByRole("button",{name:"更多",exact:true});
+  await moreSort.click();
+  await toolbar.getByRole("button",{name:"次数 · 从少到多",exact:true}).click();
+  await moreSort.click();
+  await toolbar.getByRole("button",{name:"次数 · 从少到多",pressed:true}).waitFor();
+  await toolbar.getByRole("button",{name:"日期 · 最新优先",exact:true}).click();
+  await toolbar.evaluate(el=>el.style.removeProperty("max-width"));
+  await moreSort.waitFor({state:"hidden"});
   await page.screenshot({path: output + "/mistake-title-summary-mobile.png", fullPage: true});
   await book.getByRole("button", { name: /^第4大题 · 第8小题/ }).click();
   await mistakeDetail.getByRole("heading",{name:"第4大题 · 第8小题",exact:true}).waitFor();
