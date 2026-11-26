@@ -55,7 +55,7 @@ function QuestionCard({ question, date, subject, title, pageId, imageUrl, displa
       {q.verdict === "wrong" && <div className="grade-cause"><strong>可能的错因 · {q.cause}</strong><p>{q.causeExplanation || "仅凭这一次作答还不能确定原因。"}</p>{q.nextStep && <><strong>下一步怎么做</strong><p>{q.nextStep}</p></>}</div>}
       {!!q.knowledgePoints.length && <p className="grade-source">知识点：{q.knowledgePoints.join("、")}</p>}
     </details>
-    <div className="grade-question-actions"><Photo id={pageId} url={imageUrl} /><button className="text-button" onClick={() => window.dispatchEvent(new CustomEvent("xiaobu:ask-homework", { detail: { date, question: `我想讨论${subject}的${displayLabel || q.label}：${q.question.slice(0, 550)}。${(q.verdict === "uncertain" || q.verdict === "passedWithNote") ? "系统尚未辨清我的作答，不要把识读当成我实际写下的字。" : `系统识读到的作答是${q.studentAnswer.slice(0, 250)}。`}请结合批改记录，引导我弄懂这道题。` } }))}><MessageCircle size={17} aria-hidden="true" />让小步帮我弄懂</button></div>
+    <div className="grade-question-actions"><Photo id={pageId} url={imageUrl} /><button className="text-button" onClick={() => window.dispatchEvent(new CustomEvent("xiaobu:ask-homework", { detail: { date, gradingTopic: { pageId, questionId: question.id, label: `${subject} · ${displayLabel || q.label}`.slice(0,400), stem: q.question.slice(0,600) } } }))}><MessageCircle size={17} aria-hidden="true" />和小步聊这题</button></div>
   </article>;
 }
 export function GradingPanel({ date, canManage = true, focusFailures = false }: { date: string; canManage?: boolean; focusFailures?: boolean }) {

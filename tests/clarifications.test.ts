@@ -110,7 +110,7 @@ test("confirm is session-bound, idempotent, persistent, and leaves original reco
   } finally { f.cleanup(); }
 });
 
-test("stale and expired proposals fail; AI cannot use its own guesses or invented targets as family corrections", () => {
+test("confirmation revalidates the target after time or unrelated updates and preserves intervening edits", () => {
   const f = setup();
   try {
     const context = f.service.context(date);
@@ -118,11 +118,13 @@ test("stale and expired proposals fail; AI cannot use its own guesses or invente
     assert.throws(() => f.service.propose(context, { ...f.action, entryId: "someone-else:entry:0" }, owner, [f.action.userQuote]), /没有对应/);
     assert.throws(() => f.service.propose(context, { ...f.action, changes: { ...f.action.changes, completed: true } } as never, owner, [f.action.userQuote]));
     const stale = f.service.propose(context, f.action, owner, [f.action.userQuote]);
+    f.advance(16 * 60_000);
     f.store.transaction(() => f.store.bump(date));
-    assert.throws(() => f.service.confirm(stale.id, owner), /已更新/);
-    const expired = f.service.propose(f.service.context(date), f.action, owner, [f.action.userQuote]);
-    f.advance(16 * 60_000); assert.throws(() => f.service.confirm(expired.id, owner), /过期/);
-    assert.equal(f.store.db.prepare("SELECT COUNT(*) AS n FROM clarifications").get()!.n, 0);
+    const newer = f.service.propose(f.service.context(date), { ...f.action, changes: { ...f.action.changes, title: "另一份说明" } }, owner, [f.action.userQuote]);
+    const receipt = f.service.confirm(stale.id, owner);
+    assert.equal(f.service.confirm(stale.id, owner).id, receipt.id);
+    assert.throws(() => f.service.confirm(newer.id, owner), /已更新/);
+    assert.equal(f.store.db.prepare("SELECT COUNT(*) AS n FROM clarifications").get()!.n, 1);
   } finally { f.cleanup(); }
 });
 
@@ -312,5 +314,21 @@ test("manual correction refuses stale revisions and foreign entries atomically",
     assert.equal(f.store.db.prepare("SELECT COUNT(*) AS n FROM clarifications").get()!.n, 0);
     f.service.editEntry(input, owner);
     assert.throws(() => f.service.editEntry({ ...input, requestId: "33333333-3333-4333-8333-333333333333" }, owner));
+  } finally { f.cleanup(); }
+});
+
+test("a question conversation uses the selected page only and cannot edit the memo",async()=>{
+  const f=setup();
+  try {
+    const file=f.store.files(f.uploadId)[0];
+    const pages=[1,2].map(number=>({id:file.id+"-p"+number,file_id:file.id,number}));
+    f.store.setPages(file.id,pages);
+    const inspected:string[]=[];
+    const service=new HomeworkConversation(f.store,{images(asked){inspected.push(...asked.map(p=>p.id));return asked.map(p=>({fileId:p.id,mimeType:"image/jpeg",base64:"c3ludGhldGlj"}));}});
+    const result=await service.answer({async run(_task,schema){
+      return schema.parse({answer:"请看分母。",spokenAnswer:"请看分母。",hint:null,followUpQuestion:null,sourceMaterialIds:[],clarification:f.action});
+    }},{question:f.action.userQuote,studyDate:date,history:[],reviewPhotos:true,gradingTopic:{pageId:pages[1].id,questionId:"q",label:"第2题",stem:"分母填什么？"}},owner);
+    assert.deepEqual(inspected,[pages[1].id]);assert.equal(result.proposal,undefined);
+    assert.equal(f.store.db.prepare("SELECT count(*) n FROM clarification_drafts").get()!.n,0);
   } finally { f.cleanup(); }
 });

@@ -12,10 +12,16 @@ export const ChatPhotoSchema = z.object({
   base64: z.string().min(32).max(600_000).regex(/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/),
 }).strict();
 export type ChatPhoto = z.infer<typeof ChatPhotoSchema>;
+const GradingTopicSchema = z.object({
+  pageId: z.string().min(1).max(200), questionId: z.string().min(1).max(200),
+  label: z.string().min(1).max(400), stem: z.string().max(600),
+}).strict();
+export type GradingTopic = z.infer<typeof GradingTopicSchema>;
 export const ChatInputSchema = z.object({
   studyDate: DaySchema.optional(),
   readingMode: z.boolean().optional(),
   readingLogId: z.string().uuid().optional(),
+  gradingTopic: GradingTopicSchema.optional(),
   reviewPhotos: z.boolean().optional(),
   photos: z.array(ChatPhotoSchema).max(CHAT_PHOTO_LIMIT).optional(),
   photoOrigin: z.enum(["current", "previous"]).optional(),
@@ -24,7 +30,7 @@ export const ChatInputSchema = z.object({
 }).strict().refine((value) => value.history.reduce((size, item) => size + item.content.length, 0) <= 12000);
 export type ChatInput = z.infer<typeof ChatInputSchema>;
 export type PhotoReview = { requested: boolean; providedPages: number; totalAvailablePages: number; unavailablePages: number };
-export type ChatMessage = { role: "user" | "assistant"; content: string; photos?: ChatPhoto[]; id?: string; spokenAnswer?: string; proposal?: ClarificationPreview; receipt?: ClarificationReceipt; photoReview?: PhotoReview; memoriesSaved?: LearnedMemory[]; memoryNotices?: string[]; changeStatus?: "none" | "pending" | "confirmed" | "undone" };
+export type ChatMessage = { role: "user" | "assistant"; content: string; photos?: ChatPhoto[]; id?: string; spokenAnswer?: string; proposal?: ClarificationPreview; proposalNotice?: string; receipt?: ClarificationReceipt; photoReview?: PhotoReview; memoriesSaved?: LearnedMemory[]; memoryNotices?: string[]; changeStatus?: "none" | "pending" | "confirmed" | "undone" };
 
 export function validateRecording(bytes: Uint8Array) {
   if (bytes.byteLength < 44) throw new Error("录音内容不完整，请重新录制。");

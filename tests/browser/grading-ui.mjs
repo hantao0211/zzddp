@@ -226,9 +226,10 @@ try {
   await book.getByText("这个分类暂时没有已核验的错题。", { exact: true }).waitFor();
   await book.getByRole("button", { name: "数学", exact: true }).click();
   await toggle(2).click();
-  await book.getByRole("button", { name: "让小步帮我弄懂", exact: true }).click();
+  await book.getByRole("button", { name: "和小步聊这题", exact: true }).click();
   await page.locator("#assistant-question").waitFor();
-  assert.match(await page.locator("#assistant-question").inputValue(), /第2题.*2\+3/);
+  assert.equal(await page.locator("#assistant-question").inputValue(), "");
+  await page.getByRole("button", {name:"帮我看看这里有没有认错"}).waitFor();
   await page.getByRole("button", { name: "关闭小助手", exact: true }).click();
   failed = true; await page.getByRole("button", { name: "返回首页", exact: true }).click();
   await page.getByRole("button", { name: "查看未完成原因", exact: true }).click();

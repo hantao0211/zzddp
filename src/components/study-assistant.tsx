@@ -9,7 +9,7 @@ import type { ClarificationReceipt, HomeworkChatContext } from "@/domain/clarifi
 import { FamilyNotes } from "./family-notes";
 import { AccountLogin, useViewer, sessionChanged } from "./account-login";
 import { isParent } from "@/domain/accounts";
-import { CHAT_PHOTO_LIMIT, type ChatMessage, type ChatPhoto } from "@/domain/assistant";
+import { CHAT_PHOTO_LIMIT, type ChatMessage, type ChatPhoto, type GradingTopic } from "@/domain/assistant";
 import { prepareChatPhoto } from "@/services/chat-photo";
 import { exportAssistantConversation } from "@/domain/assistant-export";
 import type { LearnedMemory } from "@/domain/memory";
@@ -36,6 +36,7 @@ export function StudyAssistant({ studyDate, launcherTarget, readingMode = false,
   const [contextNotice, setContextNotice] = useState("");
   const [status, setStatus] = useState<"checking" | "locked" | "ready" | "offline" | "insecure">("checking");
   const [code, setCode] = useState("");
+  const [gradingTopic, setGradingTopic] = useState<GradingTopic | undefined>();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [error, setError] = useState("");
@@ -57,6 +58,7 @@ export function StudyAssistant({ studyDate, launcherTarget, readingMode = false,
   const [playing, setPlaying] = useState<string | null>(null);
   const [audioReady, setAudioReady] = useState<string | null>(null);
   const dialog = useRef<HTMLDialogElement>(null), transcript = useRef<HTMLDivElement>(null);
+  const updatedCard = useRef<string | undefined>(undefined);
   const questionInput = useRef<HTMLTextAreaElement>(null);
   const current = useRef<AbortController | null>(null), recorder = useRef<VoiceRecording | null>(null);
   const audio = useRef<HTMLAudioElement | null>(null), audioUrl = useRef<string | null>(null), audioId = useRef<string | null>(null);
@@ -132,10 +134,11 @@ export function StudyAssistant({ studyDate, launcherTarget, readingMode = false,
   }
   useEffect(() => {
     const openHomework = (event: Event) => {
-      const detail = (event as CustomEvent<{ date: string; question?: string }>).detail;
+      const detail = (event as CustomEvent<{ date: string; question?: string; gradingTopic?: GradingTopic }>).detail;
       if (!/^20\d{2}-\d{2}-\d{2}$/.test(detail?.date || "")) return;
       cancelWork(); clearPhotos(); setSelectedDate(detail.date); setMessages([]); setHomeworkContext(null);
-      setInput(detail.question || "这一天的作业，系统还有哪些疑问？");
+      setGradingTopic(detail.gradingTopic); setReviewPhotos(false); setToolsOpen(false);
+      setInput(detail.gradingTopic ? "" : detail.question || "这一天的作业，系统还有哪些疑问？");
       if (open) void check(detail.date, false); else setOpen(true);
     };
     const openNavigation = () => setOpen(true);
@@ -146,14 +149,14 @@ export function StudyAssistant({ studyDate, launcherTarget, readingMode = false,
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
   useEffect(() => {
-    if (studyDate) { cancelWork(); clearPhotos(); setSelectedDate(studyDate); setMessages([]); setHomeworkContext(null); setReviewPhotos(false); }
+    if (studyDate) { cancelWork(); clearPhotos(); setSelectedDate(studyDate); setGradingTopic(undefined); setMessages([]); setHomeworkContext(null); setReviewPhotos(false); }
     // A photo belongs to the conversation for this homework date.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [studyDate]);
   useEffect(() => { setManualExport(""); setExportNotice(""); }, [selectedDate]);
   useEffect(() => {
     if (previousViewer.current && previousViewer.current !== viewer?.id) {
-      cancelWork(); clearPhotos(); setMessages([]); setInput(""); setManualExport(""); setExportNotice("");
+      cancelWork(); clearPhotos(); setMessages([]); setGradingTopic(undefined); setInput(""); setManualExport(""); setExportNotice("");
     }
     previousViewer.current = viewer?.id;
     // Clear private conversation pictures when the account changes.
@@ -162,7 +165,7 @@ export function StudyAssistant({ studyDate, launcherTarget, readingMode = false,
   useEffect(() => { if (new URLSearchParams(location.search).get("assistant") === "1") setOpen(true); }, []);
   useEffect(() => {
     if (!open) return;
-    dialog.current?.showModal(); void check();
+    dialog.current?.showModal(); void check(selectedDate || studyDate, !gradingTopic);
     return () => { current.current?.abort(); recorder.current?.cancel(); audio.current?.pause(); if (audioUrl.current) URL.revokeObjectURL(audioUrl.current); dialog.current?.close(); };
     // The dialog owns the in-flight request and microphone for its whole lifetime.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -170,6 +173,11 @@ export function StudyAssistant({ studyDate, launcherTarget, readingMode = false,
   useEffect(() => {
     const container = transcript.current;
     if (!container) return;
+    if (updatedCard.current) {
+      const card = document.getElementById("assistant-card-" + updatedCard.current);
+      updatedCard.current = undefined;
+      if (card && container.contains(card)) { card.scrollIntoView({ block: "nearest" }); return; }
+    }
     const lastAnswer = container.querySelector<HTMLElement>(".assistant-message.assistant:last-of-type");
     // Start at the new answer, rather than hiding its beginning below a long response.
     if (!pendingQuestion && messages.at(-1)?.role === "assistant" && lastAnswer) {
@@ -208,22 +216,33 @@ export function StudyAssistant({ studyDate, launcherTarget, readingMode = false,
     catch (cause) { report(cause); } finally { setPending(null); }
   }
   async function ask(event: React.FormEvent) {
-    event.preventDefault(); const question = input.trim() || (photos.length ? "请看看这张图片，帮我理解。" : ""); if (!question || pending || recording || memoryBusy) return;
-    const attached = photos.length ? photos : referencePhotos;
-    stopAudio(); const task = controller(); setPending("chat"); setPendingQuestion(question); setInput(""); setError("");
+    event.preventDefault();
+    await sendQuestion();
+  }
+  async function sendQuestion(revisit?: ChatMessage, shortcut?: string) {
+    const preview = revisit?.proposal;
+    const question = preview?.userQuote || shortcut || input.trim() || (photos.length ? "请看看这张图片，帮我理解。" : "");
+    if (!question || pending || recording || memoryBusy) return;
+    const attached = preview ? [] : photos.length ? photos : referencePhotos;
+    stopAudio(); const task = controller(); setPending("chat"); if (!preview) { setPendingQuestion(question); setInput(""); } setError("");
     let answer: ChatMessage | undefined;
     try {
       const history: { role: "user" | "assistant"; content: string }[] = []; let length = 0;
-      for (const { role, content } of messages.slice(-8).reverse()) { if (length + content.length > 12000) break; history.unshift({ role, content }); length += content.length; }
-      const result = await (await request("chat", { method: "POST", ...json({ question, history, reviewPhotos, ...(attached.length ? { photos: attached, photoOrigin: photos.length ? "current" : "previous" } : {}), ...(readingMode ? { readingMode: true, ...(readingLogId ? { readingLogId } : {}) } : {}), ...(homeworkContext ? { studyDate: selectedDate } : {}) }), signal: task.signal })).json();
+      const previous = preview ? messages.slice(0, messages.findIndex(m => m.id === revisit?.id)) : messages;
+      for (const { role, content } of previous.slice(preview ? -7 : -8).reverse()) { if (length + content.length > (preview ? 11000 : 12000)) break; history.unshift({ role, content }); length += content.length; }
+      if (preview) history.push({ role: "assistant", content: `这是一条尚未保存的旧预览。之前讨论的是「${preview.before.subject || ""} · ${preview.before.title}」。请依据最新清单重新核对接下来的家庭原话，目标不明确时先问清楚。` });
+      const result = await (await request("chat", { method: "POST", ...json({ question, history, ...(!preview && gradingTopic ? { gradingTopic } : {}), reviewPhotos: preview ? false : reviewPhotos || (!!gradingTopic && shortcut !== "给我讲讲这道题"), ...(attached.length ? { photos: attached, photoOrigin: photos.length ? "current" : "previous" } : {}), ...(readingMode ? { readingMode: true, ...(readingLogId ? { readingLogId } : {}) } : {}), ...(preview ? { studyDate: preview.date } : homeworkContext ? { studyDate: selectedDate } : {}) }), signal: task.signal })).json();
       if (task.signal.aborted) return;
       answer = { role: "assistant", content: result.answer, id: result.id, spokenAnswer: result.spokenAnswer, proposal: result.proposal, photoReview: result.photoReview, memoriesSaved: result.memoriesSaved, memoryNotices: result.memoryNotices, changeStatus: result.changeStatus };
-      setMessages((items) => [...items, { role: "user" as const, content: question, ...(photos.length ? { photos } : {}) }, answer!]);
-      if (photos.length) { setReferencePhotos(photos); setPhotos([]); }
-      setReviewPhotos(false);
+      if (preview && answer.proposal) {
+        updatedCard.current = answer.id;
+        setMessages(items => items.map(m => m.id === revisit?.id ? answer! : m));
+      } else setMessages((items) => [...items, { role: "user" as const, content: question, ...(!preview && photos.length ? { photos } : {}) }, answer!]);
+      if (!preview && photos.length) { setReferencePhotos(photos); setPhotos([]); }
+      if (!preview) setReviewPhotos(false);
       if (result.activeMemories) setMemories(result.activeMemories);
       else if (result.memoriesSaved?.length) setMemories((items) => [...result.memoriesSaved, ...items.filter((m) => !result.memoriesSaved.some((n: LearnedMemory) => n.kind === m.kind && n.subject === m.subject && n.trigger === m.trigger))]);
-    } catch (cause) { if (!task.signal.aborted) { setInput(question); report(cause); } }
+    } catch (cause) { if (!task.signal.aborted) { if (!preview) setInput(question); report(cause); } }
     finally { if (!task.signal.aborted) { setPending(null); setPendingQuestion(""); } }
     if (answer?.id && autoRead && !task.signal.aborted) void playReply(answer.id);
   }
@@ -248,10 +267,17 @@ export function StudyAssistant({ studyDate, launcherTarget, readingMode = false,
     try {
       const value = await (await request(`clarifications/${id}/${undo ? "undo" : "confirm"}`, { method: "POST", ...json({}), signal: task.signal })).json();
       if (task.signal.aborted) return;
+      updatedCard.current = message.id;
       setMessages((items) => items.map((m) => m.id === message.id || (undo && m.receipt?.id === id) ? { ...m, changeStatus: undo ? "undone" : "confirmed", ...(undo ? {} : { receipt: value as ClarificationReceipt }) } : m));
       window.dispatchEvent(new Event("xiaobu:homework-updated"));
       await loadContext(task, selectedDate, false);
-    } catch (cause) { report(cause); } finally { if (!task.signal.aborted) setPending(null); }
+    } catch (cause) {
+      if (task.signal.aborted) return;
+      if (!undo && cause instanceof RequestError && [404, 409, 410].includes(cause.status)) {
+        updatedCard.current = message.id;
+        setMessages(items => items.map(m => m.id === message.id ? { ...m, proposalNotice: cause.status === 404 || cause.status === 410 ? "旧预览已失效，你的说明还在。" : cause.message } : m));
+      } else report(cause);
+    } finally { if (!task.signal.aborted) setPending(null); }
   }
   async function playReply(id: string) {
     if (playing === id) { stopAudio(); return; }
@@ -300,21 +326,26 @@ export function StudyAssistant({ studyDate, launcherTarget, readingMode = false,
       <header className="assistant-header"><span className="assistant-avatar assistant-rabbit"><XiaobuMascot/></span><div><h2 id="assistant-title">小步在这里</h2><p>有问题，就来问小步。</p></div><div className="assistant-header-actions"><TutorialButton topic="assistant"/>{status === "ready" && <button className="icon-button" onClick={() => setToolsOpen(!toolsOpen)} aria-label={toolsOpen ? "收起更多" : "更多功能"} aria-expanded={toolsOpen} aria-controls="assistant-settings"><MoreHorizontal size={23} /></button>}<button className="icon-button" onClick={close} aria-label="关闭小助手"><X size={23} /></button></div></header>
       {status === "checking" ? <div className="assistant-welcome" role="status"><LoaderCircle className="spin" /> 正在连接小助手…</div> : status === "insecure" ? <div className="assistant-welcome"><LockKeyhole size={32} /><h3>从安全地址打开吧</h3><p>小助手和麦克风需要安全连接。</p><a className="button primary" href="https://14.103.24.55/?assistant=1">打开 HTTPS 小助手</a></div> : status === "offline" ? <div className="assistant-welcome"><MessageCircle size={32} /><h3>暂时没有连接上</h3><p>{error}</p><button className="button primary" onClick={() => void check()}>重新连接</button></div> : status === "locked" ? accounts ? <div className="assistant-welcome"><h3>登录学习账号</h3><AccountLogin legacy onSignedIn={() => void check()} /><a href="/admin/">家长登录与管理</a></div> : <form className="assistant-welcome" onSubmit={login}><LockKeyhole size={32} /><h3>打开家里的小助手</h3><p>第一次使用，请输入家长提供的家庭访问码。<br />这台设备会记住登录状态。</p><label>家庭访问码<input type="password" inputMode="numeric" pattern="[0-9]{8}" maxLength={8} minLength={8} autoComplete="one-time-code" required value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, ""))} placeholder="8位数字" /></label>{error && <p className="form-error" role="alert">{error}</p>}<button className="button primary" disabled={!!pending}>{pending ? <LoaderCircle size={18} className="spin" /> : <Check size={18} />}打开小助手</button></form> : <>
         {readingMode && <div className="assistant-context-bar"><span>课外阅读交流</span><span>{readingLogId ? "已关联这次阅读" : "阅读与奖励使用帮助"}</span></div>}
-        {homeworkContext && <div className="assistant-context-bar" inert={toolsOpen}><button onClick={() => setToolsOpen(true)} aria-label="切换作业日期"><CalendarDays size={16} /><span>{selectedDate.replaceAll("-", "/")} 的作业</span></button><span>{reviewPhotos ? "本次重看照片" : homeworkContext.pending ? "正在整理" : homeworkContext.hasMaterials ? "已关联记录" : "暂无资料"}</span></div>}
+        {homeworkContext && <div className="assistant-context-bar" inert={toolsOpen}><button onClick={() => setToolsOpen(true)} aria-label="切换作业日期"><CalendarDays size={16} /><span>{selectedDate.replaceAll("-", "/")} 的作业</span></button><span>{gradingTopic ? gradingTopic.label : reviewPhotos ? "本次重看照片" : homeworkContext.pending ? "正在整理" : homeworkContext.hasMaterials ? "已关联记录" : "暂无资料"}</span></div>}
         <section id="assistant-settings" className="assistant-settings" aria-label="小助手更多功能" hidden={!toolsOpen}>
           <div className="assistant-settings-heading"><strong>更多功能</strong><button className="text-button" onClick={() => setToolsOpen(false)}>返回对话</button></div>
-        <div className="assistant-tools"><span>{homeworkContext ? "作业沟通与学习问答" : "AI 学习问答"}</span><button disabled={!canExport} onClick={() => void copyConversation()}><Copy size={15} /> 复制对话</button><button disabled={!canExport} onClick={downloadConversation}><Download size={15} /> 下载文本</button><button disabled={!!pending || recording} onClick={() => { clearPhotos(); setMessages([]); setError(""); setReviewPhotos(false); setExportNotice(""); setManualExport(""); stopAudio(true); }}><Trash2 size={15} /> 清空对话</button><button disabled={!!pending || recording} onClick={() => void logout()}><LogOut size={15} /> 退出设备</button></div>
+        <div className="assistant-tools"><span>{homeworkContext ? "作业沟通与学习问答" : "AI 学习问答"}</span><button disabled={!canExport} onClick={() => void copyConversation()}><Copy size={15} /> 复制对话</button><button disabled={!canExport} onClick={downloadConversation}><Download size={15} /> 下载文本</button><button disabled={!!pending || recording} onClick={() => { clearPhotos(); setMessages([]); setGradingTopic(undefined); setError(""); setReviewPhotos(false); setExportNotice(""); setManualExport(""); stopAudio(true); }}><Trash2 size={15} /> 清空对话</button><button disabled={!!pending || recording} onClick={() => void logout()}><LogOut size={15} /> 退出设备</button></div>
         {(exportNotice || manualExport) && <section className="assistant-export-panel"><p role="status">{exportNotice}</p>{manualExport && <><label className="visually-hidden" htmlFor="assistant-export-text">待复制的对话文本</label><textarea id="assistant-export-text" readOnly value={manualExport} rows={4} onFocus={(e) => e.currentTarget.select()} /><button onClick={() => { setManualExport(""); setExportNotice(""); }}>收起复制文本</button></>}</section>}
-        {homeworkContext && <div className="assistant-homework-context"><label>讨论的作业日期<input aria-label="讨论的作业日期" type="date" value={selectedDate} disabled={!!pending || recording} onChange={(e) => { if (e.target.value) { cancelWork(); clearPhotos(); setMessages([]); void check(e.target.value, false); } }} /></label><p>{contextNotice || (homeworkContext.hasMaterials ? `已读取这一天的作业整理记录${homeworkContext.pending ? "，后台正在更新查缺结果。" : "。"}` : "这一天还没有上传资料，可以切换日期或先问学习问题。")}</p>{!!homeworkContext.familyNotes.length && <details className="assistant-saved-notes"><summary>当前有 {homeworkContext.familyNotes.filter(n => n.current !== false).length} 项补充说明</summary><FamilyNotes notes={homeworkContext.familyNotes} action={(n) => n.canUndo && <button className="text-button" disabled={!!pending || recording} onClick={() => void saveClarification({ role: "assistant", content: "", id: `saved-note:${n.id}`, receipt: n }, true)}>撤销这次说明</button>} /></details>}</div>}
+        {homeworkContext && <div className="assistant-homework-context"><label>讨论的作业日期<input aria-label="讨论的作业日期" type="date" value={selectedDate} disabled={!!pending || recording} onChange={(e) => { if (e.target.value) { cancelWork(); clearPhotos(); setMessages([]); setGradingTopic(undefined); void check(e.target.value, false); } }} /></label><p>{contextNotice || (homeworkContext.hasMaterials ? `已读取这一天的作业整理记录${homeworkContext.pending ? "，后台正在更新查缺结果。" : "。"}` : "这一天还没有上传资料，可以切换日期或先问学习问题。")}</p>{!!homeworkContext.familyNotes.length && <details className="assistant-saved-notes"><summary>当前有 {homeworkContext.familyNotes.filter(n => n.current !== false).length} 项补充说明</summary><FamilyNotes notes={homeworkContext.familyNotes} action={(n) => n.canUndo && <button className="text-button" disabled={!!pending || recording} onClick={() => void saveClarification({ role: "assistant", content: "", id: `saved-note:${n.id}`, receipt: n }, true)}>撤销这次说明</button>} /></details>}</div>}
         {!!memories.length && <details className="assistant-memory-list"><summary>已学到 {memories.length} 条有用记忆</summary>{memories.map((m) => <section key={m.id}><strong>{m.summary}</strong><details><summary>查看依据</summary><p>{m.sourceQuote}</p><small>来自 {m.sourceDate} 的交流说明</small></details>{(!accounts || isParent(viewer)) && <button disabled={!!pending || recording || !!memoryBusy} onClick={() => void stopMemory(m.id)}>{memoryBusy === m.id ? "正在停用…" : "停用这条记忆"}</button>}</section>)}</details>}
           <div className="assistant-preferences">{homeworkContext?.hasMaterials && <label className="assistant-photo-option"><input type="checkbox" checked={reviewPhotos} disabled={!!pending || recording} onChange={(e) => setReviewPhotos(e.target.checked)} /> 重新查看当天照片（每次最多6页）</label>}{speech && <label><input type="checkbox" checked={autoRead} onChange={(event) => setAutoRead(event.target.checked)} /> 回答后朗读</label>}</div>
           <p className="assistant-footnote">输入框旁的图片按钮可以拍照或选图，最多3张。对话图片仅用于问答；作业归档请用“交作业”。刷新或清空对话后图片不保留。说“看看作业”或勾选重看照片，可重新查看当天照片。清单修改先确认；提炼的记忆会保留，可停用。聊天全文请先复制或下载。</p>
         </section>
         <div className="assistant-messages" inert={toolsOpen || !!previewPhoto} ref={transcript} role="log" aria-live="polite" aria-label="小助手对话">
-          {!messages.length && !pendingQuestion && <div className="assistant-intro"><span className="assistant-avatar assistant-rabbit"><XiaobuMascot/></span><h3>你好，我是小步。</h3><p>不会操作、看不懂提示，或者学习卡住了，<br />都可以来问我，也可以拍张图。</p><div>{(readingMode ? ["怎样记录今天的阅读？", "我想聊聊今天读的内容", "怎样许愿和兑换奖励？"] : ["怎么上传今天的备忘录和作业？", "系统对这天的作业还有什么疑问？", "小数减法退位时，我总是弄错"]).map((question) => <button key={question} onClick={() => setInput(question)}>{question}</button>)}</div></div>}
-          {messages.map((message, index) => <article key={message.id || `question-${index}`} className={`assistant-message ${message.role}`}><strong>{message.role === "user" ? "我" : "小步"}</strong><div>{message.photos?.length ? photoThumbs(message.photos) : null}{message.content}</div>{message.photoReview?.requested && <small className="assistant-photo-result">{message.photoReview.providedPages ? `本次已重新查看 ${message.photoReview.providedPages} 页照片。${message.photoReview.totalAvailablePages > message.photoReview.providedPages ? `还有 ${message.photoReview.totalAvailablePages - message.photoReview.providedPages} 页未查看。` : ""}` : "本次没有可重新查看的页面，仅依据已有整理记录回答。"}</small>}{message.memoriesSaved?.map((m) => <aside className="assistant-memory-receipt" key={m.id}><strong>{memories.some((active) => active.id === m.id) ? "这次学到的知识" : "这条记忆已停用或更新"}</strong><p>{m.summary}</p><small>可在“更多功能”的记忆列表查看依据或停用。停用后不再用于后续识别和问答。</small></aside>)}{message.memoryNotices?.map((notice, i) => <small className="assistant-memory-notice" key={i}>{notice}</small>)}{message.proposal && <section className="assistant-proposal"><h4>{message.changeStatus === "confirmed" ? "家庭说明已保存" : message.changeStatus === "undone" ? "这次说明已撤销" : "修改预览 · 尚未保存"}</h4><div><span>原清单</span><strong>{message.proposal.before.subject || "科目未定"} · {message.proposal.before.title}</strong><p>{message.proposal.before.requirement}</p><small>形式：{formatLabel[message.proposal.before.format]}</small></div><div><span>拟修改为</span><strong>{message.proposal.after.subject || "科目未定"} · {message.proposal.after.title}</strong><p>{message.proposal.after.requirement}</p><small>形式：{formatLabel[message.proposal.after.format]}</small></div><blockquote>你的说明：{message.proposal.userQuote}</blockquote>{!!message.proposal.resolves.length && <details><summary>将按这份说明处理 {message.proposal.resolves.length} 条识别疑问</summary><ul>{message.proposal.resolves.map((r, n) => <li key={n}>{r}</li>)}</ul></details>}{message.changeStatus === "pending" && <button className="button primary" disabled={!!pending || recording} onClick={() => void saveClarification(message)}>确认修改并重新查缺</button>}{message.changeStatus === "confirmed" && <><p>后台会重新关联作业。原照片和原识别结果保留。</p><button className="text-button" disabled={!!pending || recording} onClick={() => void saveClarification(message, true)}>撤销这次说明</button></>}</section>}{message.role === "assistant" && message.changeStatus === "none" && <small className="assistant-no-change">本次只作解释，未修改清单。</small>}{message.role === "assistant" && speech && message.id && <button className="assistant-read" disabled={!!pending || recording} onClick={() => void playReply(message.id!)}>{playing === message.id ? <Square size={15} /> : <Volume2 size={16} />}{playing === message.id ? "停止朗读" : audioReady === message.id ? "播放回答" : "朗读回答"}</button>}</article>)}
+          {!messages.length && !pendingQuestion && gradingTopic && <div className="assistant-intro">
+            <h3>{gradingTopic.label}</h3><p>{gradingTopic.stem}</p>
+            <div>{["帮我看看这里有没有认错", "给我讲讲这道题"].map(text =>
+              <button key={text} disabled={!!pending || recording || !!input.trim()} onClick={() => void sendQuestion(undefined, text)}>{text}</button>)}</div>
+          </div>}
+          {!messages.length && !pendingQuestion && !gradingTopic && <div className="assistant-intro"><span className="assistant-avatar assistant-rabbit"><XiaobuMascot/></span><h3>你好，我是小步。</h3><p>不会操作、看不懂提示，或者学习卡住了，<br />都可以来问我，也可以拍张图。</p><div>{(readingMode ? ["怎样记录今天的阅读？", "我想聊聊今天读的内容", "怎样许愿和兑换奖励？"] : ["怎么上传今天的备忘录和作业？", "系统对这天的作业还有什么疑问？", "小数减法退位时，我总是弄错"]).map((question) => <button key={question} onClick={() => setInput(question)}>{question}</button>)}</div></div>}
+          {messages.map((message, index) => <article key={message.id || `question-${index}`} className={`assistant-message ${message.role}`}><strong>{message.role === "user" ? "我" : "小步"}</strong><div>{message.photos?.length ? photoThumbs(message.photos) : null}{message.content}</div>{message.photoReview?.requested && <small className="assistant-photo-result">{message.photoReview.providedPages ? `本次已重新查看 ${message.photoReview.providedPages} 页照片。${message.photoReview.totalAvailablePages > message.photoReview.providedPages ? `还有 ${message.photoReview.totalAvailablePages - message.photoReview.providedPages} 页未查看。` : ""}` : "本次没有可重新查看的页面，仅依据已有整理记录回答。"}</small>}{message.memoriesSaved?.map((m) => <aside className="assistant-memory-receipt" key={m.id}><strong>{memories.some((active) => active.id === m.id) ? "这次学到的知识" : "这条记忆已停用或更新"}</strong><p>{m.summary}</p><small>可在“更多功能”的记忆列表查看依据或停用。停用后不再用于后续识别和问答。</small></aside>)}{message.memoryNotices?.map((notice, i) => <small className="assistant-memory-notice" key={i}>{notice}</small>)}{message.proposal && <section className="assistant-proposal" id={"assistant-card-" + message.id}><h4>{message.changeStatus === "confirmed" ? "家庭说明已保存" : message.changeStatus === "undone" ? "这次说明已撤销" : "修改预览 · 尚未保存"}</h4><div><span>原清单</span><strong>{message.proposal.before.subject || "科目未定"} · {message.proposal.before.title}</strong><p>{message.proposal.before.requirement}</p><small>形式：{formatLabel[message.proposal.before.format]}</small></div><div><span>拟修改为</span><strong>{message.proposal.after.subject || "科目未定"} · {message.proposal.after.title}</strong><p>{message.proposal.after.requirement}</p><small>形式：{formatLabel[message.proposal.after.format]}</small></div><blockquote>你的说明：{message.proposal.userQuote}</blockquote>{!!message.proposal.resolves.length && <details><summary>将按这份说明处理 {message.proposal.resolves.length} 条识别疑问</summary><ul>{message.proposal.resolves.map((r, n) => <li key={n}>{r}</li>)}</ul></details>}{message.proposalNotice && <p role="status">{message.proposalNotice}</p>}{message.changeStatus === "pending" && <button className="button primary" disabled={!!pending || recording} onClick={() => void (message.proposalNotice ? sendQuestion(message) : saveClarification(message))}>{message.proposalNotice ? "用原说明重新预览" : "确认修改并重新查缺"}</button>}{message.changeStatus === "confirmed" && <><p>后台会重新关联作业。原照片和原识别结果保留。</p><button className="text-button" disabled={!!pending || recording} onClick={() => void saveClarification(message, true)}>撤销这次说明</button></>}</section>}{message.role === "assistant" && message.changeStatus === "none" && <small className="assistant-no-change">本次只作解释，未修改清单。</small>}{message.role === "assistant" && speech && message.id && <button className="assistant-read" disabled={!!pending || recording} onClick={() => void playReply(message.id!)}>{playing === message.id ? <Square size={15} /> : <Volume2 size={16} />}{playing === message.id ? "停止朗读" : audioReady === message.id ? "播放回答" : "朗读回答"}</button>}</article>)}
           {pendingQuestion && <article className="assistant-message user"><strong>我</strong><div>{photos.length ? photoThumbs(photos) : null}{pendingQuestion}</div></article>}
-          {pending === "chat" && <p className="assistant-progress" role="status"><LoaderCircle size={17} className="spin" /> 小步正在想一想…<button onClick={() => { current.current?.abort(); setInput(pendingQuestion); setPendingQuestion(""); setPending(null); }}>停止等待</button></p>}
+          {pending === "chat" && <p className="assistant-progress" role="status"><LoaderCircle size={17} className="spin" /> 小步正在想一想…<button onClick={() => { current.current?.abort(); if (pendingQuestion) setInput(pendingQuestion); setPendingQuestion(""); setPending(null); }}>停止等待</button></p>}
         </div>
         <form className="assistant-compose" inert={toolsOpen || !!previewPhoto} onSubmit={ask}>
           {error && <p className="form-error" role="alert">{error}</p>}
@@ -329,7 +360,7 @@ export function StudyAssistant({ studyDate, launcherTarget, readingMode = false,
           <div className="assistant-compose-row">
             <button className="button secondary assistant-add-photo" type="button" aria-label="添加图片，可拍照或从相册选择" title="拍照或选择图片" disabled={!!pending || recording || photos.length >= CHAT_PHOTO_LIMIT} onClick={() => photoInput.current?.click()}><ImagePlus size={21} /></button>
             {speech && <button className="button secondary assistant-mic" type="button" aria-label={recording ? "结束录音" : "语音提问"} title={recording ? "结束录音" : "语音提问"} disabled={!!pending} onClick={() => recording ? void endRecording() : void beginRecording()}>{pending === "microphone" ? <LoaderCircle size={20} className="spin" /> : recording ? <Square size={19} /> : <Mic size={21} />}</button>}
-            <label className="visually-hidden" htmlFor="assistant-question">想问小步的问题</label><textarea id="assistant-question" ref={questionInput} rows={1} value={input} onChange={(event) => setInput(event.target.value)} maxLength={1200} placeholder="问问小步…" disabled={!!pending || recording} />
+            <label className="visually-hidden" htmlFor="assistant-question">想问小步的问题</label><textarea id="assistant-question" ref={questionInput} rows={1} value={input} onChange={(event) => setInput(event.target.value)} maxLength={1200} placeholder={gradingTopic ? "你发现了什么？直接告诉小步…" : "问问小步…"} disabled={!!pending || recording} />
             <button className="button primary assistant-send" type="submit" aria-label="发送问题" title="发送问题" disabled={!!pending || recording || !!memoryBusy || (!input.trim() && !photos.length)}><Send size={20} /><span>发送</span></button>
           </div>
         </form>

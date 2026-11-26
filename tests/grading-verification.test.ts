@@ -1,8 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { GradingQuestionSchema, type GradedQuestion } from "../src/domain/grading";
+import { equivalentAnswer, GradingVerificationSchema, GradingQuestionSchema, type GradedQuestion } from "../src/domain/grading";
 import { blindGradingQuestions, reconcileFocusedQuestion } from "../src/domain/grading-verification";
-import { gradingDisplayQuestion, mistakeQuestionSummary } from "../src/domain/grading-display";
+import { gradingDisplayQuestion, gradingTakeaway, mistakeQuestionSummary } from "../src/domain/grading-display";
 const first = { ...GradingQuestionSchema.parse({ kind: "objective", studentAnswer: "挡地", expectedAnswer: "当地", label: "第9题：当地", question: "第9题词语默写，曾识别挡地", evidence: [{ fileId: "synthetic-page", page: 1, excerpt: "被误识为挡地" }], verdict: "wrong", confidence: "medium", explanation: "字形看不清", knowledgePoints: ["词语默写"], cause: "书写或单位", causeExplanation: "误判偏旁", nextStep: "订正" }), id: "synthetic-question" };
 const check = { ...first, confidence: "high" as const, questionId: first.id };
 test("blind verification receives only location hints, not the original OCR, expected word, explanation or answer-bearing labels", () => {
@@ -73,4 +73,17 @@ test("completed blind readings settle matching answers and report the specific r
  for(const [x,y] of [["1,23","12,3"],["US","us"],["a part","apart"]]){
    assert.equal(settleReviewedQuestion({...q,studentAnswer:x},[{...a,studentAnswer:x,expectedAnswer:x},{...b,studentAnswer:y,expectedAnswer:y}]).verdict,"passedWithNote");
  }
+});
+
+test("numeric fill-ins keep each slot, including a denominator", () => {
+ const question = "3/8 里有（ ）个 1/（ ），再添（ ）个 1/8 就是 1。";
+ const original = { ...first, question, studentAnswer:"3，8，8", expectedAnswer:"3，8，5", confidence:"high" as const };
+ const read = GradingVerificationSchema.shape.checks.element.parse({ ...check, studentAnswer:"3, 8, 8", expectedAnswer:"3, 8, 5" });
+ const complete = reconcileFocusedQuestion(original, read, {...read,studentAnswer:"3,8,8"}, "数学");
+ assert.equal(complete.verdict,"wrong");
+ assert.equal(gradingTakeaway(complete),"第3空填了 8，应填 5。");
+ const partial = {...read,studentAnswer:"3,8",expectedAnswer:"3,5"};
+ assert.equal(reconcileFocusedQuestion(original,partial,partial,"数学").verdict,"uncertain");
+ assert.equal(reconcileFocusedQuestion({...original,question:"3/8 里有（ ）个 1/8，再添（ ）个 1/8 就是 1。"},partial,partial,"数学").verdict,"wrong");
+ assert.equal(equivalentAnswer("1,23","12,3"),false);
 });

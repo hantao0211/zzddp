@@ -58,7 +58,7 @@ export class HomeworkConversation {
         const score = u.kind === "memo" ? 1 : (content?.subject && input.question.includes(content.subject) ? 8 : 0) + (numbers.some((n) => `${content?.printedPage || ""} ${content?.content || ""}`.includes(n)) ? 4 : 0);
         return { upload: u, page: p, score };
       }));
-    }).sort((a, b) => b.score - a.score);
+    }).filter(candidate => !input.gradingTopic || candidate.page.id === input.gradingTopic.pageId).sort((a, b) => b.score - a.score);
     review.totalAvailablePages = candidates.length;
     if (this.pipeline) for (const { upload, page } of candidates) {
       if (images.length >= 6) break;
@@ -90,8 +90,12 @@ export class HomeworkConversation {
       priority: "先解释当前用户对上一轮的回答；已聊清楚就提出预览，只问一个真正缺失的问题。历史发言不自动当成事实，已确认条目优先；可依据已传作业推断的检查范围按inferredScope解释，不能再把已消除的范围疑问变成家庭补交要求，不凭空补造老师要求或标准答案。",
     };
     const grading = this.store.grading.results(context.date);
-    const gradingQuestions = grading.batches.flatMap(b => (b.result?.questions || []).map(q => ({ title: b.title, subject: b.subject, question: q, rank: (input.question.includes(q.label) ? 4 : 0) + (input.question.includes(q.question.slice(0, 30)) ? 8 : 0) + (q.verdict === "wrong" ? 2 : q.verdict === "uncertain" ? 1 : 0) }))).sort((a, b) => b.rank - a.rank).slice(0, 20);
-    const gradingContext = { enabled: this.store.autoGradingEnabled, summary: grading.summary, batches: grading.batches.slice(0, 30).map(b => ({ title: b.title, subject: b.subject, status: b.status, note: b.note, scopeComplete: b.result?.scopeComplete })), questions: gradingQuestions.map(({ title, subject, question: q }) => ({ title, subject, ...q, question: q.question.slice(0, 2000), studentAnswer: q.studentAnswer.slice(0, 1000), expectedAnswer: q.expectedAnswer.slice(0, 1000), explanation: q.explanation.slice(0, 800), causeExplanation: q.causeExplanation.slice(0, 500), nextStep: q.nextStep.slice(0, 500) })) };
+    const topic = input.gradingTopic;
+    const batch = topic && grading.batches.find(b => b.primaryPageId === topic.pageId && b.result?.questions.some(q => q.id === topic.questionId));
+    const target = batch?.result?.questions.find(q => q.id === topic?.questionId);
+    const gradingQuestions = grading.batches.flatMap(b => (b.result?.questions || []).filter(q => !topic || (b === batch && q.id === target?.id)).map(q => ({ title: b.title, subject: b.subject, question: q, rank: (input.question.includes(q.label) ? 4 : 0) + (input.question.includes(q.question.slice(0, 30)) ? 8 : 0) + (q.verdict === "wrong" ? 2 : q.verdict === "uncertain" ? 1 : 0) }))).sort((a, b) => b.rank - a.rank).slice(0, 20);
+    const gradingContext = { ...(topic ? { selectedQuestion: { label: target?.label || topic.label, stem: target?.question || topic.stem, readings: batch?.readings?.[topic.questionId] },
+      guidance: "孩子正在讨论指定题。按孩子自己的话区分反馈识读与求讲解。反馈时检查所附该页的印刷题干、各空手写、批注和订正；没有读到图就说明。仅作对话解释，不声称已修订批改记录，不提出清单修改。" } : {}), enabled: this.store.autoGradingEnabled, summary: grading.summary, batches: grading.batches.slice(0, 30).map(b => ({ title: b.title, subject: b.subject, status: b.status, note: b.note, scopeComplete: b.result?.scopeComplete })), questions: gradingQuestions.map(({ title, subject, question: q }) => ({ title, subject, ...q, question: q.question.slice(0, 2000), studentAnswer: q.studentAnswer.slice(0, 1000), expectedAnswer: q.expectedAnswer.slice(0, 1000), explanation: q.explanation.slice(0, 800), causeExplanation: q.causeExplanation.slice(0, 500), nextStep: q.nextStep.slice(0, 500) })) };
     const photos = this.reviewPhotos(input, context.date);
     const attached = chatPhotos(input);
     const aliases = new Map<string, string>();
@@ -105,7 +109,7 @@ export class HomeworkConversation {
     if (result.sourceMaterialIds.some((id) => !aliases.has(id))) throw new AIServiceError("INVALID_SOURCE", false, "回答引用的作业资料无效。");
     result.sourceMaterialIds = [...new Set(result.sourceMaterialIds.map((id) => aliases.get(id)!))];
     let proposal: ClarificationPreview | undefined;
-    if (result.clarification) proposal = this.propose(context, result.clarification, owner, [...input.history.filter((m) => m.role === "user").map((m) => m.content), input.question]);
+    if (!topic && result.clarification) proposal = this.propose(context, result.clarification, owner, [...input.history.filter((m) => m.role === "user").map((m) => m.content), input.question]);
     const memory = this.memories.remember(result.memoryCandidates, input.question, context.date, input.history, isParent(viewer));
     const { clarification: _ignored, memoryCandidates: _candidates, ...reply } = result;
     // This action acknowledgement is derived from the validated preview, never from an AI promise.
@@ -148,7 +152,7 @@ export class HomeworkConversation {
     for (const field of ["subject", "title", "requirement", "format"] as const) if (action.changes[field] !== null) Object.assign(after, { [field]: action.changes[field] });
     if (JSON.stringify(before) === JSON.stringify(after)) throw new HomeworkError(400, "这项作业已经是你说明的内容，无需重复修改。");
     const now = this.store.now();
-    this.store.db.prepare("DELETE FROM clarification_drafts WHERE expires_at<? AND confirmed_id IS NULL").run(now);
+    this.store.db.prepare("DELETE FROM clarification_drafts WHERE expires_at<? AND confirmed_id IS NULL").run(now - 30 * 86400_000);
     const count = this.store.db.prepare("SELECT COUNT(*) AS n FROM clarification_drafts WHERE owner=? AND confirmed_id IS NULL AND expires_at>=?").get(owner, now) as { n: number };
     if (count.n >= 20) throw new HomeworkError(429, "待确认的说明较多，请先确认已有修改。");
     const id = draftId, expiresAt = now + 15 * 60_000;
@@ -167,13 +171,17 @@ export class HomeworkConversation {
         if (note.undone_at) throw new HomeworkError(409, "这份说明已经撤销，请重新提出修改。");
         return this.receipt(draft.confirmed_id);
       }
-      if (draft.expires_at < this.store.now()) throw new HomeworkError(410, "这条修改提议已过期，请重新说明。");
       const memo = this.memo(draft.date);
-      if (!memo?.result || memo.id !== draft.memo_id || this.store.revision(draft.date) !== draft.revision) throw new HomeworkError(409, "作业资料已更新，这条提议已失效。请重新提问后确认。");
+      if (!memo?.result || memo.id !== draft.memo_id) throw new HomeworkError(409, "当天的备忘录已更换，需要按最新清单重新预览。");
       const data = effectiveMemo(this.store, memo), source = data.original.assignments[draft.entry_index];
-      if (!source || sourceHash(source) !== draft.source_hash) throw new HomeworkError(409, "备忘录识别版本已变化，请重新说明。");
+      if (!source || sourceHash(source) !== draft.source_hash) throw new HomeworkError(409, "这项作业的识别内容已变化，需要按最新清单重新预览。");
       const payload = JSON.parse(draft.payload) as { action: ClarificationAction; preview: ClarificationPreview };
       const action = ClarificationActionSchema.parse(payload.action), noteId = randomUUID();
+      const before = entryValue(data.result.assignments[draft.entry_index]);
+      const questionsMatch = action.resolves.every((index, i) =>
+        data.unresolved.some(u => u.index === index && u.text === payload.preview.resolves[i]));
+      if (sourceHash(before) !== sourceHash(payload.preview.before) || !questionsMatch)
+        throw new HomeworkError(409, "这项作业或对应的疑问已更新，需要按最新清单重新预览。");
       this.store.db.prepare("INSERT INTO clarifications(id,owner,date,memo_id,entry_index,source_hash,payload,created_at) VALUES(?,?,?,?,?,?,?,?)").run(noteId, owner, draft.date, memo.id, draft.entry_index, draft.source_hash, JSON.stringify(action), new Date(this.store.now()).toISOString());
       this.store.db.prepare("UPDATE clarification_drafts SET confirmed_id=? WHERE id=?").run(noteId, id);
       this.refreshMemo(memo);

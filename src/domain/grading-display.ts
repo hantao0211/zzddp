@@ -1,4 +1,5 @@
 import { type GradedQuestion, type GradingReading } from "./grading";
+import { blankCount, numericSlots } from "./grading-decision";
 /** Internal evidence identifiers are links, not readable explanations. Keep genuine problem numbers. */
 export function gradingDisplayQuestion(question: GradedQuestion): GradedQuestion {
   const ids = [question.id, ...question.evidence.map(e => e.fileId)].filter(Boolean);
@@ -19,6 +20,11 @@ export function gradingTakeaway(q: GradedQuestion, readings: GradingReading[] = 
   if (q.verdict === "correct") return "";
   if (q.verdict === "blank") return "这题还空着，补上答案吧。";
   if (q.verdict === "wrong") {
+    const written = numericSlots(q.studentAnswer), expected = numericSlots(q.expectedAnswer);
+    if (written && expected && written.length === expected.length && written.length === blankCount(q.question)) {
+      const changes = expected.flatMap((value, i) => written[i] !== value ? [`第${i + 1}空填了 ${written[i]}，应填 ${value}`] : []);
+      if (changes.length) return changes.join("；") + "。";
+    }
     if (q.studentAnswer && q.expectedAnswer && q.studentAnswer !== q.expectedAnswer &&
       q.studentAnswer.length + q.expectedAnswer.length <= 48) {
       return `你写的是「${q.studentAnswer}」，正确答案是「${q.expectedAnswer}」。`;

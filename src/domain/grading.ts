@@ -1,4 +1,4 @@
-import { matchingCorrectAnswer } from "./grading-decision";
+import { blankCount, matchingCorrectAnswer, numericSlots } from "./grading-decision";
 import type { GradingFailure } from "./grading-failure";
 import { z } from "zod";
 import { EvidenceSchema } from "./ai-contracts";
@@ -31,7 +31,7 @@ export function readAutoGrading(env: Record<string, string | undefined> = proces
   return true;
 }
 export const emptyCounts = () => ({ passedWithNote: 0, correct: 0, wrong: 0, blank: 0, uncertain: 0, feedback: 0 });
-function normalized(value: string) { return value.normalize("NFKC").toLowerCase().replace(/\\(?:d?frac)\{([^{}]+)\}\{([^{}]+)\}/g, "$1/$2").replace(/[\s$\\,，。；;]/g, "").replace(/^(?:答案[:：]?|选项[:：]?)/, ""); }
+function normalized(value: string) { const slots = numericSlots(value); if (slots) return slots.join(","); return value.normalize("NFKC").toLowerCase().replace(/\\(?:d?frac)\{([^{}]+)\}\{([^{}]+)\}/g, "$1/$2").replace(/[\s$\\,，。；;]/g, "").replace(/^(?:答案[:：]?|选项[:：]?)/, ""); }
 export function equivalentAnswer(a: string, b: string) {
   const x = normalized(a), y = normalized(b); if (!x || !y) return false; if (x === y) return true;
   const fraction = (v: string) => /^[-+]?\d{1,30}(?:\/\d{1,30})?$/.test(v) ? v.split("/").map(BigInt) : null;
@@ -39,6 +39,10 @@ export function equivalentAnswer(a: string, b: string) {
 }
 export function reconcileQuestion(id: string, first: z.infer<typeof GradingQuestionSchema>, second: z.infer<typeof GradingVerificationSchema>["checks"][number]): GradedQuestion {
   if (first.kind === "subjective" || second.kind === "subjective") return { ...first, id, verdict: "feedback", confidence: "medium", explanation: second.explanation || first.explanation, verification: "subjective", cause: "原因待确认" };
+  const count = blankCount(first.question);
+  const ordered = [first.studentAnswer, first.expectedAnswer, second.studentAnswer, second.expectedAnswer].map(numericSlots);
+  if (count >= 2 && ordered.some(values => values && values.length !== count))
+    return { ...first, id, verdict: "uncertain", confidence: "low", verification: "uncertain", explanation: "有填写位置还没核对齐，需要按原图逐空查看。" };
   const sameStudent = normalized(first.studentAnswer) === normalized(second.studentAnswer) || equivalentAnswer(first.studentAnswer, second.studentAnswer);
   const visualFraction = (s: string) => {
     if (/厘米|毫米|千米|平方米|平方厘米|千克|公斤|(?:cm|mm|km|kg|m2|m²)\b/i.test(s)) return null;
@@ -50,7 +54,7 @@ export function reconcileQuestion(id: string, first: z.infer<typeof GradingQuest
   const sameReference = equivalentAnswer(first.expectedAnswer, second.expectedAnswer) || !!visualA && !!visualB && equivalentAnswer(visualA, visualB);
   const numeric = (s: string) => !/[，,;；\n]/.test(s) && !/\d\s+\d/.test(s) && /^[-+]?\d{1,30}(?:\/\d{1,30})?$/.test(normalized(s));
   const consistent = [first, second].every(q => q.verdict !== "correct" || !numeric(q.studentAnswer) || !numeric(q.expectedAnswer) || equivalentAnswer(q.studentAnswer, q.expectedAnswer));
-  const agreed = consistent && first.confidence === "high" && second.confidence === "high" && first.verdict === second.verdict && (first.verdict === "correct" ? sameStudent || sameReference : first.verdict === "blank" ? true : sameStudent && sameReference);
+  const agreed = consistent && first.confidence === "high" && second.confidence === "high" && first.verdict === second.verdict && (first.verdict === "correct" ? sameStudent || (sameReference && !ordered.some(Boolean)) : first.verdict === "blank" ? true : sameStudent && sameReference);
   if ((!agreed && !matchingCorrectAnswer(first, second)) || !["correct", "wrong", "blank"].includes(first.verdict)) return { ...first, id, verdict: "uncertain", confidence: "low", verification: "uncertain", explanation: "两次识别或独立解答未取得一致结果，尚未判对错。" };
   return { ...first, ...second, id, verification: "agreed", cause: first.cause === second.cause ? second.cause : "原因待确认", causeExplanation: first.cause === second.cause ? second.causeExplanation : "已确认答案有误，但仅凭这次作答还不能确定错因。" };
 }

@@ -1,6 +1,17 @@
 import type { GradedQuestion, GradingReading } from "./grading";
 
+export function numericSlots(text: string): string[] | undefined {
+  const parts = text.normalize("NFKC").trim().split(/\s*[,、]\s*/);
+  return parts.length >= 2 && parts.every(part => /^-?\d+(?:\.\d+)?(?:\/\d+)?$/.test(part)) ? parts : undefined;
+}
+
+export function blankCount(stem: string) {
+  return stem.normalize("NFKC").match(/\(\s*(?:_{2,}\s*)?\)|_{2,}/g)?.length || 0;
+}
+
 function answer(text: string) {
+  const slots = numericSlots(text);
+  if (slots) return slots.join(",");
   return text.normalize("NFKC").trim().replace(/^([\p{Script=Han}]+)\((?:写了?|抄写)?[两二2]遍\)$/u, "$1");
 }
 
@@ -23,7 +34,7 @@ function quote(text: string) {
 export function settleReviewedQuestion(q: GradedQuestion, readings: GradingReading[]): GradedQuestion {
   if (q.kind !== "objective" || q.verdict !== "uncertain") return q;
   const a = readings.find(r => r.stage === "focusOne"), b = readings.find(r => r.stage === "focusTwo");
-  if (!a || !b) return q;
+  if (!a || !b || q.explanation.startsWith("有填写位置还没核对齐")) return q;
   const x = answer(a.studentAnswer), y = answer(b.studentAnswer);
   const u = answer(a.expectedAnswer), v = answer(b.expectedAnswer);
   const bothCorrect = a.verdict === "correct" && b.verdict === "correct";
@@ -44,7 +55,7 @@ export function settleReviewedQuestion(q: GradedQuestion, readings: GradingReadi
     // A specific suspected error belongs with the items needing attention.
     const issue = a.explanation.trim().split(/[。！\n]/u)[0].slice(0, 96);
     const account = issue || ("复核读到的作答是" + quote(x || y) + "，参考答案是" + quote(u || v));
-    return { ...q, explanation: "复核指出的可能问题：" + account + "。" + points.join("") };
+    return { ...q, explanation: "复核指出的可能问题：" + account + "。" + (x === y && u === v && issue ? "" : points.join("")) };
   }
   if ((!readable(x) && !readable(y)) || (a.verdict === "blank" && b.verdict === "blank")) {
     return { ...q, explanation: points[0] || "两次复核都未读到可核对的作答。" };
