@@ -10,13 +10,13 @@ import { DailyReportSchema } from "../src/domain/homework";
 import { GradingQuestionSchema, reconcileQuestion, equivalentAnswer, readAutoGrading } from "../src/domain/grading";
 import { AIServiceError, type StructuredAI } from "../src/server/ai/provider";
 const date = "2026-11-17";
-function fixture(convention?: string) {
+function fixture(convention?: string, subject: "数学" | "语文" = "数学", title = "模拟数学") {
   const directory = mkdtempSync(join(tmpdir(), "xiaobu-grade-")), store = new HomeworkStore(directory, Date.now, null, false, true);
   const u = store.begin({ date, kind: "homework", files: [{ name: "synthetic.png", size: 1, sha256: "a".repeat(64) }] });
   const file = u.files[0].id, page = file + "-p1"; store.stored(file, "image/png"); store.setPages(file, [{ id: page, file_id: file, number: 1 }]); store.finalize(u.id);
-  const job = store.claim()!; store.recognized(job, { pages: [{ fileId: page, readable: true, subject: "数学", book: "模拟数学", printedPage: "12", content: "模拟算式", uncertainties: [] }] }, ["数学"], false, 0, "Synthetic fixture"); store.db.exec("UPDATE jobs SET status='done'");
+  const job = store.claim()!; store.recognized(job, { pages: [{ fileId: page, readable: true, subject, book: title, printedPage: "12", content: "模拟算式", uncertainties: [] }] }, ["数学"], false, 0, "Synthetic fixture"); store.db.exec("UPDATE jobs SET status='done'");
   if (convention) {
-    const saved = new LearnedMemories(store).remember([{kind:"homework_grading",trigger:"符号",subject:"数学",summary:convention,evidenceQuote:convention,confirmationQuote:null,replacesMemoryId:null}],convention,date,[],true);
+    const saved = new LearnedMemories(store).remember([{kind:"homework_grading",trigger:subject === "语文" ? "家默" : "符号",subject,summary:convention,evidenceQuote:convention,confirmationQuote:null,replacesMemoryId:null}],convention,date,[],true);
     assert.equal(saved.saved.length, 1);
   }
   store.transaction(() => store.grading.queueDay(date, null));
@@ -281,4 +281,34 @@ test("signature transcription is a record across automatic grading, family confi
       assert.equal(reopened.grading.summary(date).wrong,1);
     } finally { reopened.close(); }
   } finally { rmSync(f.directory,{recursive:true,force:true}); }
+});
+
+test("语文家默在逐题批改、盲核和疑题复查都取得家长确认的验字约定", async () => {
+  const rule = "这类家默，只检查字词写法，不用比对原词。";
+  const f = fixture(rule, "语文", "家默");
+  const seen: string[] = [];
+  try {
+    const grader = new HomeworkGrader(f.store, () => ({ async run(task, schema, metadata) {
+      const input = metadata as { source?: {title:string; familyRules:unknown; focus?:boolean}; questions?: {questionId:string}[] };
+      const source = input.source ?? metadata as {title:string;familyRules:unknown};
+      assert.equal(source.title, "家默");
+      assert.deepEqual(source.familyRules, [{subject:"语文",convention:rule}]);
+      const item = {...question(f.page,"correct"), label:"第1项", question:"默写词语", studentAnswer:"晴朗", expectedAnswer:"晴朗", explanation:"字词写法正确。"};
+      if (task === "grade_homework") {
+        seen.push("initial");
+        return schema.parse({scopeComplete:true,note:"",questions:[item]});
+      }
+      seen.push(input.source?.focus ? "focus" : "blind");
+      const check = {...item, questionId:input.questions![0].questionId, confidence:input.source?.focus ? "high" : "low"};
+      return schema.parse({scopeComplete:true,omittedLabels:[],checks:[check]});
+    }}), {images:()=>[]});
+    assert.ok(await grader.tick());
+    assert.deepEqual(seen, ["initial","blind","focus","focus"]);
+    assert.equal(f.store.grading.summary(date).correct, 1);
+    const memories = new LearnedMemories(f.store);
+    assert.deepEqual(memories.forJudgment("homework_grading", ["英语"], "家默"), []);
+    assert.deepEqual(memories.forJudgment("homework_completion", ["语文"], "家默"), []);
+    memories.revoke(memories.catalog().rules[0].id);
+    assert.deepEqual(memories.forJudgment("homework_grading", ["语文"], "下一份家默"), []);
+  } finally { f.close(); }
 });

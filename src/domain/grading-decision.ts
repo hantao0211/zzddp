@@ -76,7 +76,7 @@ export function settleReviewedQuestion(q: GradedQuestion, readings: GradingReadi
   if (q.studentAnswer === "手写字暂未辨清") points.push("手写字的笔画没有辨清。");
   if (bothCorrect && x !== y && x === u && y === v) points.push("两次都判对，核对的内容分别是" + quote(x) + "和" + quote(y) + "。");
   else if (x !== y) points.push("两次读到的作答分别为" + quote(x || "未读到作答") + "和" + quote(y || "未读到作答") + "。");
-  if (/缺少词表|缺少.*拼音/.test(u + v)) points.push("缺少听写词表或拼音，无法核对目标词。");
+  if ([u, v].some(value => /(?:未提供|没有提供|无|缺少)(?:听写|目标|原始)?(?:词表|拼音)/u.test(value))) points.push("复核记录提到缺少听写词表或拼音。");
   else if (!readable(u) || !readable(v)) points.push("未取得可核对的参考答案。");
   else if (u !== v && !(x === u && y === v)) points.push("两次复核给出的参考答案分别为" + quote(u) + "和" + quote(v) + "。");
   else if (u === v && x === y && x !== u && readable(x)) points.push("识读作答为" + quote(x) + "，参考答案为" + quote(u) + "，复核未能证实这处差异是作答错误。");

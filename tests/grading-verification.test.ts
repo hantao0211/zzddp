@@ -65,6 +65,9 @@ test("completed blind readings settle matching answers and report the specific r
  assert.match(word.explanation,/「春」和「春天」/);
  const noKey = {...a,expectedAnswer:"无法确定（缺少词表）",verdict:"uncertain"} as const;
  assert.match(settleReviewedQuestion(q,[noKey,{...noKey,stage:"focusTwo"}]).explanation,/缺少听写词表/);
+ const noList = {...noKey,expectedAnswer:"未提供词表"};
+ const unavailable = settleReviewedQuestion(q,[noList,{...noList,stage:"focusTwo",expectedAnswer:"未提供词表，无法独立确认"}]);
+ assert.doesNotMatch(unavailable.explanation,/参考答案分别|「未提供词表/);
  const flagged = { ...a, verdict: "wrong", studentAnswer: "6", expectedAnswer: "5", explanation: "加法算多了一。" } as const;
  const possibleError = settleReviewedQuestion(q,[flagged,{...flagged,stage:"focusTwo",expectedAnswer:"五"}]);
  assert.equal(possibleError.verdict,"uncertain"); assert.match(possibleError.explanation,/加法算多了一/);

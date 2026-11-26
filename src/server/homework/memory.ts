@@ -45,7 +45,10 @@ function statesConvention(message: string, quote: string) {
   const start = message.indexOf(quote);
   if (start < 0) return false;
   const prefix = message.slice(0, start).split(/[。！？!?；;\n]/u).pop() || "";
-  const suffix = /[。！？!?；;\n]$/u.test(quote) ? "" : message.slice(start + quote.length).match(/^[^。！？!?；;\n]*[。！？!?；;]?/u)?.[0] || "";
+  const tail = /[。！？!?；;\n]$/u.test(quote) ? "" : message.slice(start + quote.length).match(/^[^。！？!?；;\n]*[。！？!?；;]?/u)?.[0] || "";
+  // A follow-up asking why the system forgot a stated convention is a separate speech act.
+  const asksAboutApplication = /^[，,]\s*(?:[^。！？?，,]{0,24}[，,]\s*)?为什么(?:系统|小步)/u.test(tail);
+  const suffix = asksAboutApplication && !/假设|比如|举例|并非|不是说|没说过/u.test(tail) ? "" : tail;
   return !/[?？]|(?:并非|并不是|不是说|没说过|假设|假如|比如|举例|是不是|是否|能不能)/u.test(prefix + quote + suffix);
 }
 
@@ -63,7 +66,7 @@ export function rememberCandidates(store: Pick<HomeworkStore, "db" | "transactio
         if (!canTeachJudgment) { notices.push("跨作业的判定约定由家长确认。"); continue; }
         const quote = candidate.evidenceQuote;
         if (/[?？]|是不是|能不能|是否|为什么|例如|比如|假设|假如|举例|可能是|好像/u.test(quote) ||
-            !/以后|今后|每次|每逢|惯例|我们(?:家|班)(?:的)?.{0,16}(?:用|按|看)|通常|一般|一直|一律|平时|习惯|默认|表示|代表|约定|凡是|统一|只要|只用于|只记录|都用|总是|按.+为准/u.test(quote)) {
+            !/这(?:种|类)(?:语文)?(?:家默|家庭默写|听写|默写)[，,：:\s]*只(?:判定|判断|检查|查|核对)|以后|今后|每次|每逢|惯例|我们(?:家|班)(?:的)?.{0,16}(?:用|按|看)|通常|一般|一直|一律|平时|习惯|默认|表示|代表|约定|凡是|统一|只要|只用于|只记录|都用|总是|按.+为准/u.test(quote)) {
           notices.push("这段说明仅供本次讨论，尚未保存为跨作业的判定约定。"); continue;
         }
         // Only the confirmed convention itself can reach a later review.

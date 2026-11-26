@@ -182,3 +182,13 @@ test("only a parent-confirmed reusable convention reaches the matching subject a
     assert.deepEqual(f.memories.forJudgment("homework_completion", ["语文"]), []);
   } finally { f.cleanup(); }
 });
+
+test("a stated convention followed by a memory question is distinct from asking whether to use that convention", () => {
+  const f = fixture(), rule = "这种家默，只判定有无错别字，无需核对原词";
+  const candidate = MemoryCandidateSchema.parse({kind:"homework_grading", subject:"语文", trigger:"家默", summary:rule, evidenceQuote:rule});
+  try {
+    assert.equal(f.memories.remember([candidate], rule+"，可以吗？", date, [], true).saved.length,0);
+    assert.equal(f.memories.remember([candidate], "假设"+rule+"。", date, [], true).saved.length,0);
+    assert.equal(f.memories.remember([candidate], rule+"，为什么系统还是在找词表？", date, [], true).saved.length,1);
+  } finally { f.cleanup(); }
+});
