@@ -1,0 +1,33 @@
+/* Shared spacing for data entry. Checkboxes, file buttons and
+   the invisible date overlay in the page header keep their own geometry. */
+:root {
+  --form-field-height: 36px;
+  --form-label-gap: 3px;
+  --form-row-gap: 8px;
+}
+
+@media (pointer: coarse) {
+  :root { --form-field-height: 44px; }
+}
+
+@media screen {
+  :is(.reading-main, .reading-dialog, .hw-dialog, .hw-upload-form, .hw-login,
+      .admin-app, .account-login, .exam-form, .hw-scope-form, .homework-day-settings,
+      .mistake-filter-dates, .assistant-settings, .form-row)
+    :is(input:not([type]), input[type="text"], input[type="number"], input[type="date"],
+        input[type="password"], input[type="search"], input[type="email"], input[type="url"],
+        input[type="tel"], input[type="time"], select:not([multiple]):not([size])) {
+    box-sizing: border-box;
+    min-height: var(--form-field-height);
+    padding-block: 4px;
+    line-height: 1.35;
+  }
+
+  :is(.reading-main, .reading-dialog, .hw-dialog, .exam-form, .admin-app) textarea {
+    padding-block: 6px;
+    line-height: 1.5;
+  }
+  :is(.reading-main, .reading-dialog) textarea:where([rows]) {
+    min-height: calc(2lh + 14px);
+  }
+}

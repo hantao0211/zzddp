@@ -282,7 +282,7 @@
   .study-shell .reading-main > :is(.growth-activities, [id="family-reward-shop"]) > h2 {
     min-height: 44px; margin: 0 0 18px;
   }
-  .study-shell .reading-main .reading-checkin > .reading-section-heading { flex-wrap: nowrap; gap: 12px; }
+  .study-shell .reading-main .reading-checkin > .reading-section-heading { flex-wrap: nowrap; gap: 12px; margin-bottom: var(--form-row-gap); }
   .study-shell .reading-main .reading-checkin > .reading-section-heading > h2,
   .study-shell .reading-main > :is(.growth-activities, [id="family-reward-shop"]) > h2 {
     display: flex; align-items: center; gap: 8px; min-height: 44px;

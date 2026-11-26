@@ -14,6 +14,7 @@ import "./theme.css";
 import "./journal-buttons.css";
 import "./journal-sections.css";
 import "./journal-tiles.css";
+import "./form-density.css";
 import { AppInteractions } from "@/components/app-interactions";
 
 export const metadata: Metadata = {
