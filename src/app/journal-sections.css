@@ -562,3 +562,5 @@
 .recap-rate i { display: block; height: 100%; background: var(--theme-success-text,#75906c); }
 .recap-pending { display: inline-block; margin-inline-start: 8px; }
 .recap-page details { margin-top: 12px; color: var(--muted); font-size: 13px; }
+
+.reading-dialog .book-barcode-scan { display: inline-flex; align-items: center; gap: 6px; margin-bottom: 8px; }
