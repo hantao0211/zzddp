@@ -31,12 +31,15 @@ function Exchange({reward:r,data,refresh,close}:Props&{reward:Reward;close:()=>v
  const cost=shopping?shoppingCost(valid?amountCents:0,r.usage?.groupCents||0,r.rateCents||200):r.cost;
  const shortfall=cost-data.growth.balance;
  const restriction=blocked(r,data);
- const unavailable=restriction||(shopping&&valid&&amountCents>budget?"超过本月剩余额度":shortfall>0?"小脚步还不够":"");
  const needsAmount=shopping&&!valid;
+ const unavailable=restriction
+  || (needsAmount ? (amount ? "请输入大于 0 的金额，最多保留两位小数。" : "请先填写本次购物金额。") : "")
+  || (shopping&&amountCents>budget ? "超过本月剩余额度" : "")
+  || (shortfall>0 ? `小脚步还不够，还差 ${shortfall} 个小脚步。` : "");
  useEffect(()=>{ref.current?.showModal();return()=>ref.current?.close();},[]);
  async function submit(event:React.FormEvent<HTMLFormElement>){
   event.preventDefault();
-  if(busy||unavailable||needsAmount)return;
+  if(busy||unavailable)return;
   setBusy(true);
   setError("");
   try{
@@ -67,14 +70,14 @@ function Exchange({reward:r,data,refresh,close}:Props&{reward:Reward;close:()=>v
     </>}
     <p>{needsAmount ? "填写金额后显示本次消耗" : <>本次暂扣 <StepAmount value={cost}/></>}，当前余额 <StepAmount value={data.growth.balance}/>。</p>
     {error&&<p role="alert" className="form-error">{error}</p>}
-    {!busy&&unavailable&&<p className="exchange-unavailable" role="status">
+    {!busy&&unavailable&&<p id="exchange-blocked-reason" className="exchange-unavailable" role="status">
      <LockKeyhole size={16} aria-hidden="true"/>
-     <span>{unavailable}{unavailable==="小脚步还不够" && `，还差 ${shortfall} 个小脚步。`}</span>
+     <span>{unavailable}</span>
     </p>}
     <div className="exchange-actions">
-     {(busy||!unavailable)&&<button type="submit" className="button primary" disabled={busy||needsAmount}>
-      {busy?"正在申请…":needsAmount?"填写金额后可申请":"确认申请兑换"}
-     </button>}
+     <button type="submit" className="button primary" disabled={busy||!!unavailable} aria-describedby={!busy&&unavailable?"exchange-blocked-reason":undefined}>
+      {busy?"正在申请…":"确认申请兑换"}
+     </button>
      {!!r.version&&<button type="button" className="button primary plum-action" onClick={openHistory} disabled={loadingHistory||busy} aria-busy={loadingHistory}>
       <History size={17} aria-hidden="true"/>{loadingHistory?"正在读取记录…":"查看约定与更正记录"}
      </button>}
