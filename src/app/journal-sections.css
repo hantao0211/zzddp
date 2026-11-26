@@ -66,16 +66,26 @@
   }
 
 
-  /* Books and reading feedback are objects on the page, not nested panels. */
-  .study-shell .reading-books { gap: 14px; padding-top: 18px; }
+  .study-shell .reading-books { grid-template-columns: minmax(0, 1fr); gap: 0; padding-top: 4px; }
   .study-shell .reading-books > article {
-    border: 0;
-    border-radius: 14px;
-    padding: 18px;
-    background: var(--theme-green-soft, #eaf0e2);
+    display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center;
+    gap: 12px; padding: 8px 0; border: 0; border-radius: 0;
   }
-  .study-shell .reading-books > article:nth-child(2n) { background: var(--theme-purple-soft, #eee7f2); }
-  .study-shell .reading-books .reading-cover { background: var(--journal-paper); }
+  .study-shell .reading-books > article + article { border-top: 1px solid var(--border); }
+  .shelf-book-copy { position: relative; min-width: 0; padding-block: 3px; }
+  .shelf-book-copy h3 { margin: 0; font-size: 1rem; line-height: 1.4; }
+  .shelf-book-open {
+    display: inline-flex; align-items: baseline; gap: 7px; max-width: 100%; padding: 0;
+    font: inherit; color: var(--ink); background: transparent; text-align: start;
+  }
+  .shelf-book-open > span {
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere;
+  }
+  .shelf-book-open > svg { flex: none; color: var(--muted); }
+  .shelf-book-open::after { content: ""; position: absolute; inset: 0; }
+  .reading-books .shelf-book-copy p { margin: 3px 0 0; font-size: .8125rem; line-height: 1.4; }
+  .reading-books .reading-shelf-status::before { content: ""; position: absolute; inset: -7px 0; }
+  :root .reading-books .reading-shelf-status select:not([multiple]):not([size]) { top: -7px; height: calc(100% + 14px); }
   .study-shell .reading-record:first-of-type { border-top: 0; margin-top: 0; padding-top: 4px; }
   .study-shell .reading-feedback {
     border: 0;
@@ -210,7 +220,6 @@
     .study-shell .study-reading-main > .card:first-child { padding-top: 0; }
     .study-shell .reading-main .card > h2,
     .study-shell .reading-main .card > summary { font-size: 18px; }
-    .study-shell .reading-books > article { padding: 16px; }
     .study-shell .growth-activities .economy-grid { gap: 10px; }
     .study-shell .growth-activities .economy-grid > article { padding: 15px 12px; }
     .study-shell .growth-activities .economy-grid h3 { font-size: 16px; }
@@ -341,9 +350,6 @@
 .hw-upload-status { flex-shrink: 0; gap: 4px; font-size: .8125rem; }
 .hw-upload-status > svg { width: 15px; height: 15px; }
 
-.reading-books article > div { flex: 1; }
-.reading-shelf-title { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 4px 10px; }
-.reading-shelf-title h3 { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 .reading-add-status { display: flex; align-items: center; gap: 10px; }
 .reading-shelf-status {
   position: relative; display: inline-flex; align-items: center; gap: 4px;
