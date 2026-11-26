@@ -70,3 +70,16 @@
   .reading-main .shop-management-row { flex-direction: column; align-items: stretch; }
   .reading-main .shop-management-row .economy-actions button { padding-inline: 6px; }
 }
+
+.activity-icon-picker { margin-bottom: var(--form-row-gap); }
+.activity-icon-trigger {
+  display: flex; align-items: center; gap: 6px; width: 100%; min-height: 44px;
+  border: 0; border-bottom: 1px solid var(--border); padding: 0 3px 0 0;
+  background: transparent; color: var(--accent); font: inherit; font-size: 14px; cursor: pointer;
+}
+.activity-icon-trigger > span { margin-inline-end: auto; color: var(--muted); }
+.activity-icon-trigger[aria-expanded=true] > svg:last-child { transform: rotate(180deg); }
+.activity-icon-choices.reward-icon-choices { gap: 4px; margin: 6px 0; }
+.activity-icon-choices.reward-icon-choices button { min-height: 44px; padding: 3px; gap: 2px; border-radius: 7px; }
+.activity-rule-title { display: inline-flex; align-items: center; gap: 6px; }
+.activity-rule-title svg { flex: none; color: var(--accent); }

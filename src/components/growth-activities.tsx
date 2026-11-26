@@ -1,14 +1,42 @@
 "use client";
 import {useEffect,useRef,useState} from "react";
-import {BookOpen,Home,Volleyball,MonitorPlay,ArrowRight,Check,Clock3,X, Plus, Pencil, Trash2, Footprints, Sparkles} from "lucide-react";
+import {BookOpen,Home,Volleyball,MonitorPlay,ArrowRight,Check,Clock3,X, Plus, Pencil, Trash2, Footprints, Sparkles, Palette, Music, ChevronDown} from "lucide-react";
 import {accountRequest} from "./account-login";
 import {StepAmount} from "./growth-tokens";
 import { GrowingSprout } from "./study-tab-illustrations";
-import {activityPeriod,addDays,weeklyActivity,type ActivityRule} from "@/domain/growth-economy";
+import {activityIconLabels,type ActivityIconId,activityPeriod,addDays,weeklyActivity,type ActivityRule} from "@/domain/growth-economy";
 import type {ReadingState} from "@/domain/reading";
 const call=(path:string,value:unknown,method="POST")=>accountRequest("reading/"+path,value,method);
 type Props={data:ReadingState;refresh:(message:string)=>Promise<void>};
-const icons:Partial<Record<string,typeof BookOpen>>={"english-reading":BookOpen,housework:Home,badminton:Volleyball,"english-class":MonitorPlay};
+const icons = {book:BookOpen, home:Home, sport:Volleyball, screen:MonitorPlay, pencil:Pencil, palette:Palette, music:Music, sparkles:Sparkles};
+const presetIcons:Partial<Record<ActivityRule["key"],ActivityIconId>> = {"english-reading":"book",housework:"home",badminton:"sport","english-class":"screen"};
+function iconFor(rule: ActivityRule) {
+  return rule.icon ?? presetIcons[rule.key] ?? "sparkles";
+}
+function ActivityIcon({rule,size=18}:{rule:ActivityRule;size?:number}) {
+  const Icon=icons[iconFor(rule)];
+  return <Icon size={size} aria-hidden="true"/>;
+}
+
+function ActivityIconPicker({rule,disabled,onChange}:{rule:ActivityRule;disabled:boolean;onChange:(icon:ActivityIconId)=>void}) {
+  const [open,setOpen]=useState(false);
+  const trigger=useRef<HTMLButtonElement>(null);
+  const selected=iconFor(rule);
+  return <div className="activity-icon-picker">
+    <button className="activity-icon-trigger" type="button" ref={trigger} disabled={disabled} aria-expanded={open} onClick={()=>setOpen(!open)}>
+      <span>活动图标</span><ActivityIcon rule={rule}/>{activityIconLabels[selected]}<ChevronDown size={15} aria-hidden="true"/>
+    </button>
+    {open && <div className="reward-icon-choices activity-icon-choices" role="group" aria-label="选择活动图标">
+      {(Object.keys(activityIconLabels) as ActivityIconId[]).map(id=>{
+        const Icon=icons[id];
+        return <button key={id} type="button" aria-pressed={id===selected} disabled={disabled}
+          onClick={()=>{onChange(id);setOpen(false);trigger.current?.focus();}}>
+          <Icon size={17} aria-hidden="true"/>{activityIconLabels[id]}
+        </button>;
+      })}
+    </div>}
+  </div>;
+}
 function activitySummary(rule: ActivityRule) {
  return [weeklyActivity(rule) ? "每周一次" : "每天一次", rule.description].filter(Boolean).join(" · ");
 }
@@ -18,7 +46,7 @@ function ActivityEntry({rule,data,close,refresh}:Props&{rule:ActivityRule;close:
  const parent=data.viewer.role!=="child";
  return <dialog ref={ref} className="reading-dialog" onCancel={e=>{e.preventDefault();if(!busy)close();}} aria-label={`记录${rule.title}`}><header><h2>{rule.title} <StepAmount value={rule.points} signed/></h2><button className="icon-button" disabled={busy} onClick={close} aria-label="关闭活动记录"><X/></button></header><form className="reading-dialog-body" onSubmit={async e=>{e.preventDefault();if(busy)return;setBusy(true);setError("");try{if(!request.current||request.current.date!==date||request.current.note!==note)request.current={id:crypto.randomUUID(),date,note};await call("activities",{...request.current,key:rule.key});await refresh(parent?"活动已确认，小脚步已到账。":"记录已送给家长，确认后小脚步到账。");close();}catch(e){setError(e instanceof Error?e.message:"请稍后重试。");}finally{setBusy(false);}}}><p>{activitySummary(rule)}{rule.key==="housework"&&"（各项家务合计）"}</p><label>完成日期<input type="date" value={date} min={[addDays(data.today,-7),data.activities?.startOn||data.today].sort().at(-1)} max={data.today} required disabled={busy} onChange={e=>setDate(e.target.value)}/></label><label>做了什么（选填）<textarea value={note} maxLength={300} rows={2} disabled={busy} onChange={e=>setNote(e.target.value)}/></label>{error&&<p role="alert" className="form-error">{error}</p>}<button className="button primary" disabled={busy}>{busy?"正在保存…":parent?"确认完成并奖励":"请家长确认"}</button></form></dialog>;
 }
-export function GrowthActivities({data,refresh}:Props){const[selected,setSelected]=useState<ActivityRule|null>(null),state=data.activities;if(!state)return null;return <section className="card growth-activities"><h2><GrowingSprout />生活里的小进步</h2><p className="reading-muted">{data.viewer.role==="child"?"做过再记录，家长确认后到账。":"记录做过的小事，小脚步直接到账。"}</p><div className="economy-grid">{state.rules.filter(r=>r.enabled&&r.points>0).map(rule=>{const Icon=icons[rule.key]??Sparkles,period=activityPeriod(rule,data.today),claim=state.claims.find(c=>c.key===rule.key&&activityPeriod(rule,c.date)===period&&c.status!=="rejected");return <article key={rule.key} className="journal-tile" data-described={rule.description ? "" : undefined}><h3 className="activity-heading journal-tile-heading"><span className="journal-tile-icon"><Icon size={20} aria-hidden="true"/></span><span className="journal-tile-title">{rule.title}</span></h3><p className="activity-reward journal-tile-value"><StepAmount value={rule.points} signed/></p><span className="activity-frequency journal-tile-note">{activitySummary(rule)}</span><button className="button secondary activity-record-action" disabled={!!claim} onClick={()=>setSelected(rule)}><span>{claim?.status==="approved"?"本期已到账":claim?"等家长确认":"记录完成"}</span>{claim?.status==="approved"?<Check aria-hidden="true"/>:claim?<Clock3 aria-hidden="true"/>:<ArrowRight aria-hidden="true"/>}</button></article>;})}</div>{!!state.claims.length&&<details><summary>活动记录 · {state.claims.filter(c=>c.status==="pending").length}项待确认</summary>{state.claims.slice(0,30).map(c=><div className="economy-row" key={c.id}><div><strong>{c.title} · {c.date}</strong><p>{c.note}</p>{c.parentNote&&<p>家长说：{c.parentNote}</p>}</div><span>{c.status==="approved"?"已到账":c.status==="pending"?"等家长确认":"这次未通过"} <StepAmount value={c.points}/></span></div>)}</details>}{selected&&<ActivityEntry rule={selected} data={data} refresh={refresh} close={()=>setSelected(null)}/>}</section>;}
+export function GrowthActivities({data,refresh}:Props){const[selected,setSelected]=useState<ActivityRule|null>(null),state=data.activities;if(!state)return null;return <section className="card growth-activities"><h2><GrowingSprout />生活里的小进步</h2><p className="reading-muted">{data.viewer.role==="child"?"做过再记录，家长确认后到账。":"记录做过的小事，小脚步直接到账。"}</p><div className="economy-grid">{state.rules.filter(r=>r.enabled&&r.points>0).map(rule=>{const period=activityPeriod(rule,data.today),claim=state.claims.find(c=>c.key===rule.key&&activityPeriod(rule,c.date)===period&&c.status!=="rejected");return <article key={rule.key} className="journal-tile" data-described={rule.description ? "" : undefined}><h3 className="activity-heading journal-tile-heading"><span className="journal-tile-icon"><ActivityIcon rule={rule} size={20}/></span><span className="journal-tile-title">{rule.title}</span></h3><p className="activity-reward journal-tile-value"><StepAmount value={rule.points} signed/></p><span className="activity-frequency journal-tile-note">{activitySummary(rule)}</span><button className="button secondary activity-record-action" disabled={!!claim} onClick={()=>setSelected(rule)}><span>{claim?.status==="approved"?"本期已到账":claim?"等家长确认":"记录完成"}</span>{claim?.status==="approved"?<Check aria-hidden="true"/>:claim?<Clock3 aria-hidden="true"/>:<ArrowRight aria-hidden="true"/>}</button></article>;})}</div>{!!state.claims.length&&<details><summary>活动记录 · {state.claims.filter(c=>c.status==="pending").length}项待确认</summary>{state.claims.slice(0,30).map(c=><div className="economy-row" key={c.id}><div><strong>{c.title} · {c.date}</strong><p>{c.note}</p>{c.parentNote&&<p>家长说：{c.parentNote}</p>}</div><span>{c.status==="approved"?"已到账":c.status==="pending"?"等家长确认":"这次未通过"} <StepAmount value={c.points}/></span></div>)}</details>}{selected&&<ActivityEntry rule={selected} data={data} refresh={refresh} close={()=>setSelected(null)}/>}</section>;}
 type RuleAction = {kind:"add"} | {kind:"edit"|"delete"; rule:ActivityRule};
 
 function ActivityRuleDialog({action,close,refresh}:Pick<Props,"refresh">&{action:RuleAction;close:()=>void}){
@@ -43,6 +71,7 @@ function ActivityRuleDialog({action,close,refresh}:Pick<Props,"refresh">&{action
   <form className="reading-dialog-body" onSubmit={save}>
    {deleting?<p>删除「{before?.title}」后，孩子将无法继续打卡。已有活动记录、小脚步和待确认申请都将保留。</p>:<>
     <label>活动名称<input autoFocus required maxLength={60} value={draft.title} onChange={e=>setDraft({...draft,title:e.target.value})}/></label>
+    <ActivityIconPicker rule={draft} disabled={busy} onChange={icon=>setDraft({...draft,icon})}/>
     <label>奖励小脚步<input required type="number" min="0" max="100" defaultValue={draft.points} onChange={e=>setDraft({...draft,points:e.target.valueAsNumber})}/></label>
     <label>记录频率<select disabled={draft.key==="housework"} value={weeklyActivity(draft)?"weekly":"daily"} onChange={e=>setDraft({...draft,frequency:e.target.value as "daily"|"weekly"})}>
      <option value="daily">每天一次</option><option value="weekly">每周一次</option></select></label>
@@ -66,7 +95,7 @@ export function ActivityManagement({data,refresh}:Props){
   {error&&<p className="form-error" role="alert">{error}</p>}
   {data.activities.claims.filter(c=>c.status==="pending").map(c=><article className="economy-row" key={c.id}><div><strong>{c.title} · <StepAmount value={c.points}/></strong><p>{c.date} · {c.note||"孩子记录已完成"}</p></div><div className="economy-actions"><button className="button primary" disabled={busy} onClick={()=>void run(()=>call("activities/"+c.id,{status:"approved"},"PATCH"),"已确认，小脚步到账。")}>确认完成</button><button className="text-button" disabled={busy} onClick={()=>{const note=prompt("告诉孩子这次需要调整什么：");if(note===null)return;void run(()=>call("activities/"+c.id,{status:"rejected",note:note.slice(0,300)},"PATCH"),"已给孩子留下说明。");}}>暂不通过</button></div></article>)}{!data.activities.claims.some(c=>c.status==="pending")&&<p className="reading-muted">没有待确认的活动。</p>}
   {data.activities.rules.map(rule=><article key={rule.key} className="economy-row activity-rule-row">
-   <div><strong>{rule.title}</strong><p className="reading-muted"><StepAmount value={rule.points} signed/> · {activitySummary(rule)}{!rule.enabled||!rule.points?" · 已暂停":""}</p></div>
+   <div><strong className="activity-rule-title"><ActivityIcon rule={rule} size={16}/>{rule.title}</strong><p className="reading-muted"><StepAmount value={rule.points} signed/> · {activitySummary(rule)}{!rule.enabled||!rule.points?" · 已暂停":""}</p></div>
    <div className="economy-actions"><button className="button primary" aria-label={`编辑${rule.title}`} onClick={()=>setAction({kind:"edit",rule})}><Pencil size={15}/>编辑</button>
     <button className="text-button" aria-label={`删除${rule.title}`} onClick={()=>setAction({kind:"delete",rule})}><Trash2 size={15}/>删除</button></div>
   </article>)}
