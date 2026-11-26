@@ -1,10 +1,17 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { BookOpen, ChevronLeft, ChevronRight, Footprints, NotebookPen, Sprout } from "lucide-react";
+import { BookOpen, CalendarRange, CalendarDays, GraduationCap, ChevronLeft, ChevronRight, Footprints, NotebookPen, Sprout } from "lucide-react";
 import { recapPeriods, recapRange, type GrowthRecap, type RecapPeriod } from "@/domain/growth-recap";
 import { homeworkRequest } from "@/services/homework-gateway";
 import { ReadingCheckinDialog } from "./reading-checkin-dialog";
+
+const periodIcons = { week: CalendarRange, month: CalendarDays, term: GraduationCap };
+
+function PeriodLabel({period}:{period:RecapPeriod}) {
+  const Icon = periodIcons[period];
+  return <><Icon className="recap-period-icon" size={17} aria-hidden="true"/>{recapPeriods[period]}小结</>;
+}
 
 function RecapPage({period,day,today,onDay}: {
   period:RecapPeriod; day:string; today:string; onDay:(day:string)=>void;
@@ -63,10 +70,10 @@ export function GrowthRecapCard({today}:{today:string}) {
   const periods=Object.keys(recapPeriods) as RecapPeriod[];
   return <section className="card growth-recap">
     <h2><Sprout size={20}/>我的成长小结</h2>
-    <div className="recap-entries">{periods.map(p=><button key={p} className="button secondary compact" onClick={()=>{setDay(today);setPeriod(p);}}>{recapPeriods[p]}小结<ChevronRight size={15}/></button>)}</div>
+    <div className="recap-entries">{periods.map(p=><button key={p} className="button secondary compact" onClick={()=>{setDay(today);setPeriod(p);}}><PeriodLabel period={p}/></button>)}</div>
     {period&&<ReadingCheckinDialog title="我的成长小结" backText="返回成长" onBack={()=>setPeriod(null)}>
       <div className="recap-page">
-        <div className="recap-periods" role="group" aria-label="小结周期">{periods.map(p=><button key={p} aria-pressed={period===p} onClick={()=>setPeriod(p)}>{recapPeriods[p]}小结</button>)}</div>
+        <div className="recap-periods" role="group" aria-label="小结周期">{periods.map(p=><button key={p} aria-pressed={period===p} onClick={()=>setPeriod(p)}><PeriodLabel period={p}/></button>)}</div>
         <RecapPage key={period+day} period={period} day={day} today={today} onDay={setDay}/>
       </div>
     </ReadingCheckinDialog>}

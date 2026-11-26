@@ -27,8 +27,23 @@ try {
   db.prepare("INSERT INTO grading_runs(id,date,primary_page_id,source,active,status,result,created_at,updated_at) VALUES('growth-qa',?,'p',?,1,'done',?,'','')").run(today,JSON.stringify({subject:"数学"}),JSON.stringify({scopeComplete:true,questions:[question]}));
   db.close();
   await page.goto(base+"/reading/?view=growth");
+  async function checkPeriodButtons(group){
+    const buttons=group.getByRole("button");
+    await buttons.first().waitFor();
+    assert.equal(await buttons.count(),3);
+    const boxes=[];
+    for(const [i,icon] of ["calendar-range","calendar-days","graduation-cap"].entries()){
+      const symbol=buttons.nth(i).locator("svg.lucide-"+icon+"[aria-hidden=true]");
+      assert.ok(await symbol.isVisible());
+      boxes.push(await buttons.nth(i).boundingBox());
+    }
+    assert.ok(boxes.every(box=>Math.abs(box.y-boxes[0].y)<1 && box.x>=0 && box.x+box.width<=320));
+  }
+  await page.setViewportSize({width:320,height:844});
+  await checkPeriodButtons(page.locator(".recap-entries"));
   await page.getByRole("button",{name:"周小结",exact:true}).click();
   const dialog=page.getByRole("dialog",{name:"我的成长小结"});
+  await checkPeriodButtons(dialog.locator(".recap-periods"));
   for(const period of ["周","月","学期"]){
     await dialog.getByRole("button",{name:period+"小结",exact:true}).click();
     await dialog.getByText("1 题中答对 1 题",{exact:true}).waitFor();

@@ -450,9 +450,15 @@
 }
 
 .recap-entries, .recap-periods { display: flex; flex-wrap: wrap; gap: 8px; }
+.recap-period-icon { flex: none; }
+.recap-entries .button, .recap-periods button { display: inline-flex; align-items: center; justify-content: center; white-space: nowrap; }
+@media (max-width: 400px) {
+  .growth-recap .recap-entries, .recap-page .recap-periods { gap: 6px; }
+  .growth-recap .recap-entries .button, .recap-page .recap-periods button { padding-inline: 6px; gap: 4px; }
+}
 .recap-page { color: var(--ink); }
 .recap-page h3, .recap-highlight, .recap-entries button { display: flex; align-items: center; gap: 8px; }
-.recap-periods button { border: 1px solid var(--border); border-radius: 8px; padding: 7px 14px; color: var(--muted); background: transparent; font: inherit; cursor: pointer; }
+.recap-periods button { gap: 6px; border: 1px solid var(--border); border-radius: 8px; padding: 7px 14px; color: var(--muted); background: transparent; font: inherit; cursor: pointer; }
 .recap-periods button[aria-pressed=true] { background: var(--theme-green-soft,#e6eee4); color: var(--theme-success-text,#46624b); border-color: currentColor; }
 .recap-navigation { margin: 13px 0; display: grid; grid-template-columns: 44px 1fr 44px; align-items: center; text-align: center; }
 .recap-navigation .text-button { justify-content: center; }
