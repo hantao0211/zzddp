@@ -31,7 +31,12 @@
 .grade-filter-ruler { position: absolute; inset: 0 auto auto 0; width: 0; height: 0; overflow: hidden; visibility: hidden; display: flex; pointer-events: none; }
 
 .grade-list-caption, .grade-detail-source { font-size: .875rem; font-weight: 400; color: var(--muted); margin: 12px 0; }
-.grade-list-group { margin: 18px 0 2px; font-size: .9rem; color: var(--muted); }
+.grade-assignment { margin-block: 12px; border: 1px solid var(--border); border-radius: 10px; }
+.grade-panel .grade-list-group { display: flex; align-items: baseline; gap: 8px; padding: 8px 10px; margin: 0; border-radius: 9px 9px 0 0; background: var(--theme-green-soft, #edf4ee); color: var(--ink); font-size: 1rem; font-weight: 650; overflow-wrap: anywhere; }
+.grade-list-group > span { flex: none; font-size: .8125rem; font-weight: 500; color: var(--muted); padding-inline-end: 8px; border-inline-end: 1px solid var(--border); }
+.grade-assignment .grade-result-row { padding-inline: 14px 8px; }
+.grade-assignment .grade-result-row:last-child { border-bottom: 0; border-radius: 0 0 9px 9px; }
+.grade-assignment .grade-row-copy strong { font-size: .9375rem; }
 .grade-result-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto;
@@ -93,7 +98,7 @@
 
 .homework-navigation { display: flex; align-items: center; gap: 4px; margin-block: 12px; border-bottom: 1px solid var(--border); }
 .homework-navigation .grade-filter-bar { flex: 1; margin: 0; padding: 0; border: 0; }
-.homework-nav-refresh { display: grid; place-items: center; flex: 0 0 44px; height: 44px; padding: 0; background: transparent; color: var(--muted); }
+.homework-nav-refresh { border: 0; border-inline-start: 1px solid var(--border); border-radius: 0; display: grid; place-items: center; flex: 0 0 44px; height: 44px; padding: 0; background: transparent; color: var(--muted); }
 
 .mistake-sort-slot { position: relative; flex: 1; min-width: 0; display: flex; }
 .mistake-sort-pair { display: flex; width: max-content; flex: none; gap: 4px; }

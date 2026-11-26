@@ -150,7 +150,13 @@ export function GradingPanel({ date, canManage = true, focusFailures = false }: 
   const pageCount = Math.ceil(rows.length / pageSize);
   const currentPage = Math.min(page, Math.max(0,pageCount - 1));
   const start = currentPage * pageSize;
-  const visible = rows.slice(start, start + pageSize);
+  const groups: { subject: string; title: string; rows: Row[] }[] = [];
+  for (const row of rows.slice(start, start + pageSize)) {
+    const {subject, title} = row.batch;
+    const previous = groups.at(-1);
+    if (previous && previous.subject === subject && previous.title === title) previous.rows.push(row);
+    else groups.push({subject, title, rows:[row]});
+  }
   const selectedBatch = batches.find(batch => batch.id === selected?.batchId);
   const selectedQuestion = selectedBatch?.result?.questions.find(q => q.id === selected?.questionId);
   const selectedIndex = navigation.current.findIndex(row => row.batchId === selected?.batchId && row.questionId === selected?.questionId);
@@ -172,19 +178,19 @@ export function GradingPanel({ date, canManage = true, focusFailures = false }: 
       {!data.batches.length && <div><p>还没有批改记录。新上传的书面作业会自动处理；已上传的作业可以直接开始，无需重新上传。</p>{canManage && <button className="button primary" disabled={retrying} onClick={async () => { setRetrying(true); try { await homeworkPost("/grading/start", { date }); setError(""); } catch (e) { setError(e instanceof Error ? e.message : "暂时无法开始批改"); } finally { setRetrying(false); } }}>批改这一天的作业</button>}</div>}
       {!!batches.length && <h3 ref={listHeading} tabIndex={-1} className="grade-list-caption">{filter === "ungraded" ? `未批改 · ${ungradedPages.length}页` : isCategory ? `只看${filterLabels[filter]} · ${shownCount}题` : `${filter === "all" ? "全部题目" : "需要留意"} · ${shownCount}题`}</h3>}
       {!!batches.length && !rows.length && <p className="grade-filter-empty">{filter === "ungraded" ? "暂无未批改的页面。" : filter === "feedback" ? "暂无点评。" : isCategory ? `暂无${filterLabels[filter]}的题目。` : "当前没有需要留意的题。"}</p>}
-      {visible.map(({batch,question},i) => {
-        const q = question && gradingDisplayQuestion(question);
-        const status = q && isSignatureRecord(q) ? "签名记录" : q ? filterLabels[q.verdict] : pageStatus(batch);
-        const hint = q && isSignatureRecord(q) ? q.studentAnswer : q ? (q.familyReview?.correction ? `已订正为「${q.familyReview.correction}」` : gradingTakeaway(q,batch.readings?.[q.id]) || q.question) : batch.failure?.reason || batch.note;
-        return <div key={JSON.stringify([batch.id,q?.id])}>
-          {(i === 0 || visible[i-1].batch.id !== batch.id) && <h4 className="grade-list-group">{batch.subject} · {batch.title}</h4>}
-          <button type="button" className="grade-result-row" onClick={e => openRow({batch,question}, e.currentTarget)}>
+      {groups.map(group => <section key={group.rows[0].batch.id} className="grade-assignment" aria-label={group.subject+" · "+group.title}>
+        <h4 className="grade-list-group"><span>{group.subject}</span>{group.title}</h4>
+        {group.rows.map(({batch,question}) => {
+          const q = question && gradingDisplayQuestion(question);
+          const status = q && isSignatureRecord(q) ? "签名记录" : q ? filterLabels[q.verdict] : pageStatus(batch);
+          const hint = q && isSignatureRecord(q) ? q.studentAnswer : q ? (q.familyReview?.correction ? `已订正为「${q.familyReview.correction}」` : gradingTakeaway(q,batch.readings?.[q.id]) || q.question) : batch.failure?.reason || batch.note;
+          return <button key={JSON.stringify([batch.id,q?.id])} type="button" className="grade-result-row" onClick={e => openRow({batch,question}, e.currentTarget)}>
             <span className="grade-row-copy"><strong>{q?.label || "本页批改"}</strong>{hint && <small>{hint}</small>}</span>
             <span className={`grade-row-status status-${q ? q.verdict === "passedWithNote" ? "correct" : q.verdict : batch.status === "failed" ? "wrong" : "pending"}`}>{q && batch.previews?.[q.id] ? "待家长确认" : status}</span>
             <ChevronRight size={16} aria-hidden="true" />
-          </button>
-        </div>;
-      })}
+          </button>;
+        })}
+      </section>)}
       {pageCount > 1 && <nav className="grade-list-pages" aria-label="批改结果翻页">
         <button type="button" disabled={currentPage === 0} onClick={() => turnPage(currentPage - 1)}>上一页</button>
         <span>{currentPage + 1} / {pageCount}</span>

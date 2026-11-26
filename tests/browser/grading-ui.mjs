@@ -138,6 +138,12 @@ try {
   await page.waitForFunction(()=>document.activeElement?.classList.contains("grade-result-row"));
   await all.click();
   assert.equal(await rows.count(),7);
+  assert.equal(await panel.locator(".grade-assignment .grade-result-row").count(),7);
+  assert.equal(await panel.locator(".grade-assignment > h4").count(),2);
+  const firstGroup=panel.locator(".grade-assignment").first();
+  await firstGroup.locator("h4").scrollIntoViewIfNeeded();
+  const headingBox=await firstGroup.locator("h4").boundingBox(),secondBox=await rows.nth(1).boundingBox();
+  await page.screenshot({path:output+"/grading-group-example.png",clip:{x:headingBox.x,y:headingBox.y,width:headingBox.width,height:secondBox.y+secondBox.height-headingBox.y}});
   for (const [label, count] of [["通过但存疑",1],["正确",2],["错误",1],["未作答",1],["未确认",1],["点评",1]]) {
     await (await reveal(label)).click();
     assert.equal(await rows.count(),count);
@@ -217,12 +223,17 @@ try {
   await panel.getByRole('button',{name:'先看需要留意的题',pressed:true}).waitFor();
   const nav=page.getByRole("navigation",{name:"学习资料导航"});
   const navMore=nav.getByRole("button",{name:"更多",exact:true});
-  for(const width of [320,390,1280]){
+  for(const width of [320,390,480,1280]){
     await page.setViewportSize({width,height:670});
-    if(width<400){
+    if(width<=480){
       await navMore.click();
       const menu=nav.getByRole("group",{name:"更多课业页签"});
       await menu.getByRole("button",{name:"课程资料库",exact:true}).waitFor();
+      const refresh=nav.getByRole("button",{name:"刷新作业状态",exact:true});
+      assert.equal(await menu.getByRole("button",{name:"刷新作业状态",exact:true}).count(),0);
+      assert.ok(await refresh.isVisible());
+      const refreshBox=await refresh.boundingBox(), moreBox=await navMore.boundingBox();
+      assert.ok(refreshBox.x>=moreBox.x+moreBox.width-1);
       if(width===390){
         await nav.scrollIntoViewIfNeeded();
         const t=await nav.boundingBox(),m=await menu.boundingBox();
