@@ -14,6 +14,11 @@ export function exportAssistantConversation(input: { date: string; messages: Cha
       if (input.activeMemoryIds) lines.push(`记忆当前状态：${input.activeMemoryIds.includes(memory.id) ? "仍在使用" : "已停用或被更新"}`);
     }
     for (const notice of message.memoryNotices || []) lines.push(`记忆提示：${notice}`);
+    if (message.gradePreview) {
+      const review = message.gradePreview;
+      lines.push(review.label + (review.applied ? " · 已确认更正" : " · 待家长确认"), "原答判定：" + (review.verdict === "wrong" ? "错误" : "正确"), review.evidence);
+      if (review.correction) lines.push("卷面订正：" + review.correction);
+    }
     if (message.proposal) {
       const proposal = message.proposal;
       const label = (value: typeof proposal.before) => `${value.subject || "科目未定"} · ${value.title}\n${value.requirement}\n形式：${formatLabel[value.format]}`;

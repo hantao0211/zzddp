@@ -13,14 +13,14 @@ const AnswerSchema = z.object({
 export const GradingQuestionSchema = AnswerSchema.extend({ sourcePartLabels: z.array(z.string().max(200)).max(160).default([]), label: z.string().min(1).max(180), question: z.string().min(1).max(5000), evidence: z.array(EvidenceSchema).min(1).max(4) });
 export const GradingInspectionSchema = z.object({ scopeComplete: z.boolean(), note: z.string().max(1200), questions: z.array(GradingQuestionSchema).max(80) });
 export const GradingVerificationSchema = z.object({ scopeComplete: z.boolean(), omittedLabels: z.array(z.string().max(180)).max(80), checks: z.array(AnswerSchema.extend({ questionId: z.string().min(1).max(100) })).max(80) });
-export const GradedQuestionSchema = GradingQuestionSchema.extend({ verdict: z.enum([...JudgmentSchema.options, "passedWithNote"]), id: z.string(), verification: z.enum(["agreed", "uncertain", "subjective"]) });
+export const GradedQuestionSchema = GradingQuestionSchema.extend({ verdict: z.enum([...JudgmentSchema.options, "passedWithNote"]), familyReview: z.object({ correction: z.string(), evidence: z.string() }).optional(), id: z.string(), verification: z.enum(["agreed", "uncertain", "subjective"]) });
 export type GradedQuestion = z.infer<typeof GradedQuestionSchema>;
 export const GradingResultSchema = z.object({ version: z.enum(["grading-v1", "grading-v2"]), scopeComplete: z.boolean(), note: z.string(), questions: z.array(GradedQuestionSchema).max(80) });
 export type GradingResult = z.infer<typeof GradingResultSchema>;
 export type GradingCounts = { passedWithNote?: number; correct: number; wrong: number; blank: number; uncertain: number; feedback: number };
 export type GradingSummary = GradingCounts & { enabled: boolean; pending: number; failed: number; pages: number; finished: number; incomplete: number; tasks: Record<string, GradingCounts & { pending: number; failed: number; incomplete: number }> };
 export type GradingReading = Pick<GradedQuestion, "studentAnswer" | "expectedAnswer" | "confidence" | "verdict" | "explanation"> & { stage: "verification" | "focusOne" | "focusTwo" };
-export type GradingBatchView = { readings?: Record<string, GradingReading[]>; failure?: GradingFailure | null; attempts?: number; retryAllowed?: boolean; id: string; title: string; subject: string; status: string; note: string; primaryPageId: string; result: GradingResult | null };
+export type GradingBatchView = { reviewVersions?: Record<string,string>; previews?: Record<string, import("./grade-review").GradePreview>; readings?: Record<string, GradingReading[]>; failure?: GradingFailure | null; attempts?: number; retryAllowed?: boolean; id: string; title: string; subject: string; status: string; note: string; primaryPageId: string; result: GradingResult | null };
 export type MistakeProvenance =
   | { kind: "assignment" | "practice" | "exam"; title: string }
   | { kind: "unmatched"; title?: string };

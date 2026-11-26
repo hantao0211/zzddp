@@ -1,3 +1,4 @@
+import { GradeReviewSchema } from "./grade-review";
 import { MEMO_ASSIGNMENT_POLICY } from "./memo-assignment";
 import { z } from "zod";
 import { DICTATION_POLICY, SUBMITTED_SCOPE_POLICY } from "./inferred-scope";
@@ -66,7 +67,8 @@ export const TutorAnswerSchema = z.object({
   sourceMaterialIds: z.array(z.string()).max(20),
 });
 export const HomeworkDialogueSchema = TutorAnswerSchema.extend({ clarification: ClarificationActionSchema.nullable(), memoryCandidates: z.array(MemoryCandidateSchema).max(3).default([]) });
-export type AITask = "recover_exam_handwriting" | "locate_exam_answers" | "transcribe_exam_answers" | "index_exam_page" | "explain_exam_reading" | "read_marked_exam" | "index_curriculum" | "grade_practice" | "reading_review" | "reading_dialogue" | "recognize_memo" | "extract_homework" | "organize_homework" | "generate_practice" | "verify_practice" | "tutor_answer" | "homework_dialogue" | "inspect_study_traces" | "assess_written_completion" | "recheck_written_parts" | "grade_homework" | "verify_homework_grading";
+export const QuestionDialogueSchema = HomeworkDialogueSchema.extend({ gradeReview: GradeReviewSchema.nullable() });
+export type AITask = "review_homework_question" | "recover_exam_handwriting" | "locate_exam_answers" | "transcribe_exam_answers" | "index_exam_page" | "explain_exam_reading" | "read_marked_exam" | "index_curriculum" | "grade_practice" | "reading_review" | "reading_dialogue" | "recognize_memo" | "extract_homework" | "organize_homework" | "generate_practice" | "verify_practice" | "tutor_answer" | "homework_dialogue" | "inspect_study_traces" | "assess_written_completion" | "recheck_written_parts" | "grade_homework" | "verify_homework_grading";
 
 const fillInGuidance = "多空题先在原图从左到右数实际让孩子填写的位置，含分数线上方或下方单独留出的空。题干用（ ）保留每个填写位置。印刷数字只留在题干；手写分母、分子分别对应其位置，不能抄进印刷题干。按顺序一空一值分别记录原答和参考答案，未读清的位置写未辨清。解释用位置或含义指出哪一空需要改。";
 const childGradingComment = fillInGuidance + "并排小题按完整印刷题号定位，包括等级、大题和括号小题号。locator.printedLabel提供时逐项对应。沿本小题所在栏读取演算和最后一行，只返回本小题的作答和参考答案。" + "写给孩子的explanation只用一句短话，力争30字以内。答对写“正确”；答错只指出哪一步或哪个字要改；未作答指出哪一空；不确定只说具体哪里不能确认，有依据才说明原因；开放题只说一个具体优点或一条建议。不要复述题干、罗列步骤、堆术语。完整题意与答案仍分别写入对应字段。";
@@ -90,7 +92,9 @@ export const AI_INSTRUCTIONS: Record<AITask, string> = {
   grade_practice: "独立批改一份课内短练习的答卷照片。只使用questions中的题目与questionId，重新求解每题，不依赖其他批改的结论。逐题记录照片上真实作答、独立参考答案、正确/错误/空白/待确认及依据。evidenceIds只取实际提供的照片ID；题号不明、缺页或字迹不清用uncertain，不能猜。没有明确最简形式要求时接受等值分数。题意有歧义或参考答案不确定也用uncertain，不虚构错误。学生作答/参考答案使用简洁一致的纯文本格式，分数a/b。字迹不美观不算错误，解释不包含内部ID。scopeComplete仅在所有题的作答范围均能核对时为true。",
   generate_practice: "根据提供的真实错题、知识点、订正与复测历史设计少量针对性变式练习，包含来源错题ID、题目、答案和解析。遵守提供的科目、年级、题量和教学范围。不得伪造学习历史或声称孩子已掌握。题意应完整清楚，避免只机械换数字，不能生成与薄弱点无关的题。",
   verify_practice: "独立检查每道候选练习的题意、答案、解析及与错题目标的关联，重新求解并给出简短检查依据。只有所有题均成立、答案解析正确且范围合适时才批准。发现歧义、答案不确定或检查资料不足时拒绝发布。只能使用候选题目的ID。",
+  review_homework_question: "只处理当前题卡。用 selectedQuestion 的原批改、逐轮识读、同题订正和本轮真实提供的目标原图答复。依照 guidance 填写 gradeReview，若原错有明确批注、订正另行书写，两者可同时成立。用户给出的线索帮助定位，不能代替卷面证据。只求讲解或查询现有状态时不提出更正；若须补充，只指出具体看不清的地方。简短回应，不让家人反复解释，不承诺已入本。clarification 为 null。某题具体答案不进入长期记忆，仅在家长明确教可复用的跨作业规则时提取 memoryCandidates。sourceMaterialIds 取已提供的资料ID。",
   homework_dialogue: [
+    "若提供 gradingContext.selectedQuestion，优先按指定题的 guidance 核对；清单修改指引不适用于题目批改。",
     "你是孩子的学习伙伴和系统求助入口。当前任务是回应question；优先理解dialogueGuide中的最近交流，再用真实作业资料核对。不要每轮重新开始盘问。",
     "【接住对话】用户的短句通常在回答上一轮问题。例如你刚问‘这张算预习还是另一项’，用户说‘是预习的作业’，就是确认前者；把上一轮已说清的页面、内容与本句合并理解，足够就直接提出修改预览。‘那张图’等指代结合最近交流和当天已上传资料解释；常见语音同音字可按唯一匹配的科目/标题理解，没必要逐字复述语音错误。只有存在两个以上真实候选且影响处理时才问。",
     "【识字纠正】用户说原文是某字或数字、之前识别错了，是在纠正本次OCR，不是在定义两个不同课号等价。直接接住最新纠正，按其确认的原文修正当前条目的title/requirement并准备clarification；保留已确认的课名、页码和要求，不再抄写错误简称作为事实，不让用户重复解释。同一项已是正确课号但说明还引用错误原文时，也应清理说明，写清旧识别有误。只有内容已完全一致才不重复预览，简短说明已按正确内容理解。识字纠正属于当前clarification和后续识别参考案例，memoryCandidates必须为空；不得推导成把一个数字固定替换成另一个数字的长期规则。",

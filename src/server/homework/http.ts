@@ -1,4 +1,5 @@
 import { noteFailure } from "../diagnostics/events";
+import { GradeReviewSchema } from "../../domain/grade-review";
 import { ConventionInput, FeedbackInput } from "./completion-feedback";
 import type {PracticeHTTP} from "../practice/http";
 import {LearningScopeSchema,type PracticeSubject} from "../../domain/practice";
@@ -69,6 +70,19 @@ export class HomeworkHTTP {
         const date = DaySchema.safeParse(url.searchParams.get("date"));
         if (!date.success) throw new HomeworkError(400, "请选择有效的作业日期。");
         json(res, this.store.grading.results(date.data)); return;
+      }
+      if (path === "/grading/review" && req.method === "POST") {
+        if (!viewer || !isParent(viewer)) throw new HomeworkError(403,"请家长核对本题。");
+        const value = z.object({runId:z.string().min(1).max(200),questionId:z.string().min(1).max(200),base:z.string().regex(/^[a-f0-9]{64}$/),review:GradeReviewSchema}).strict().safeParse(await input(req));
+        if (!value.success) throw new HomeworkError(400,"请选择结论，写下一句核对依据。");
+        const {runId,questionId,base,review} = value.data;
+        json(res,this.store.grading.proposeReview(runId,questionId,base,review)); return;
+      }
+      if (path === "/grading/confirm" && req.method === "POST") {
+        if (!viewer || !isParent(viewer)) throw new HomeworkError(403,"请家长确认本题的批改更正。");
+        const value = z.object({id:z.string().uuid()}).strict().safeParse(await input(req));
+        if (!value.success) throw new HomeworkError(400,"请选择本题的更正建议。");
+        json(res,this.store.grading.confirmReview(value.data.id,viewer.id)); return;
       }
       if (path === "/grading/start" && req.method === "POST") {
         const date = DaySchema.safeParse((await input(req))?.date);

@@ -7,11 +7,12 @@ import { automaticAttemptLimit } from "../../domain/homework-usage";
 import { selectedSubmissionReport } from "./selected-submission";
 import { gradingFailureText, type GradingFailure, type GradingStage } from "../../domain/grading-failure";
 import { resolveUploadTarget } from "./upload-target";
-import { createHash } from "node:crypto";
+import { randomUUID, createHash } from "node:crypto";
 import { readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { GRADING_VERSION, GradingResultSchema, emptyCounts, type GradingResult, type GradingSummary, type GradingBatchView, type MistakeView } from "../../domain/grading";
-import type { HomeworkStore } from "./store";
+import type { GradeReview, GradePreview } from "../../domain/grade-review";
+import { HomeworkError, type HomeworkStore } from "./store";
 import type { DailyReport } from "../../domain/homework";
 export type GradingSource = { familyRules?: HomeworkRule[]; date: string; title: string; subject: string; assigned: boolean; requirements: string[]; taskIds: string[]; primaryPageId: string; pages: { id: string; file_id: string; number: number }[]; expectedLabels: string[] };
 export type GradingRun = { id: string; primary_page_id?: string; source: string; status: string; attempts: number; result: string | null; note: string };
@@ -22,6 +23,7 @@ export class GradingStore {
     store.db.exec(`CREATE TABLE IF NOT EXISTS grading_runs(id TEXT PRIMARY KEY,date TEXT NOT NULL,primary_page_id TEXT NOT NULL,source TEXT NOT NULL,active INTEGER NOT NULL DEFAULT 1,status TEXT NOT NULL DEFAULT 'queued',attempts INTEGER NOT NULL DEFAULT 0,next_at INTEGER NOT NULL DEFAULT 0,result TEXT,note TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL,updated_at TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS grading_diagnostics(run_id TEXT PRIMARY KEY REFERENCES grading_runs(id),code TEXT NOT NULL,stage TEXT NOT NULL,attempts INTEGER NOT NULL,failed_at TEXT NOT NULL,source TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS grading_reviews(id TEXT PRIMARY KEY,run_id TEXT NOT NULL REFERENCES grading_runs(id),question_id TEXT NOT NULL,previous_question TEXT NOT NULL,reason TEXT NOT NULL,created_at TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS grading_previews(id TEXT PRIMARY KEY,run_id TEXT NOT NULL REFERENCES grading_runs(id),question_id TEXT NOT NULL,base TEXT NOT NULL,payload TEXT NOT NULL,applied INTEGER NOT NULL DEFAULT 0,UNIQUE(run_id,question_id));
       CREATE INDEX IF NOT EXISTS grading_by_date ON grading_runs(date,active);
       CREATE INDEX IF NOT EXISTS grading_queue ON grading_runs(active,status,next_at);
       CREATE TABLE IF NOT EXISTS grading_mistakes(id TEXT PRIMARY KEY,first_date TEXT NOT NULL,last_date TEXT NOT NULL,subject TEXT NOT NULL,title TEXT NOT NULL,page_id TEXT NOT NULL,payload TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'verified');
@@ -174,16 +176,45 @@ export class GradingStore {
       const active = this.store.db.prepare("SELECT active FROM grading_runs WHERE id=?").get(run.id) as { active: number };
       this.store.db.prepare("UPDATE grading_runs SET status='done',result=?,note='',updated_at=? WHERE id=?").run(JSON.stringify(GradingResultSchema.parse(result)), new Date(this.store.now()).toISOString(), run.id);
       if (!active.active) return;
-      for (const question of result.questions) {
-        const primaryEvidence = question.evidence.find(e => e.fileId === source.primaryPageId)!;
-        const page = this.store.page(primaryEvidence.fileId)!, file = this.store.file(page.file_id)!;
-        const id = digest({ file: file.sha256, page: page.number, subject: source.subject, label: question.label.normalize("NFKC").replace(/\s/g, "") });
-        if (question.verdict === "wrong" && question.verification === "agreed") {
-          this.store.db.prepare("INSERT INTO grading_mistakes(id,first_date,last_date,subject,title,page_id,payload) VALUES(?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET last_date=MAX(last_date,excluded.last_date),payload=excluded.payload,status='verified'").run(id, source.date, source.date, source.subject, source.title, source.primaryPageId, JSON.stringify(question));
-          this.store.db.prepare("INSERT OR IGNORE INTO grading_occurrences(mistake_id,run_id,question_id) VALUES(?,?,?)").run(id, run.id, question.id);
-        } else if (question.verdict === "correct" && question.verification === "agreed") this.store.db.prepare("UPDATE grading_mistakes SET status='withdrawn' WHERE id=?").run(id);
-        else if (question.verdict === "uncertain" || question.verdict === "passedWithNote") this.store.db.prepare("UPDATE grading_mistakes SET status='needs_review' WHERE id=?").run(id);
-      }
+      for (const question of result.questions) this.syncMistake(run, source, question);
+    });
+  }
+  private syncMistake(run: GradingRun, source: GradingSource, question: GradingResult["questions"][number]) {
+    const primaryEvidence = question.evidence.find(e => e.fileId === source.primaryPageId)!;
+    const page = this.store.page(primaryEvidence.fileId)!, file = this.store.file(page.file_id)!;
+    const id = digest({ file: file.sha256, page: page.number, subject: source.subject, label: question.label.normalize("NFKC").replace(/\s/g, "") });
+    if (question.verdict === "wrong" && question.verification === "agreed") {
+      this.store.db.prepare("INSERT INTO grading_mistakes(id,first_date,last_date,subject,title,page_id,payload) VALUES(?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET last_date=MAX(last_date,excluded.last_date),payload=excluded.payload,status='verified'").run(id, source.date, source.date, source.subject, source.title, source.primaryPageId, JSON.stringify(question));
+      this.store.db.prepare("INSERT OR IGNORE INTO grading_occurrences(mistake_id,run_id,question_id) VALUES(?,?,?)").run(id, run.id, question.id);
+    } else if (question.verdict === "correct" && question.verification === "agreed") this.store.db.prepare("UPDATE grading_mistakes SET status='withdrawn' WHERE id=?").run(id);
+    else if (question.verdict === "uncertain" || question.verdict === "passedWithNote") this.store.db.prepare("UPDATE grading_mistakes SET status='needs_review' WHERE id=?").run(id);
+  }
+  proposeReview(runId: string, questionId: string, base: string, review: GradeReview): GradePreview {
+    const run = this.store.db.prepare("SELECT result FROM grading_runs WHERE id=? AND active=1 AND status='done'").get(runId) as {result:string} | undefined;
+    const current = run && GradingResultSchema.parse(JSON.parse(run.result)).questions.find(q => q.id === questionId);
+    if (!current || digest(current) !== base) throw new HomeworkError(409,"这题的批改已更新，请打开最新题卡。");
+    const id = randomUUID();
+    this.store.db.prepare("INSERT INTO grading_previews(id,run_id,question_id,base,payload) VALUES(?,?,?,?,?) ON CONFLICT(run_id,question_id) DO UPDATE SET id=excluded.id,base=excluded.base,payload=excluded.payload,applied=0").run(id,runId,questionId,base,JSON.stringify(review));
+    return { ...review, id, label: current.label, applied:false };
+  }
+  confirmReview(id: string, actor: string): GradePreview {
+    return this.store.transaction(() => {
+      const row = this.store.db.prepare("SELECT * FROM grading_previews WHERE id=?").get(id) as {run_id:string;question_id:string;base:string;payload:string;applied:number} | undefined;
+      if (!row) throw new HomeworkError(409,"建议已有更新，请查看题卡上的最新建议。");
+      const run = this.store.db.prepare("SELECT * FROM grading_runs WHERE id=? AND active=1 AND status='done'").get(row.run_id) as GradingRun | undefined;
+      const result = run?.result && GradingResultSchema.parse(JSON.parse(run.result));
+      const q = result && result.questions.find(item => item.id === row.question_id);
+      if (!run || !result || !q || digest(q) !== row.base) throw new HomeworkError(409,"本题记录已更新，请重新核对。");
+      const review: GradeReview = JSON.parse(row.payload);
+      const receipt = {...review,id,label:q.label,applied:true};
+      if (row.applied) return receipt;
+      const time = new Date(this.store.now()).toISOString();
+      this.store.db.prepare("INSERT INTO grading_reviews(id,run_id,question_id,previous_question,reason,created_at) VALUES(?,?,?,?,?,?)").run(id,run.id,q.id,JSON.stringify(q),JSON.stringify({actor,review}),time);
+      Object.assign(q,{ studentAnswer:review.original,expectedAnswer:review.expected,explanation:review.evidence,verdict:review.verdict,verification:"agreed",confidence:"high",familyReview:{correction:review.correction,evidence:review.evidence},cause:"原因待确认",causeExplanation:"",nextStep:"" });
+      this.store.db.prepare("UPDATE grading_runs SET result=?,updated_at=? WHERE id=?").run(JSON.stringify(result),time,run.id);
+      this.syncMistake(run,JSON.parse(run.source),q);
+      this.store.db.prepare("UPDATE grading_previews SET applied=1,base=? WHERE id=?").run(digest(GradingResultSchema.parse(result).questions.find(item => item.id === q.id)),id);
+      return receipt;
     });
   }
   fail(run: GradingRun, retry: boolean, budget: boolean, diagnostic?: { code: string; stage: GradingStage }) {
@@ -223,6 +254,7 @@ export class GradingStore {
     return { summary: this.summary(date), batches: (this.store.db.prepare("SELECT * FROM grading_runs WHERE date=? AND active=1 ORDER BY rowid").all(date) as (GradingRun & { primary_page_id: string })[]).map(run => { const source = JSON.parse(run.source) as GradingSource;
       const result = run.result ? GradingResultSchema.parse(JSON.parse(run.result)) : null;
       const readings = reviewReadings(this.store.db, run.id, result);
+      const reviewVersions = Object.fromEntries((result?.questions || []).map(q => [q.id,digest(q)]));
       for (const question of result?.questions || []) {
         const observations = readings?.[question.id];
         if (readings && observations && singleCalculation(question.question) && observations.some(mixedCalculationReading)) {
@@ -233,7 +265,12 @@ export class GradingStore {
           }
         }
       }
-      return { readings, attempts: run.attempts, retryAllowed: run.status === "failed" && run.attempts < 6, failure: run.status === "done" ? null : this.failure(run.id), id: run.id, subject: source.subject, title: source.title, status: run.status, note: run.note, primaryPageId: run.primary_page_id, result }; }) };
+      const previews: Record<string, GradePreview> = {};
+      for (const row of this.store.db.prepare("SELECT id,question_id,base,payload FROM grading_previews WHERE run_id=? AND applied=0").all(run.id) as {id:string;question_id:string;base:string;payload:string}[]) {
+        const q = result?.questions.find(item => item.id === row.question_id);
+        if (q && reviewVersions[q.id] === row.base) previews[q.id] = {...JSON.parse(row.payload),id:row.id,label:q.label,applied:false};
+      }
+      return { reviewVersions, previews, readings, attempts: run.attempts, retryAllowed: run.status === "failed" && run.attempts < 6, failure: run.status === "done" ? null : this.failure(run.id), id: run.id, subject: source.subject, title: source.title, status: run.status, note: run.note, primaryPageId: run.primary_page_id, result }; }) };
   }
   private failure(runId: string): GradingFailure | null {
     const row = this.store.db.prepare("SELECT code,stage,failed_at,source FROM grading_diagnostics WHERE run_id=?").get(runId) as { code: string; stage: GradingStage; failed_at: string; source: GradingFailure["source"] } | undefined;

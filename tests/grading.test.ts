@@ -175,3 +175,50 @@ test("explicit dictation labeled other is queued for grading instead of silently
   f.store.transaction(()=>f.store.grading.queueDay(date,report));assert.equal(f.store.grading.claim(),undefined,"Nonwritten work must still stay out of image grading");
  }finally{f.close();}
 });
+
+test("题卡复核原答与另行订正，关窗后家长可以确认并同步错题本", async () => {
+  const {HomeworkConversation} = await import("../src/server/homework/conversation");
+  const f = fixture();
+  try {
+    const run = f.store.grading.claim()!;
+    const original = {...question(f.page),id:"target",verdict:"uncertain" as const,verification:"uncertain" as const};
+    const correction = {...question(f.page,"correct"),id:"correction",label:"第1题订正",verification:"agreed" as const};
+    const adjacent = {...correction,id:"other",label:"第11题订正"};
+    f.store.grading.save(run,{version:"grading-v2",scopeComplete:true,note:"",questions:[original,correction,adjacent]});
+    const service = new HomeworkConversation(f.store,{images:() => [{fileId:f.page,mimeType:"image/png",base64:"synthetic"}]});
+    const child = {id:"child",username:"child",name:"孩子",role:"child" as const};
+    const request = {studyDate:date,reviewPhotos:true,history:[],question:"红叉旁是原答，下一行是订正",gradingTopic:{pageId:f.page,questionId:original.id,label:original.label,stem:original.question}};
+    const review = {verdict:"wrong" as const,original:"6",expected:"5",correction:"5",evidence:"第1题原答旁有红叉，下一行已改写为5。"};
+    const ai: StructuredAI = {async run(task,schema,metadata) {
+      assert.equal(task,"review_homework_question");
+      const context = (metadata as {gradingContext:{selectedQuestion:{linkedCorrection:{id:string}}}}).gradingContext;
+      assert.equal(context.selectedQuestion.linkedCorrection.id,correction.id);
+      return schema.parse({answer:"看到了",spokenAnswer:"看到了",hint:null,followUpQuestion:null,sourceMaterialIds:[],gradeReview:review,clarification:null});
+    }};
+    const noPhoto = await service.answer(ai,{...request,reviewPhotos:false},"session",child);
+    assert.equal(noPhoto.gradePreview,undefined);
+    const answer = await service.answer(ai,request,"session",child);
+    const preview = answer.gradePreview!;
+    assert.ok(preview.id);
+    const current = () => f.store.grading.results(date).batches[0];
+    assert.equal(current().previews?.target.id,preview.id);
+    assert.equal(f.store.grading.mistakes(null).total,0);
+    const status = await service.answer({async run(){throw new Error("status must use saved records");}},{...request,question:"那这题的状态现在是什么呢"},"other-session",child);
+    assert.match(status.answer,/待核对.*订正记录.*已判正确/);
+    assert.equal(status.gradePreview?.id,preview.id);
+    const receipt = f.store.grading.confirmReview(preview.id,"parent");
+    assert.equal(receipt.applied,true);
+    assert.deepEqual(f.store.grading.confirmReview(preview.id,"parent"),receipt);
+    assert.equal(current().result!.questions[0].familyReview?.correction,"5");
+    assert.deepEqual(current().result!.questions.slice(1),[correction,adjacent]);
+    assert.equal(f.store.grading.mistakes(null).items[0].occurrences,1);
+    assert.equal(current().previews?.target,undefined);
+    const version = current().reviewVersions!.target;
+    const next = f.store.grading.proposeReview(run.id,original.id,version,{...review,verdict:"correct",correction:"",original:"5"});
+    assert.throws(() => f.store.grading.confirmReview(preview.id,"parent"));
+    f.store.grading.confirmReview(next.id,"parent");
+    assert.equal(f.store.grading.mistakes(null).total,0);
+    assert.throws(() => f.store.grading.proposeReview(run.id,original.id,version,review));
+    assert.equal(f.store.db.prepare("SELECT COUNT(*) n FROM grading_reviews").get()?.n,2);
+  } finally { f.close(); }
+});

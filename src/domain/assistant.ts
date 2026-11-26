@@ -30,7 +30,7 @@ export const ChatInputSchema = z.object({
 }).strict().refine((value) => value.history.reduce((size, item) => size + item.content.length, 0) <= 12000);
 export type ChatInput = z.infer<typeof ChatInputSchema>;
 export type PhotoReview = { requested: boolean; providedPages: number; totalAvailablePages: number; unavailablePages: number };
-export type ChatMessage = { role: "user" | "assistant"; content: string; photos?: ChatPhoto[]; id?: string; spokenAnswer?: string; proposal?: ClarificationPreview; proposalNotice?: string; receipt?: ClarificationReceipt; photoReview?: PhotoReview; memoriesSaved?: LearnedMemory[]; memoryNotices?: string[]; changeStatus?: "none" | "pending" | "confirmed" | "undone" };
+export type ChatMessage = { role: "user" | "assistant"; content: string; photos?: ChatPhoto[]; id?: string; spokenAnswer?: string; proposal?: ClarificationPreview; gradePreview?: import("./grade-review").GradePreview; proposalNotice?: string; receipt?: ClarificationReceipt; photoReview?: PhotoReview; memoriesSaved?: LearnedMemory[]; memoryNotices?: string[]; changeStatus?: "none" | "pending" | "confirmed" | "undone" };
 
 export function validateRecording(bytes: Uint8Array) {
   if (bytes.byteLength < 44) throw new Error("录音内容不完整，请重新录制。");

@@ -2,6 +2,8 @@
 import { LearningScopeSchema, PracticeSubjectSchema, scopeLabels, type LearningScope, type PracticeSubject } from "@/domain/practice";
 import {MistakeInsights,QuestionTags,type Selections} from "./mistake-insights";
 import {dimensions,type Dimension,type Analysis} from "@/domain/assessment";
+import { FamilyGradeReview, GradeReviewPreview } from "./grade-review-preview";
+import type { GradePreview } from "@/domain/grade-review";
 import { HomeworkPhoto } from "./homework-photo";
 import { PhotoPreviewButton } from "./photo-preview";
 import { pagePhotoUrl } from "@/services/homework-photo";
@@ -33,12 +35,14 @@ function Photo({ id, url }: { id: string; url?: string }) {
     </>}
   </div>;
 }
-function QuestionCard({ question, date, subject, title, pageId, imageUrl, displayLabel, readings = [] }: { readings?: GradingReading[]; question: GradedQuestion; date: string; subject: string; title?: string; pageId: string; imageUrl?: string; displayLabel?: string }) {
+function QuestionCard({ question, date, subject, title, pageId, imageUrl, displayLabel, preview, runId, version, canConfirm = false, readings = [] }: { runId?: string; version?: string; preview?: GradePreview; canConfirm?: boolean; readings?: GradingReading[]; question: GradedQuestion; date: string; subject: string; title?: string; pageId: string; imageUrl?: string; displayLabel?: string }) {
   const q = gradingDisplayQuestion(question);
   const takeaway = gradingTakeaway(q, readings);
   return <article className={`grade-question grade-verdict-${q.verdict}`}>
     <div className="grade-question-heading"><h3>{displayLabel || q.label}</h3><StatusIndicator kind={q.verdict === "passedWithNote" ? "correct" : q.verdict} className="grade-verdict-badge">{verdicts[q.verdict]}</StatusIndicator></div>
     {takeaway && <p className="grade-takeaway">{q.verdict === "passedWithNote" && "疑点 · "}{takeaway}</p>}
+    {q.familyReview && <p className="grade-source">家长已核对{q.familyReview.correction && ` · 已订正为「${q.familyReview.correction}」`}</p>}
+    {preview && <GradeReviewPreview key={preview.id} preview={preview} canConfirm={canConfirm} />}
     <details className="grade-explanation">
       <summary>{(q.verdict === "uncertain" || q.verdict === "passedWithNote") && readings.length ? "查看复核记录" : "查看详情"}</summary>
       <p className="grade-source">{date} · {subject}{title && ` · ${title}`}</p>
@@ -56,6 +60,7 @@ function QuestionCard({ question, date, subject, title, pageId, imageUrl, displa
       {!!q.knowledgePoints.length && <p className="grade-source">知识点：{q.knowledgePoints.join("、")}</p>}
     </details>
     <div className="grade-question-actions"><Photo id={pageId} url={imageUrl} /><button className="text-button" onClick={() => window.dispatchEvent(new CustomEvent("xiaobu:ask-homework", { detail: { date, gradingTopic: { pageId, questionId: question.id, label: `${subject} · ${displayLabel || q.label}`.slice(0,400), stem: q.question.slice(0,600) } } }))}><MessageCircle size={17} aria-hidden="true" />和小步聊这题</button></div>
+    {canConfirm && version && runId && <FamilyGradeReview key={version + (preview?.id || "")} runId={runId} questionId={question.id} version={version} initial={{original:q.studentAnswer,expected:q.expectedAnswer,correction:q.familyReview?.correction || ""}} />}
   </article>;
 }
 export function GradingPanel({ date, canManage = true, focusFailures = false }: { date: string; canManage?: boolean; focusFailures?: boolean }) {
@@ -86,7 +91,7 @@ export function GradingPanel({ date, canManage = true, focusFailures = false }: 
       {!data.batches.length && <div><p>还没有批改记录。新上传的书面作业会自动处理；已上传的作业可以直接开始，无需重新上传。</p>{canManage && <button className="button primary" disabled={retrying} onClick={async () => { setRetrying(true); try { await homeworkPost("/grading/start", { date }); setError(""); } catch (e) { setError(e instanceof Error ? e.message : "暂时无法开始批改"); } finally { setRetrying(false); } }}>批改这一天的作业</button>}</div>}
       {!!data.batches.length && <p className="grade-filter-summary" role="status">{isCategory ? `只看${filterLabels[filter]} · ${shownCount}题` : filter === "all" ? `全部题目 · ${shownCount}题` : `需要留意 · ${shownCount}题`}</p>}
       {isCategory && shownCount === 0 && <p className="grade-filter-empty">{filter === "feedback" ? "暂无点评。" : `暂无${filterLabels[filter]}的题目。`}{data.summary.pending > 0 ? "新结果会自动更新。" : ""}</p>}
-      {data.batches.filter(batch => batch.status !== "failed" && (!isCategory || batch.result?.questions.some(matches))).map(batch => <section key={batch.id} className="grade-batch"><h3>{batch.subject} · {batch.title}</h3>{(batch.note || batch.result?.note) && <details className="grade-batch-note" open={batch.status === "failed"}><summary>查看批改说明</summary>{batch.note && <p>{batch.note}</p>}{batch.result?.note && <p>{batch.result.note}</p>}</details>}{batch.result?.questions.filter(matches).map(q => <QuestionCard key={q.id} question={q} readings={batch.readings?.[q.id]} date={date} subject={batch.subject} title={batch.title} pageId={batch.primaryPageId} />)}{filter === "attention" && batch.result?.questions.some(q => q.verdict === "passedWithNote") && <button type="button" className="text-button" onClick={() => setFilter("passedWithNote")}>已通过，查看疑点</button>}{batch.status === "done" && batch.result && !batch.result.questions.length && <p>这页未发现需要逐题批改的作答。</p>}{batch.status === "done" && batch.result?.questions.length && batch.result.questions.every(q => q.verdict === "correct") && filter === "attention" ? <p className="grade-all-correct"><CircleCheck size={22} aria-hidden="true" />已检查的{batch.result.questions.length}题均正确，可切换“全部题目”查看。</p> : null}</section>)}
+      {data.batches.filter(batch => batch.status !== "failed" && (!isCategory || batch.result?.questions.some(matches))).map(batch => <section key={batch.id} className="grade-batch"><h3>{batch.subject} · {batch.title}</h3>{(batch.note || batch.result?.note) && <details className="grade-batch-note" open={batch.status === "failed"}><summary>查看批改说明</summary>{batch.note && <p>{batch.note}</p>}{batch.result?.note && <p>{batch.result.note}</p>}</details>}{batch.result?.questions.filter(matches).map(q => <QuestionCard key={q.id} question={q} preview={batch.previews?.[q.id]} runId={batch.id} version={batch.reviewVersions?.[q.id]} canConfirm={canManage} readings={batch.readings?.[q.id]} date={date} subject={batch.subject} title={batch.title} pageId={batch.primaryPageId} />)}{filter === "attention" && batch.result?.questions.some(q => q.verdict === "passedWithNote") && <button type="button" className="text-button" onClick={() => setFilter("passedWithNote")}>已通过，查看疑点</button>}{batch.status === "done" && batch.result && !batch.result.questions.length && <p>这页未发现需要逐题批改的作答。</p>}{batch.status === "done" && batch.result?.questions.length && batch.result.questions.every(q => q.verdict === "correct") && filter === "attention" ? <p className="grade-all-correct"><CircleCheck size={22} aria-hidden="true" />已检查的{batch.result.questions.length}题均正确，可切换“全部题目”查看。</p> : null}</section>)}
       <p className="grade-source">错题经过两次识别与解答核验后自动入本；有分歧的题不直接判错。错因是根据作答提出的分析，主观题给出点评。</p>
     </>}
   </section>;
