@@ -41,20 +41,52 @@ try{
   });
   console.log('FORM_DENSITY',JSON.stringify(measures));
   assert.equal(measures.overflow,false);
-  assert.deepEqual([measures.book,measures.date,measures.pages],[44,44,44]);
+  assert.deepEqual([measures.book,measures.date,measures.pages],[40,40,40]);
   const picker=reading.getByRole('combobox',{name:'正在读的书'});
   assert.equal(await picker.evaluate(el=>getComputedStyle(el).appearance),'none');
   await picker.selectOption(bookId);
   assert.equal(measures.gap,'3px');
   assert.ok(measures.textarea>=72,'Summary still fits three lines');
   if(width<=390)assert.ok(measures.formToSummary<=365,'Summary is visible earlier on phones');
-  if(width===390)await page.screenshot({path:output+'/reading-checkin.png'});
+  if(width===390){
+    const date=reading.locator('input[type=date]');
+    await date.fill('2026-11-21');
+    assert.equal(await date.inputValue(),'2026-11-21');
+    await date.blur();
+    for(const [name,field] of [['book',picker],['date',date],['start-page',reading.getByLabel('开始页',{exact:true})]]){
+      const png=await field.screenshot({path:output+'/field-'+name+'.png'});
+      // Measure the painted text, excluding the border and picker/spinner icons.
+      const offset=await page.evaluate(async encoded=>{
+        const img=new Image();
+        img.src='data:image/png;base64,'+encoded;
+        await img.decode();
+        const canvas=document.createElement('canvas');
+        canvas.width=img.width;canvas.height=img.height;
+        const ctx=canvas.getContext('2d');
+        ctx.drawImage(img,0,0);
+        const {data}=ctx.getImageData(0,0,img.width,img.height);
+        const background=(2*img.width+Math.floor(img.width/2))*4;
+        const rows=[];
+        for(let y=3;y<img.height-3;y++){
+          for(let x=8;x<img.width-28;x++){
+            const at=(y*img.width+x)*4;
+            const contrast=Math.max(...[0,1,2].map(c=>Math.abs(data[at+c]-data[background+c])));
+            if(contrast>75){rows.push(y);break;}
+          }
+        }
+        return rows.length ? (rows[0]+rows[rows.length-1]-(img.height-1))/2 : null;
+      },png.toString('base64'));
+      console.log('FIELD_INK_CENTER',name,offset);
+      assert.ok(offset!==null && Math.abs(offset)<=2.5,name+' text should be vertically centered');
+    }
+    await page.screenshot({path:output+'/reading-checkin.png'});
+  }
  }
  await page.setViewportSize({width:390,height:844});
  await page.getByLabel('开始页',{exact:true}).fill('49');await page.getByLabel('结束页',{exact:true}).fill('52');await page.getByLabel('时长（分钟）',{exact:true}).fill('12');await page.locator('#reading-summary').fill('还没提交的阅读概括。');
  await page.locator('.reading-library > summary').click();await page.getByRole('button',{name:`修改${book.title}的书籍信息`,exact:true}).click();
  const dialog=page.getByRole('dialog',{name:'修改书籍信息',exact:true});await dialog.waitFor();assert.equal(await dialog.getByLabel('书名',{exact:true}).inputValue(),book.title);assert.equal(await dialog.getByLabel('总页数（选填）',{exact:true}).inputValue(),'241');
- for(const field of ['书名','总页数（选填）']) assert.equal((await dialog.getByLabel(field,{exact:true}).boundingBox()).height,44);
+ for(const field of ['书名','总页数（选填）']) assert.equal((await dialog.getByLabel(field,{exact:true}).boundingBox()).height,40);
  await dialog.getByLabel('书名',{exact:true}).fill('更正后的模拟书名');await dialog.getByLabel('总页数（选填）',{exact:true}).fill('300');
  await dialog.getByRole('button',{name:'保存书籍信息',exact:true}).click();await dialog.locator('.form-error[role=alert]').filter({hasText:'模拟网络失败'}).waitFor();assert.equal(await dialog.getByLabel('书名',{exact:true}).inputValue(),'更正后的模拟书名');
  conflictNext=true;await dialog.getByRole('button',{name:'保存书籍信息',exact:true}).click();await dialog.getByRole('button',{name:'读取最新信息，保留我的填写',exact:true}).click();

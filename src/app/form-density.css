@@ -7,7 +7,7 @@
 }
 
 @media (pointer: coarse), (max-width: 600px) {
-  :root { --form-field-height: 44px; }
+  :root { --form-field-height: 40px; }
 }
 
 @media screen {
@@ -19,7 +19,18 @@
     box-sizing: border-box;
     height: var(--form-field-height);
     min-height: var(--form-field-height);
-    padding-block: 4px;
+    padding-block: 0;
+    line-height: 1.35;
+  }
+  /* iOS paints a date value in a separate box. Center that box as well
+     as the native segmented editor used by desktop browsers. */
+  :root input:is([type="date"], [type="time"], [type="month"], [type="week"],
+      [type="datetime-local"]):not(.study-heading-date > input) {
+    display: inline-flex;
+    align-items: center;
+  }
+  :root input:not(.study-heading-date > input)::-webkit-date-and-time-value {
+    margin-block: auto;
     line-height: 1.35;
   }
   /* Paint the indicator ourselves so iOS draws the full CSS box. The
