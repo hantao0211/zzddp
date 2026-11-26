@@ -1,4 +1,5 @@
 "use client";
+import { BackLabel } from "./back-label";
 
 import { useEffect, useRef, useState } from "react";
 import {XiaobuMascot} from "./xiaobu-mascot";
@@ -329,7 +330,7 @@ export function StudyAssistant({ studyDate, launcherTarget, readingMode = false,
         {readingMode && <div className="assistant-context-bar"><span>课外阅读交流</span><span>{readingLogId ? "已关联这次阅读" : "阅读与奖励使用帮助"}</span></div>}
         {homeworkContext && <div className="assistant-context-bar" inert={toolsOpen}><button onClick={() => setToolsOpen(true)} aria-label="切换作业日期"><CalendarDays size={16} /><span>{selectedDate.replaceAll("-", "/")} 的作业</span></button><span>{gradingTopic ? gradingTopic.label : reviewPhotos ? "本次重看照片" : homeworkContext.pending ? "正在整理" : homeworkContext.hasMaterials ? "已关联记录" : "暂无资料"}</span></div>}
         <section id="assistant-settings" className="assistant-settings" aria-label="小助手更多功能" hidden={!toolsOpen}>
-          <div className="assistant-settings-heading"><strong>更多功能</strong><button className="text-button" onClick={() => setToolsOpen(false)}>返回对话</button></div>
+          <div className="assistant-settings-heading"><strong>更多功能</strong><button className="text-button" onClick={() => setToolsOpen(false)}><BackLabel>返回对话</BackLabel></button></div>
         <div className="assistant-tools"><span>{homeworkContext ? "作业沟通与学习问答" : "AI 学习问答"}</span><button disabled={!canExport} onClick={() => void copyConversation()}><Copy size={15} /> 复制对话</button><button disabled={!canExport} onClick={downloadConversation}><Download size={15} /> 下载文本</button><button disabled={!!pending || recording} onClick={() => { clearPhotos(); setMessages([]); setGradingTopic(undefined); setError(""); setReviewPhotos(false); setExportNotice(""); setManualExport(""); stopAudio(true); }}><Trash2 size={15} /> 清空对话</button><button disabled={!!pending || recording} onClick={() => void logout()}><LogOut size={15} /> 退出设备</button></div>
         {(exportNotice || manualExport) && <section className="assistant-export-panel"><p role="status">{exportNotice}</p>{manualExport && <><label className="visually-hidden" htmlFor="assistant-export-text">待复制的对话文本</label><textarea id="assistant-export-text" readOnly value={manualExport} rows={4} onFocus={(e) => e.currentTarget.select()} /><button onClick={() => { setManualExport(""); setExportNotice(""); }}>收起复制文本</button></>}</section>}
         {homeworkContext && <div className="assistant-homework-context"><label>讨论的作业日期<input aria-label="讨论的作业日期" type="date" value={selectedDate} disabled={!!pending || recording} onChange={(e) => { if (e.target.value) { cancelWork(); clearPhotos(); setMessages([]); setGradingTopic(undefined); void check(e.target.value, false); } }} /></label><p>{contextNotice || (homeworkContext.hasMaterials ? `已读取这一天的作业整理记录${homeworkContext.pending ? "，后台正在更新查缺结果。" : "。"}` : "这一天还没有上传资料，可以切换日期或先问学习问题。")}</p>{!!homeworkContext.familyNotes.length && <details className="assistant-saved-notes"><summary>当前有 {homeworkContext.familyNotes.filter(n => n.current !== false).length} 项补充说明</summary><FamilyNotes notes={homeworkContext.familyNotes} action={(n) => n.canUndo && <button className="text-button" disabled={!!pending || recording} onClick={() => void saveClarification({ role: "assistant", content: "", id: `saved-note:${n.id}`, receipt: n }, true)}>撤销这次说明</button>} /></details>}</div>}
@@ -365,7 +366,7 @@ export function StudyAssistant({ studyDate, launcherTarget, readingMode = false,
             <button className="button primary assistant-send" type="submit" aria-label="发送问题" title="发送问题" disabled={!!pending || recording || !!memoryBusy || (!input.trim() && !photos.length)}><Send size={20} /><span>发送</span></button>
           </div>
         </form>
-        {previewPhoto && <section className="assistant-photo-preview" aria-label="图片预览"><button type="button" onClick={() => setPreviewPhoto(null)} autoFocus><X size={20} /> 返回对话</button><div><img src={`data:${previewPhoto.mimeType};base64,${previewPhoto.base64}`} alt="放大的对话图片" /></div></section>}
+        {previewPhoto && <section className="assistant-photo-preview" aria-label="图片预览"><button type="button" onClick={() => setPreviewPhoto(null)} autoFocus><BackLabel>返回对话</BackLabel></button><div><img src={`data:${previewPhoto.mimeType};base64,${previewPhoto.base64}`} alt="放大的对话图片" /></div></section>}
       </>}
     </dialog>}
   </>;

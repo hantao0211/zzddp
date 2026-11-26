@@ -1,4 +1,5 @@
 "use client";
+import { BackLabel } from "./back-label";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
@@ -43,7 +44,7 @@ export function LearningApp({active=true,onDemoModeChange}:{active?:boolean;onDe
   const [demo, setDemo] = useState(false);
   const [studyDate, setStudyDate] = useState("");
   useEffect(()=>{onDemoModeChange?.(active&&demo);},[active,demo,onDemoModeChange]);
-  return <>{demo ? <><div className="hw-demo-return"><button className="button primary" onClick={() => setDemo(false)}>返回真实作业空间</button><span>以下为示例体验及本浏览器旧记录</span></div><PrototypeApp /></> : <HomeworkApp active={active} onDemo={() => setDemo(true)} onDateChange={setStudyDate} />}{!workspace&&<StudyAssistant studyDate={studyDate || undefined} navigationManaged={!demo} />}</>;
+  return <>{demo ? <><div className="hw-demo-return"><button className="button primary" onClick={() => setDemo(false)}><BackLabel>返回真实作业空间</BackLabel></button><span>以下为示例体验及本浏览器旧记录</span></div><PrototypeApp /></> : <HomeworkApp active={active} onDemo={() => setDemo(true)} onDateChange={setStudyDate} />}{!workspace&&<StudyAssistant studyDate={studyDate || undefined} navigationManaged={!demo} />}</>;
 }
 
 function PrototypeApp() {

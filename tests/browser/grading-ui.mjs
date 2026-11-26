@@ -52,7 +52,7 @@ try {
       const offset = Number(url.searchParams.get("offset"));
       const limit = Number(url.searchParams.get("limit"));
       assert.equal(limit, 10);
-      const total = subject === "英语" ? 0 : subject === "数学" ? 1 : 301;
+      const total = url.searchParams.has("knowledge") ? 2 : subject === "英语" ? 0 : subject === "数学" ? 1 : 301;
       const items = Array.from({ length: Math.min(limit, total - offset) }, (_, index) => {
         const number = url.searchParams.get("sort") === "oldest" ? total + 1 - offset - index : offset + index + 2;
         const sample = legacyLabels[number - 4];
@@ -62,7 +62,8 @@ try {
           title: "已上传作业", provenance: { kind: "assignment", title: fullAssignment }, pageId: "synthetic-page",
           occurrences: 1, question };
       });
-      return json({ total, items });
+      return json({ total, items, options:{knowledge:["四则运算与运算律","数与分数","阅读与表达"], form:["填空题","计算题"],cause:["计算错误"],stage:["4年级上学期"],source:["作业","考试"]},
+        analysis:{wrong:2,sources:1,known:3,partial:0,unknown:0,wrongRate:67,retestCorrect:0,retestKnown:0,focus:[],trends:[]} });
     }
     if (path.endsWith("/learning/grading/review")) {
       const payload = route.request().postDataJSON();
@@ -98,6 +99,16 @@ try {
   await dateInput.fill(startingDate);
   await page.setViewportSize({ width: 390, height: 670 });
   await page.getByRole("button", { name: "查看批改", exact: true }).click();
+  const homeBack = page.getByRole("button", { name: "返回首页", exact: true });
+  for (const width of [320, 390, 1280]) {
+    await page.setViewportSize({width, height: 670});
+    await homeBack.locator(".back-link-label > svg[aria-hidden=true]").waitFor();
+    const backBox = await homeBack.boundingBox();
+    const dateBox = await page.locator(".hw-details-heading .hw-date").boundingBox();
+    assert.ok(backBox.height >= 44 && backBox.x + backBox.width <= dateBox.x);
+    assert.ok(backBox.y < dateBox.y + dateBox.height && dateBox.y < backBox.y + backBox.height);
+  }
+  await page.setViewportSize({width: 390, height: 670});
   const panel = page.getByRole("region", { name: "批改结果", exact: true });
   const rows = panel.locator(".grade-result-row");
   const detail = page.getByRole("dialog",{name:"批改详情"});
@@ -133,6 +144,7 @@ try {
   await page.getByRole("button",{name:"关闭小助手"}).click();
   await detail.getByRole("button",{name:"下一条"}).click();
   await detail.getByRole("heading",{name:"第5题"}).waitFor();
+  await detail.getByRole("button",{name:"返回列表"}).locator(".back-link-label > svg[aria-hidden=true]").waitFor();
   await detail.getByRole("button",{name:"返回列表"}).click();
   await detail.waitFor({state:"hidden"});
   await page.waitForFunction(()=>document.activeElement?.classList.contains("grade-result-row"));
@@ -253,6 +265,29 @@ try {
   if(!await mistakesTab.isVisible())await navMore.click();
   await mistakesTab.click();
   const book = page.getByRole("region", { name: "错题本", exact: true });
+  const advanced = book.getByRole("button",{name:/^更多筛选/});
+  const filtersDialog = page.getByRole("dialog",{name:"筛选错题"});
+  await advanced.click();
+  for (const width of [320,390,1280]) {
+    await page.setViewportSize({width,height:670});
+    const box=await filtersDialog.boundingBox();
+    assert.ok(box.x >= 0 && box.x+box.width <= width && box.y >= 0 && box.y+box.height <= 670);
+  }
+  await page.setViewportSize({width:390,height:670});
+  await filtersDialog.getByRole("button",{name:"数与分数",exact:true}).click();
+  await filtersDialog.screenshot({path:output+"/mistake-filter-dialog.png"});
+  await filtersDialog.getByRole("button",{name:"关闭筛选"}).click();
+  assert.equal(await advanced.innerText(),"更多筛选");
+  await advanced.click();
+  assert.equal(await filtersDialog.getByRole("button",{name:"数与分数"}).getAttribute("aria-pressed"),"false");
+  await filtersDialog.getByRole("button",{name:"数与分数"}).click();
+  await filtersDialog.getByRole("button",{name:"日期范围"}).click();
+  await filtersDialog.getByLabel("开始日期").fill("2026-11-01");
+  await filtersDialog.getByRole("button",{name:/应用筛选/}).click();
+  await book.getByRole("heading",{name:"我的错题本 · 2题",exact:true}).waitFor();
+  await book.getByText(/知识分类 · 数与分数.*2026-11-01/).waitFor();
+  await book.getByRole("button",{name:"清除",exact:true}).click();
+  await book.getByRole("heading",{name:"我的错题本 · 301题",exact:true}).waitFor();
   const mistakeDetail=page.getByRole("dialog",{name:"错题详情"});
   const toolbar=book.getByRole("group",{name:"错题筛选与排序"});
   const sort=toolbar.getByRole("combobox",{name:/^排序/});

@@ -1,6 +1,7 @@
 "use client";
+import { BackLabel } from "./back-label";
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { ArrowLeft, ChevronRight, CircleAlert, CircleCheck, ClipboardCheck, Clock3, FileText, Upload, X, type LucideIcon } from "lucide-react";
+import { ChevronRight, CircleAlert, CircleCheck, ClipboardCheck, Clock3, FileText, Upload, X, type LucideIcon } from "lucide-react";
 import { type ExamRecord, type ExamDetail } from "@/domain/assessment";
 import { homeworkPost, homeworkRequest } from "@/services/homework-gateway";
 import { ExamMilestonePanel } from "./exam-milestones";
@@ -118,7 +119,7 @@ export function ExamShelf({canManage,openMistakes,resume}:{canManage:boolean;ope
     {latestPaper&&<button className="text-button" onClick={()=>{setOffset(0);setError("");setNotice("");setMode("list");}}>全部试卷（{latest?.total}）</button>}
     {!mode&&error&&<p role="alert">{error} <button className="text-button" onClick={()=>{setError("");refresh(n=>n+1);}}>重试</button></p>}
     <dialog ref={dialog} className="reading-dialog exam-dialog" aria-label="试卷档案" onCancel={e=>{e.preventDefault();goBack();}}>
-      <header>{backLabel&&<button ref={backButton} type="button" className="text-button exam-nav-back" aria-label={backLabel} disabled={!!busy} onClick={goBack}><ArrowLeft size={18}/>返回</button>}<h2>{photo?photo.alt:selection?(selection.id?"题目详情":"补录题目"):mode==="new"?"上传已批试卷":mode==="list"?"全部试卷":mode==="milestones"?"考试里程碑":detail?.exam.title||"试卷详情"}</h2><button className="icon-button" disabled={!!busy} aria-label="关闭试卷档案" onClick={close}><X/></button></header>
+      <header>{backLabel&&<button ref={backButton} type="button" className="text-button exam-nav-back" aria-label={backLabel} disabled={!!busy} onClick={goBack}><BackLabel>返回</BackLabel></button>}<h2>{photo?photo.alt:selection?(selection.id?"题目详情":"补录题目"):mode==="new"?"上传已批试卷":mode==="list"?"全部试卷":mode==="milestones"?"考试里程碑":detail?.exam.title||"试卷详情"}</h2><button className="icon-button" disabled={!!busy} aria-label="关闭试卷档案" onClick={close}><X/></button></header>
       <div className="reading-dialog-body">
       {photo&&<div className="exam-photo-content"><PhotoPreviewContent {...photo}/></div>}
       <div hidden={!!photo}>

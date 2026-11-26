@@ -1,7 +1,8 @@
 "use client";
+import { BackLabel } from "./back-label";
 import { REQUIREMENT_PRESETS, taskSubmission } from "@/domain/task-submission";
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, Check, ChevronDown, LoaderCircle, LockKeyhole, Pencil, RefreshCw, X } from "lucide-react";
+import { Check, ChevronDown, LoaderCircle, LockKeyhole, Pencil, RefreshCw, X } from "lucide-react";
 import type { ClarificationReceipt, HomeworkChatContext, MemoEdit, MemoEntry } from "@/domain/clarifications";
 import { homeworkPost, homeworkRequest, HomeworkRequestError } from "@/services/homework-gateway";
 
@@ -90,7 +91,7 @@ export function MemoEditor({ date, title, subject, close, saved, canManage, scop
         <div className="memo-edit-section-heading">
           <h3>作业内容</h3>
           {context && context.entries.length > 1 && <button type="button" className="text-button memo-edit-back" disabled={busy} onClick={() => { setEntry(null); setSelected(null); }}>
-            <ArrowLeft size={16} aria-hidden="true" />换一项
+            <BackLabel>换一项</BackLabel>
           </button>}
         </div>
         <div className="memo-edit-identity">

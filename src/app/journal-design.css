@@ -497,11 +497,7 @@
 .exam-form :is(input,select),.exam-fields input { width: 100%; min-width: 0; max-width: 100%; box-sizing: border-box; }
 .exam-page,.question-tags,.mistake-insights { margin: 15px 0; }
 .exam-page details,.mistake-insights > details { padding-block: 8px; }
-.mistake-insights fieldset { border: 0; padding: 0; min-width: 0; margin: 10px 0; }
-.mistake-insights legend,.question-tags small { font-size: .84em; }
-.tag-options { display: flex; flex-wrap: wrap; gap: 5px; }
-.tag-options button { background: transparent; color: inherit; border: 1px solid var(--theme-border); border-radius: 8px; padding: 6px 10px; }
-.tag-options button[aria-pressed=true] { background: var(--journal-pink); color: var(--accent-dark); }
+.question-tags small { font-size: .84em; }
 
 .journal-flower-speech {
   --speech-paper: #f4ced9;

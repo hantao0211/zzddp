@@ -53,8 +53,11 @@ try{
  await page.locator(".exam-shelf .exam-line").waitFor();await checkSectionDivider();
  await page.getByRole("button",{name:"我的错题本",exact:true}).click();
  const book=page.getByRole("region",{name:"错题本",exact:true});
- await book.getByText("题型、阶段与更多筛选",{exact:true}).click();
- await book.getByRole("button",{name:"考试",exact:true}).click();
+ await book.getByRole("button",{name:"更多筛选",exact:true}).click();
+ const advanced=page.getByRole("dialog",{name:"筛选错题"});
+ await advanced.getByRole("button",{name:"来源",exact:true}).click();
+ await advanced.getByRole("button",{name:"考试",exact:true}).click();
+ await advanced.getByRole("button",{name:/应用筛选/}).click();
  await book.getByText("我的错题本 · 2题",{exact:true}).waitFor();
  await book.locator("summary").filter({hasText:"薄弱项与长期趋势"}).click();
  await book.getByText(/已核验原作答错误率 50%/).waitFor();

@@ -1,7 +1,8 @@
 "use client";
+import { BackLabel } from "./back-label";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ArrowLeft, Printer } from "lucide-react";
+import { Printer } from "lucide-react";
 import { formatPracticeQuestionText } from "@/domain/practice-question-text";
 import { accountRequest } from "./account-login";
 import type { PracticePaper, PracticeView } from "@/domain/practice";
@@ -69,7 +70,7 @@ export function PracticePrintPreview({ close, answerItemId, ...sheet }: SheetPro
     }}>
       <header>
         <button ref={back} type="button" className="button secondary" onClick={dismiss}>
-          <ArrowLeft size={18} aria-hidden="true" />返回练习
+          <BackLabel>返回练习</BackLabel>
         </button>
         <button type="button" className="button primary" disabled={!ready} onClick={() => window.print()}>
           <Printer size={18} aria-hidden="true" />打印／另存PDF

@@ -59,7 +59,7 @@
 .grade-list-pages, .grade-detail-nav, .grade-detail-nav > div { display: flex; align-items: center; gap: 8px; }
 .grade-list-pages { justify-content: center; margin-top: 12px; }
 .grade-list-pages button, .grade-detail-nav button { display: inline-flex; justify-content: center; align-items: center; gap: 3px; color: var(--accent); background: transparent; min-height: 44px; min-width: 44px; padding: 0 6px; font: inherit; }
-.grade-list-pages span, .grade-detail-nav span { font-size: .85rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.grade-list-pages span, .grade-detail-nav > div > span { font-size: .85rem; color: var(--muted); font-variant-numeric: tabular-nums; }
 .grade-detail-dialog[open] { display: flex; flex-direction: column; width: min(640px, calc(100% - 32px)); max-height: 85dvh; padding: 0; overflow: hidden; color: var(--ink); background: var(--journal-paper,var(--white)); }
 .grade-detail-nav { flex: none; justify-content: space-between; border-bottom: 1px solid var(--border); padding: 4px 14px; }
 .grade-detail-body { overflow: auto; overscroll-behavior: contain; padding: 0 18px 20px; }

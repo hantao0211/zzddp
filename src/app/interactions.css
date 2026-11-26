@@ -47,3 +47,48 @@ dialog :is(.dialog-body,.reading-dialog-body,.assistant-messages,.assistant-sett
 .exam-dialog>header h2{flex:1;min-width:0;overflow-wrap:anywhere}
 .exam-photo-content{display:grid;grid-template-rows:minmax(0,1fr) auto;height:min(67dvh,720px);gap:8px}
 .exam-photo-content footer{text-align:center}
+
+.back-link-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375em;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.back-link-label > svg { flex: none; }
+.hw-details-heading .hw-back { min-height: 44px; padding: 0 6px; }
+@media (max-width: 370px) {
+  .study-shell .hw-details-heading .hw-date { flex-direction: column; align-items: flex-end; gap: 2px; }
+}
+
+.mistake-insights .mistake-advanced { display:flex; align-items:center; gap:10px; min-width:0; }
+.mistake-filter-trigger, .mistake-filter-summary { display:inline-flex; align-items:center; gap:6px; }
+.mistake-filter-trigger { flex:none; border:1px solid var(--border); padding:6px 9px; border-radius:8px; background:transparent; color:inherit; font:inherit; font-size:.84rem; }
+.mistake-filter-trigger b { color:var(--accent); }
+.mistake-filter-summary { min-width:0; font-size:.8rem; color:var(--muted); }
+.mistake-filter-summary span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.mistake-filter-summary button { flex:none; }
+.mistake-advanced + details > summary { color:var(--muted); font-size:.85rem; }
+.mistake-focus-row { display:flex; width:100%; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:4px 12px; padding:10px 0; background:transparent; color:inherit; border:0; border-bottom:1px solid var(--border); text-align:start; }
+.mistake-focus-row small { color:var(--muted); }
+.mistake-filter-dialog { box-sizing:border-box; width:min(32rem,calc(100% - 24px)); max-width:none; max-height:calc(100dvh - 24px); padding:0; border:1px solid var(--border); border-radius:16px; background:var(--journal-paper); color:var(--ink); box-shadow:0 12px 48px #27152430; }
+.mistake-filter-dialog[open] { display:flex; flex-direction:column; }
+.mistake-filter-dialog::backdrop { background:rgb(23 18 21 / .48); }
+.mistake-filter-dialog header, .mistake-filter-dialog footer { display:flex; flex:none; align-items:center; justify-content:space-between; gap:10px; padding:10px 16px; }
+.mistake-filter-dialog header { border-bottom:1px solid var(--border); }
+.mistake-filter-dialog header h3, .mistake-filter-values h4 { margin:0; }
+.mistake-filter-dialog header button { display:grid; place-items:center; width:40px; height:40px; color:var(--muted); background:transparent; }
+.mistake-filter-body { display:grid; grid-template-columns:minmax(94px,27%) minmax(0,1fr); min-height:0; height:min(22rem,55dvh); }
+.mistake-filter-groups, .mistake-filter-values { overflow:auto; overscroll-behavior:contain; }
+.mistake-filter-groups { padding:6px; background:var(--bg); }
+.mistake-filter-groups button { width:100%; display:flex; align-items:center; justify-content:space-between; padding:8px; min-height:40px; background:transparent; color:var(--muted); font:inherit; font-size:.84rem; border-radius:7px; }
+.mistake-filter-groups button[aria-pressed=true] { color:var(--accent); background:var(--journal-paper); font-weight:700; }
+.mistake-filter-values { padding:14px 12px; }
+.mistake-filter-values h4 { font-size:.94rem; margin-bottom:12px; }
+.mistake-filter-choices { display:flex; align-items:flex-start; flex-wrap:wrap; gap:7px; }
+.mistake-filter-choices button { display:inline-flex; align-items:center; gap:4px; max-width:100%; overflow-wrap:anywhere; min-height:34px; padding:6px 10px; border-radius:8px; background:transparent; border:1px solid var(--border); color:inherit; font:inherit; font-size:.85rem; }
+.mistake-filter-choices button[aria-pressed=true] { color:var(--accent); border-color:currentColor; background:var(--accent-soft); }
+.mistake-filter-dialog footer { border-top:1px solid var(--border); }
+.mistake-filter-dates { display:grid; gap:12px; }
+.mistake-filter-dates label { color:var(--muted); font-size:.85rem; }
+.mistake-filter-dates input { box-sizing:border-box; width:100%; min-width:0; min-height:38px; padding:6px; font:inherit; color:inherit; border:1px solid var(--border); border-radius:7px; background:transparent; }

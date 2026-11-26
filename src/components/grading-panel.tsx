@@ -1,6 +1,8 @@
 "use client";
+import type { Selections } from "./mistake-advanced-filters";
+import { BackLabel } from "./back-label";
 import { LearningScopeSchema, PracticeSubjectSchema, scopeLabels, type LearningScope, type PracticeSubject } from "@/domain/practice";
-import {MistakeInsights,QuestionTags,type Selections} from "./mistake-insights";
+import {MistakeInsights,QuestionTags} from "./mistake-insights";
 import {dimensions,type Dimension,type Analysis} from "@/domain/assessment";
 import { FamilyGradeReview, GradeReviewPreview } from "./grade-review-preview";
 import type { GradePreview } from "@/domain/grade-review";
@@ -98,7 +100,7 @@ function GradeDetail({close, position, count, move, itemKey, children, label = "
   useEffect(() => { if (body.current) body.current.scrollTop = 0; },[itemKey]);
   return <dialog ref={dialog} className="dialog grade-detail-dialog" aria-label={label} onCancel={e => { e.preventDefault(); close(); }}>
     <header className="grade-detail-nav">
-      <button type="button" onClick={close}><ChevronLeft size={17} aria-hidden="true" />返回列表</button>
+      <button type="button" onClick={close}><BackLabel>返回列表</BackLabel></button>
       <div><button type="button" aria-label="上一条" disabled={position <= 0} onClick={() => move(position - 1)}><ChevronLeft size={18} /></button>
         {position >= 0 && <span>{position + 1} / {count}</span>}
         <button type="button" aria-label="下一条" disabled={position < 0 || position + 1 >= count} onClick={() => move(position + 1)}><ChevronRight size={18} /></button></div>

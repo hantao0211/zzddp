@@ -1,13 +1,14 @@
 "use client";
+import { BackLabel } from "./back-label";
 
 import { useState } from "react";
-import { ArrowLeft, Printer } from "lucide-react";
+import { Printer } from "lucide-react";
 import { practice, practiceAnswers } from "@/domain/demo";
 
 export function PrintSheet() {
   const [answers, setAnswers] = useState(false);
   return <main className="print-page">
-    <div className="print-toolbar"><a href="/"><ArrowLeft size={17} /> 返回学习首页</a><label><input type="checkbox" checked={answers} onChange={(e) => setAnswers(e.target.checked)} /> 附答案页</label><button className="button primary" onClick={() => window.print()}><Printer size={17} /> 打开系统打印</button></div>
+    <div className="print-toolbar"><a href="/"><BackLabel>返回学习首页</BackLabel></a><label><input type="checkbox" checked={answers} onChange={(e) => setAnswers(e.target.checked)} /> 附答案页</label><button className="button primary" onClick={() => window.print()}><Printer size={17} /> 打开系统打印</button></div>
     <article className="paper">
       <div className="paper-brand">小步学习 / 数学专项练习</div><h1>把每一步，算清楚</h1>
       <p>小数加减法与单位换算 · 四年级 · 共 4 题</p>

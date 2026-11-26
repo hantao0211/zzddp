@@ -1,4 +1,5 @@
 "use client";
+import { BackLabel } from "./back-label";
 import { PracticeCenter } from "./practice-center";
 import { HomeworkScopeForm, HomeworkScopeSelect } from "./homework-scope-field";
 import { scopeLabels } from "@/domain/practice";
@@ -234,7 +235,7 @@ export function HomeworkApp({ onDemo, onDateChange, active=true }: { onDemo: () 
           {(!summary || !summary.rows.length) && <button className="hw-details-link" onClick={() => showDetails(true)}><FolderOpen size={18} />查看详情</button>}
           </div></div>
         </section> : <section className="hw-details-page" aria-label="作业详情">
-          <div className="hw-details-heading"><button className="button secondary" onClick={() => showDetails(false)}>{examReturn.current?.viewerId===viewer?.id&&examReturn.current?"返回试卷":"返回首页"}</button><label className="hw-date">作业日期<input type="date" value={date} onChange={(e) => { if (e.target.value) { setDate(e.target.value); setDetailId(null); setMemoEdit(null); setRowStatusId(null); } }} /></label></div>
+          <div className="hw-details-heading"><button className="text-button hw-back" onClick={() => showDetails(false)}><BackLabel>{examReturn.current?.viewerId===viewer?.id&&examReturn.current?"返回试卷":"返回首页"}</BackLabel></button><label className="hw-date">作业日期<input type="date" value={date} onChange={(e) => { if (e.target.value) { setDate(e.target.value); setDetailId(null); setMemoEdit(null); setRowStatusId(null); } }} /></label></div>
         <HomeworkNavigation tab={tab} grading={!!snapshot?.grading?.enabled} change={setTab} refresh={()=>void refresh()} />
         {(tab === "today" || tab === "archive") && snapshot && <div className={`hw-status ${snapshot.status === "failed" ? "hw-status-error" : ""}`} role="status">{snapshot.pending ? <LoaderCircle size={20} className="spin" /> : <Sparkles size={20} />}<div><strong>{labels[snapshot.status] || "正在整理"}</strong><p>{snapshot.note}</p>{snapshot.pending && snapshot.report && <p>下方暂时展示上一次结果，新资料整理完成后会自动更新。</p>}</div>{snapshot.status === "failed" && canManage && <button className="button primary compact" onClick={retryDay}>重新查缺</button>}</div>}
         {(tab === "today" || tab === "archive") && snapshot?.reviewPolicy && <section className="hw-review-policy"><details><summary>预习复习按学习痕迹检查</summary><p>{snapshot.reviewPolicy.description}</p></details>{canManage && <button className="button primary compact" onClick={retryDay}>重新整理</button>}{oldReviewTasks.length > 0 && !snapshot.pending && <p>部分预习、复习还是旧版结果，尚未按新规则判断。重新整理会由AI检查已上传照片，无需重新上传。</p>}</section>}
