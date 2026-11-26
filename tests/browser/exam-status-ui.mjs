@@ -93,6 +93,15 @@ try{
       const bounds=await modal.boundingBox();
       if(full){assert.equal(bounds.y,0);assert.equal(bounds.height,height);assert.equal(bounds.width,width);}
       else assert.ok(bounds.width<width && bounds.height<height);
+      const closeButton=modal.getByRole("button",{name:"关闭试卷档案"});
+      const closeBounds=await closeButton.boundingBox();
+      await modal.getByRole("button",{name:"返回全部试卷"}).click();
+      await modal.getByRole("heading",{name:"全部试卷"}).waitFor();
+      assert.deepEqual(await modal.boundingBox(),bounds);
+      assert.deepEqual(await closeButton.boundingBox(),closeBounds);
+      await modal.locator(".exam-line").nth(3).click();
+      await failed.getByText("识读已停止",{exact:true}).waitFor();
+      assert.deepEqual(await modal.boundingBox(),bounds);
       const headerBefore=await header.boundingBox();
       await body.evaluate(el=>{el.scrollTop=el.scrollHeight;});
       assert.ok(await body.evaluate(el=>el.scrollTop>0));

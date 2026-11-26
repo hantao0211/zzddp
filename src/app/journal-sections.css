@@ -301,26 +301,26 @@
 
 /* Date, streak and balance share one footprint across all four tabs. */
 @media screen {
-  .study-shell .study-page-heading .study-heading-badge {
+  .study-shell :is(.study-page-heading, .hw-details-heading) .study-heading-badge {
     display: inline-flex; align-items: center; justify-content: center; gap: 6px;
     width: 128px; min-width: 128px; height: 44px; min-height: 44px; flex: 0 0 128px;
     box-sizing: border-box; padding: 8px 6px; border: 0; border-radius: 12px;
     font-size: 12px; font-weight: 400; line-height: 20px; white-space: nowrap;
     font-variant-numeric: tabular-nums;
   }
-  .study-shell .study-page-heading .study-heading-badge svg { display: block; flex-shrink: 0; width: 20px; height: 20px; }
+  .study-shell :is(.study-page-heading, .hw-details-heading) .study-heading-badge svg { display: block; flex-shrink: 0; width: 20px; height: 20px; }
   .study-shell .study-page-heading .study-heading-badge .reading-token { display: contents; color: inherit; }
   .study-shell .study-page-heading .study-heading-badge .reading-token > span,
   .study-shell .study-page-heading .study-heading-badge .study-streak-value strong { font-size: 14px; font-weight: 600; line-height: 20px; color: inherit; }
   .study-shell .study-page-heading .study-heading-badge .reading-token small { display: inline; font-size: 12px; font-weight: 400; line-height: 20px; margin-left: 3px; }
   .study-streak-value { line-height: 20px; }
   .study-streak-value strong { margin-inline: 2px; }
-  .study-shell .study-page-heading .study-heading-date {
+  .study-shell :is(.study-page-heading, .hw-details-heading) .study-heading-date {
     position: relative; flex-flow: row nowrap; padding-block: 4px; background: var(--field-bg); color: var(--ink); cursor: pointer;
   }
   .study-heading-date time { display: grid; text-align: start; font-size: 14px; font-weight: 600; line-height: 17px; }
   .study-heading-date time small { font-size: 12px; font-weight: 400; line-height: 14px; color: var(--muted); }
-  .study-shell .study-page-heading .study-heading-date input {
+  .study-shell :is(.study-page-heading, .hw-details-heading) .study-heading-date input {
     position: absolute; inset: 0; width: 100%; height: 100%; min-width: 0; min-height: 0;
     margin: 0; padding: 0; border: 0; border-radius: inherit; font-size: 16px; opacity: 0; cursor: pointer;
   }

@@ -43,7 +43,7 @@ dialog :is(.dialog-body,.reading-dialog-body,.assistant-messages,.assistant-sett
   .photo-viewer>header{padding-top:max(8px,env(safe-area-inset-top))}
 }
 
-.exam-detail-dialog[open] {
+.exam-dialog[open] {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   box-sizing: border-box;
@@ -51,13 +51,13 @@ dialog :is(.dialog-body,.reading-dialog-body,.assistant-messages,.assistant-sett
   max-height: none;
   overflow: hidden;
 }
-.exam-detail-dialog > .reading-dialog-body {
+.exam-dialog > .reading-dialog-body {
   min-height: 0;
   overflow: auto;
   overscroll-behavior: contain;
 }
 @media (max-width: 600px), (orientation: landscape) and (max-height: 500px) and (pointer: coarse) {
-  .exam-detail-dialog[open] {
+  .exam-dialog[open] {
     inset: 0;
     margin: 0;
     width: 100%;
@@ -69,6 +69,7 @@ dialog :is(.dialog-body,.reading-dialog-body,.assistant-messages,.assistant-sett
   }
 }
 .exam-dialog>header .exam-nav-back{display:inline-flex;align-items:center;gap:4px;flex:none;min-height:44px}
+.exam-dialog > header > .icon-button { min-width: 44px; min-height: 44px; align-self: flex-start; }
 .exam-dialog>header h2{flex:1;min-width:0;overflow-wrap:anywhere}
 .exam-photo-content{display:grid;grid-template-rows:minmax(0,1fr) auto;height:min(67dvh,720px);gap:8px}
 .exam-photo-content footer{text-align:center}
@@ -82,9 +83,6 @@ dialog :is(.dialog-body,.reading-dialog-body,.assistant-messages,.assistant-sett
 }
 .back-link-label > svg { flex: none; }
 .hw-details-heading .hw-back { min-height: 44px; padding: 0 6px; }
-@media (max-width: 370px) {
-  .study-shell .hw-details-heading .hw-date { flex-direction: column; align-items: flex-end; gap: 2px; }
-}
 
 .mistake-insights .mistake-advanced { display:flex; align-items:center; gap:10px; min-width:0; }
 .mistake-filter-trigger, .mistake-filter-summary { display:inline-flex; align-items:center; gap:6px; }

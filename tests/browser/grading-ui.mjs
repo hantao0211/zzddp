@@ -111,7 +111,11 @@ try {
   for (const width of [320, 390, 1280]) {
     await page.setViewportSize({width, height: 670});
     await homeBack.locator(".back-link-label > svg[aria-hidden=true]").waitFor();
-    assert.equal((await page.locator(".hw-details-heading input[type=date]").boundingBox()).height,44);
+    assert.equal(await dateInput.inputValue(),startingDate);
+    assert.equal(await dateBadge.locator("time").getAttribute("datetime"),startingDate);
+    assert.match(await dateBadge.locator("time small").innerText(),/^周[日一二三四五六]$/);
+    assert.equal((await dateInput.boundingBox()).height,44);
+    assert.equal((await dateBadge.boundingBox()).width,128);
     const backBox = await homeBack.boundingBox();
     const dateBox = await page.locator(".hw-details-heading .hw-date").boundingBox();
     assert.ok(backBox.height >= 44 && backBox.x + backBox.width <= dateBox.x);
@@ -240,7 +244,8 @@ try {
     await detail.getByRole("button",{name:"返回列表"}).click();
   }
   await page.setViewportSize({width:390,height:670});
-  await page.locator('.hw-date input').fill('2026-11-21');
+  await dateInput.fill('2026-11-21');
+  await dateBadge.getByText('周六',{exact:true}).waitFor();
   await panel.getByRole('button',{name:'先看需要留意的题',pressed:true}).waitFor();
   const nav=page.getByRole("navigation",{name:"学习资料导航"});
   const navMore=nav.getByRole("button",{name:"更多",exact:true});

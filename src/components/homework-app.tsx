@@ -176,6 +176,12 @@ export function HomeworkApp({ onDemo, onDateChange, active=true }: { onDemo: () 
     const task = snapshot?.report?.tasks.find(task => task.id === row.id);
     if (task) return { taskId: task.id, subject: task.subject, title: task.title, requirement: task.requirement, format: task.format, scopeSource: snapshot?.taskScopeSources?.[task.id] };
   }
+  function changeStudyDate(value: string) {
+    setDate(value);
+    setDetailId(null);
+    setMemoEdit(null);
+    setRowStatusId(null);
+  }
   function chooseUpload(kind: "memo" | "homework", row?: Pick<HomeworkSummaryRow,"id">) {
     pickedKind.current = kind;
     pickedTarget.current = row ? uploadTarget(row) : undefined;
@@ -205,7 +211,7 @@ export function HomeworkApp({ onDemo, onDateChange, active=true }: { onDemo: () 
     <main className="hw-main">
       {auth === "insecure" ? <section className="card hw-login"><ShieldCheck size={35} /><h1>安全打开学习空间</h1><p>真实作业上传和AI整理需要使用安全地址。</p><a className="button primary" href="https://14.103.24.55/">打开安全地址</a><p>以前在此浏览器保存的文件仍然保留。可在下方示例空间查看、下载，再到安全地址上传。</p><button className="text-button" onClick={onDemo}>查看此浏览器的旧记录</button></section> : auth === "locked" ? <section className="card hw-login"><span className="hw-login-icon"><Heart size={32} /></span><div className="eyebrow">欢迎回到小步学习</div><h1>今天，也向前一小步</h1><p>{accounts ? "使用家长或孩子的独立账号登录，与小助手共用登录状态。" : "输入家庭访问码，查看作业和学习资料。与小助手使用同一个访问码。"}</p>{accounts ? <AccountLogin legacy onSignedIn={() => void refresh()} /> : <form onSubmit={login}><label htmlFor="family-code">8位家庭访问码</label><input id="family-code" name="code" type="password" inputMode="numeric" autoComplete="off" pattern="[0-9]{8}" maxLength={8} value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))} required /><button className="button primary" disabled={busy}>{busy ? <LoaderCircle className="spin" size={18} /> : <ShieldCheck size={18} />}进入学习空间</button></form>}<p className="hw-secondary">这台设备会记住登录状态。公共设备使用后请退出。</p><a className="hw-account-entry" href="/admin/">家长登录与管理</a></section> : auth === "loading" ? <section className="card hw-login"><LoaderCircle className="spin" /><p>正在打开家庭学习空间…</p><button className="button primary compact" onClick={() => void refresh()}>重新连接</button></section> : <>
         {!detailsOpen ? <section className={`hw-simple-home ${summary ? "hw-home-with-summary" : ""}`} aria-label="交作业首页">
-          <StudyPageHeading className="hw-heading hw-simple-heading" title="我的课业手账" subtitle={<><Sun size={16} aria-hidden="true"/><span>新的一页，开始啦</span></>} aside={<StudyHeadingDate value={date} onChange={value=>{setDate(value);setDetailId(null);setMemoEdit(null);setRowStatusId(null);}}/>} />
+          <StudyPageHeading className="hw-heading hw-simple-heading" title="我的课业手账" subtitle={<><Sun size={16} aria-hidden="true"/><span>新的一页，开始啦</span></>} aside={<StudyHeadingDate value={date} onChange={changeStudyDate}/>} />
           <JournalGarden progress={active && !error && snapshot?.date === shanghaiDay() ? snapshot.gardenProgress : undefined} allowReadingReminder={reminderWindow} remindUpload={reminderWindow && !upload && !busy && !error && needsHomeworkUpload(snapshot, dayPlan.noHomework)} sticker={journal.sticker} onChoose={journal.choose} hint={snapshot && dayPlan.noHomework ? "今天没有作业，留点时间给喜欢的事。" : "今天的作业，小步陪你整理。"} />
           <div className="study-home-grid"><div className="study-home-main">{(!snapshot || !dayPlan.noHomework) && <div className="hw-upload-actions hw-primary-actions">
             <button onClick={() => chooseUpload("memo")}><span><ClipboardList size={25} aria-hidden="true"/></span><div><strong>拍备忘录</strong><small>记下今天要做什么</small></div></button>
@@ -238,7 +244,7 @@ export function HomeworkApp({ onDemo, onDateChange, active=true }: { onDemo: () 
           {(!summary || !summary.rows.length) && <button className="hw-details-link" onClick={() => showDetails(true)}><FolderOpen size={18} />查看详情</button>}
           </div></div>
         </section> : <section className="hw-details-page" aria-label="作业详情">
-          <div className="hw-details-heading"><button className="text-button hw-back" onClick={() => showDetails(false)}><BackLabel>{examReturn.current?.viewerId===viewer?.id&&examReturn.current?"返回试卷":"返回首页"}</BackLabel></button><label className="hw-date">作业日期<input type="date" value={date} onChange={(e) => { if (e.target.value) { setDate(e.target.value); setDetailId(null); setMemoEdit(null); setRowStatusId(null); } }} /></label></div>
+          <div className="hw-details-heading"><button className="text-button hw-back" onClick={() => showDetails(false)}><BackLabel>{examReturn.current?.viewerId===viewer?.id&&examReturn.current?"返回试卷":"返回首页"}</BackLabel></button><StudyHeadingDate value={date} onChange={changeStudyDate} /></div>
         <HomeworkNavigation tab={tab} grading={!!snapshot?.grading?.enabled} change={setTab} refresh={()=>void refresh()} />
         {(tab === "today" || tab === "archive") && snapshot && <div className={`hw-status ${snapshot.status === "failed" ? "hw-status-error" : ""}`} role="status">{snapshot.pending ? <LoaderCircle size={20} className="spin" /> : <Sparkles size={20} />}<div><strong>{labels[snapshot.status] || "正在整理"}</strong><p>{snapshot.note}</p>{snapshot.pending && snapshot.report && <p>下方暂时展示上一次结果，新资料整理完成后会自动更新。</p>}</div>{snapshot.status === "failed" && canManage && <button className="button primary compact" onClick={retryDay}>重新查缺</button>}</div>}
         {(tab === "today" || tab === "archive") && snapshot?.reviewPolicy && <section className="hw-review-policy"><details><summary>预习复习按学习痕迹检查</summary><p>{snapshot.reviewPolicy.description}</p></details>{canManage && <button className="button primary compact" onClick={retryDay}>重新整理</button>}{oldReviewTasks.length > 0 && !snapshot.pending && <p>部分预习、复习还是旧版结果，尚未按新规则判断。重新整理会由AI检查已上传照片，无需重新上传。</p>}</section>}
