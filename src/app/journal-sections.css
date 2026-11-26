@@ -337,3 +337,6 @@
   background: var(--status-bg); font-size: .8125rem;
 }
 .hw-task-status > svg { width: 15px; height: 15px; }
+
+.hw-upload-status { flex-shrink: 0; gap: 4px; font-size: .8125rem; }
+.hw-upload-status > svg { width: 15px; height: 15px; }

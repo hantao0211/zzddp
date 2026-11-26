@@ -98,6 +98,8 @@ input:is([type=checkbox], [type=radio]), progress { accent-color: var(--accent);
   }
   .card, .dialog { background: var(--journal-paper); color: var(--ink); border-color: var(--border); }
   .pill, .count-label { background: var(--accent-soft); color: var(--muted); }
+  .pill.neutral, .pill.light { background: var(--field-bg); color: var(--muted); }
+  .pill.amber { background: var(--theme-warm-soft); color: var(--theme-warm-text); }
   .journal-stickers button:nth-child(2) { color: var(--theme-warm-text); }
   .journal-stickers button:nth-child(3) { color: var(--theme-purple-text); }
   .journal-pot { background: var(--action-bg); }

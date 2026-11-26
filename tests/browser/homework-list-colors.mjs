@@ -12,6 +12,15 @@ const tasks = ["语文","数学","英语"].map((subject,i) => ({
   ...(i ? {} : {selfCompletion:{role:"child",confirmedBy:"test",confirmedAt:"2026-11-20"}})
 }));
 const counts = {correct:0,wrong:0,passedWithNote:1,blank:0,feedback:0,uncertain:0,failed:0,pending:0,incomplete:0};
+const luminance = color => {
+  const [r,g,b] = color.match(/\d+/g).map(Number).map(n => n/255)
+    .map(n => n<=.04045 ? n/12.92 : ((n+.055)/1.055)**2.4);
+  return .2126*r+.7152*g+.0722*b;
+};
+const uploads = ["processed","recognizing","queued","needs_rescan","failed"].map((status,i) => ({
+  id:i ? "qa-upload-"+i : "qa-memo", kind:i ? "homework" : "memo",
+  status, subjects:["英语"], files:[], issues:[], date:"2026-11-20"
+}));
 try {
   const page = await browser.newPage({viewport:{width:390,height:844},isMobile:true,hasTouch:true,ignoreHTTPSErrors:true});
   await page.route("**/assistant-api/**", route => {
@@ -21,7 +30,7 @@ try {
     if (url.pathname.endsWith("/status")) return send({authenticated:true,available:true,viewer:{id:"qa",name:"模拟",role:"parent"}});
     if (url.pathname.endsWith("/learning/state")) return send({
       date,status:"processed",pending:false,dates:[date],quota:{calls:0,limit:60},
-      uploads:[{id:"qa-memo",kind:"memo",status:"processed",subjects:[],files:[],issues:[]}],
+      uploads,
       report:{date,memoId:"qa-memo",tasks,unclassified:[],unassigned:[],uncertainties:[],familyNotes:[]},
       grading:{...counts,enabled:true,pages:2,finished:2,tasks:{"1":counts,"2":{...counts,wrong:1}}}
     });
@@ -37,18 +46,37 @@ try {
     await page.emulateMedia({colorScheme:scheme});
     const colors = await list.evaluate(el => Array.from(el.querySelectorAll(".subject-icon,.hw-task-status"), badge => {
       const css = getComputedStyle(badge);
-      const luminance = color => {
-        const channels = color.match(/\d+/g).slice(0,3).map(n => Number(n)/255).map(n => n <= .04045 ? n/12.92 : ((n+.055)/1.055)**2.4);
-        return .2126*channels[0]+.7152*channels[1]+.0722*channels[2];
-      };
-      return [luminance(css.backgroundColor),luminance(css.color),css.backgroundColor];
+      return [css.backgroundColor,css.color];
     }));
     assert.equal(colors.length,6);
-    for (const [bg,fg] of colors) {
+    for (const [background,foreground] of colors) {
+      const bg=luminance(background), fg=luminance(foreground);
       assert.ok((Math.max(bg,fg)+.05)/(Math.min(bg,fg)+.05) >= 4.5);
       if (scheme==="dark") assert.ok(bg < .12);
     }
-    assert.equal(new Set([colors[1][2],colors[3][2],colors[5][2]]).size,3);
+    const rows = page.locator(".hw-file-row");
+    // A theme switch transitions the button surface; measure its settled color.
+    await rows.evaluateAll(nodes=>Promise.all(nodes.flatMap(node=>node.getAnimations().map(animation=>animation.finished))));
+    assert.deepEqual(await rows.locator(".hw-upload-status").allTextContents(),
+      ["已整理","AI识别中","排队中","需要补拍或调整","整理未完成"]);
+    const uploadColors = await rows.locator(".hw-upload-status").evaluateAll(labels => labels.map(label => {
+      const style = getComputedStyle(label);
+      return [style.backgroundColor,style.color];
+    }));
+    for (const [index,row] of (await rows.all()).entries()) {
+      const rowBg = await row.evaluate(el=>getComputedStyle(el).backgroundColor);
+      const bg=luminance(rowBg), fg=luminance(uploadColors[index][1]);
+      assert.ok((Math.max(bg,fg)+.05)/(Math.min(bg,fg)+.05)>=4.5, [scheme,index,rowBg,uploadColors[index][1]].join(" "));
+    }
+    assert.ok(uploadColors.every(([bg]) => bg==="rgba(0, 0, 0, 0)"));
+    assert.equal(new Set(uploadColors.map(([,fg])=>fg)).size,4);
+    await rows.first().click();
+    const detail = page.getByRole("dialog");
+    const tag = detail.locator(".hw-upload-status");
+    assert.equal(await tag.textContent(),"已整理");
+    assert.deepEqual(await tag.evaluate(el=>[getComputedStyle(el).backgroundColor,getComputedStyle(el).color]),uploadColors[0]);
+    await detail.getByRole("button",{name:"关闭",exact:true}).click();
+    assert.equal(new Set([colors[1][0],colors[3][0],colors[5][0]]).size,3);
     assert.equal(await list.locator(".hw-task-count").evaluate(el=>getComputedStyle(el).backgroundColor),"rgba(0, 0, 0, 0)");
     assert.ok(await list.evaluate(el=>el.scrollWidth<=el.clientWidth));
   }
