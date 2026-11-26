@@ -277,6 +277,10 @@
     .study-shell .growth-activities .economy-grid > article { padding: 15px 12px; }
     .study-shell .growth-activities .economy-grid h3 { font-size: 16px; }
     .study-shell .reading-wish-row { padding: 15px; }
+    .study-shell .reading-main .reading-wishes > .reading-section-heading { margin-bottom: 12px; }
+    .reading-wishes .reading-wish-row { margin-top: 10px; padding: 11px 14px; }
+    .reading-wishes .reading-wish-heading { margin-bottom: 5px; }
+    .reading-wishes .reading-wish-result { gap: 4px 14px; margin: 6px 0 0; }
   }
 }
 
