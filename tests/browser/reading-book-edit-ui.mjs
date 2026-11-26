@@ -11,7 +11,7 @@ const state=()=>({today:'2026-11-23',viewer,books:[book],logs:[log],rules:{daily
 const writes=[],errors=[],browser=await (process.env.SMOKE_BROWSER==='webkit'?webkit:chromium).launch({headless:true});
 try{
  const page=await browser.newPage({ ignoreHTTPSErrors:true, colorScheme:process.env.SMOKE_COLOR_SCHEME || 'light',viewport:{width:390,height:844},hasTouch:true,isMobile:true});page.on('pageerror',e=>errors.push(e.message));
- await page.route('**/assistant-api/**',async route=>{
+ const mockApi=async route=>{
   const req=route.request(),path=new URL(req.url()).pathname,send=(data,status=200)=>route.fulfill({status,contentType:'application/json',body:JSON.stringify(data)});
   if(path.endsWith('/status'))return send({authenticated:true,available:true,accounts:true,viewer});
   if(path.endsWith('/reading/state'))return send(state());
@@ -27,7 +27,8 @@ try{
    const {revision,...fields}=value;book={...book,...fields,revision:'d'.repeat(64)};return send(book);
   }
   throw Error('Unexpected mocked API '+path);
- });
+ };
+ await page.route('**/assistant-api/**',mockApi);
  await page.goto(base+'/reading/',{waitUntil:'networkidle'});
  for(const width of [320,390,768,1280]){
   await page.setViewportSize({width,height:844});
@@ -40,7 +41,10 @@ try{
   });
   console.log('FORM_DENSITY',JSON.stringify(measures));
   assert.equal(measures.overflow,false);
-  for(const height of [measures.book,measures.date,measures.pages]) assert.ok(height>=44 && height<=46, 'Touch fields keep a compact, tappable height');
+  assert.deepEqual([measures.book,measures.date,measures.pages],[44,44,44]);
+  const picker=reading.getByRole('combobox',{name:'正在读的书'});
+  assert.equal(await picker.evaluate(el=>getComputedStyle(el).appearance),'none');
+  await picker.selectOption(bookId);
   assert.equal(measures.gap,'3px');
   assert.ok(measures.textarea>=72,'Summary still fits three lines');
   if(width<=390)assert.ok(measures.formToSummary<=365,'Summary is visible earlier on phones');
@@ -50,6 +54,7 @@ try{
  await page.getByLabel('开始页',{exact:true}).fill('49');await page.getByLabel('结束页',{exact:true}).fill('52');await page.getByLabel('时长（分钟）',{exact:true}).fill('12');await page.locator('#reading-summary').fill('还没提交的阅读概括。');
  await page.locator('.reading-library > summary').click();await page.getByRole('button',{name:`修改${book.title}的书籍信息`,exact:true}).click();
  const dialog=page.getByRole('dialog',{name:'修改书籍信息',exact:true});await dialog.waitFor();assert.equal(await dialog.getByLabel('书名',{exact:true}).inputValue(),book.title);assert.equal(await dialog.getByLabel('总页数（选填）',{exact:true}).inputValue(),'241');
+ for(const field of ['书名','总页数（选填）']) assert.equal((await dialog.getByLabel(field,{exact:true}).boundingBox()).height,44);
  await dialog.getByLabel('书名',{exact:true}).fill('更正后的模拟书名');await dialog.getByLabel('总页数（选填）',{exact:true}).fill('300');
  await dialog.getByRole('button',{name:'保存书籍信息',exact:true}).click();await dialog.locator('.form-error[role=alert]').filter({hasText:'模拟网络失败'}).waitFor();assert.equal(await dialog.getByLabel('书名',{exact:true}).inputValue(),'更正后的模拟书名');
  conflictNext=true;await dialog.getByRole('button',{name:'保存书籍信息',exact:true}).click();await dialog.getByRole('button',{name:'读取最新信息，保留我的填写',exact:true}).click();
@@ -60,5 +65,20 @@ try{
  await page.locator('.reading-notice').filter({hasText:'书籍信息已更新，阅读记录和小脚步都保留了。'}).waitFor();await page.locator('.reading-books').getByRole('heading',{name:book.title,exact:true}).waitFor();await page.locator('.reading-books').getByText('已记录22 / 300页 · 25分钟',{exact:true}).waitFor();assert.equal(book.id,bookId);assert.equal(book.logCount,1);
  assert.equal(await page.getByLabel('开始页',{exact:true}).inputValue(),'49');assert.equal(await page.getByLabel('结束页',{exact:true}).inputValue(),'52');assert.equal(await page.getByLabel('时长（分钟）',{exact:true}).inputValue(),'12');assert.equal(await page.locator('#reading-summary').inputValue(),'还没提交的阅读概括。');
  await page.reload({waitUntil:'networkidle'});await page.locator('.reading-library > summary').click();await page.getByRole('button',{name:`修改${book.title}的书籍信息`,exact:true}).click();await dialog.getByLabel('总页数（选填）',{exact:true}).fill('40');await dialog.getByRole('button',{name:'保存书籍信息',exact:true}).click();await dialog.locator('.form-error[role=alert]').filter({hasText:'48页'}).waitFor();assert.equal(await dialog.getByLabel('总页数（选填）',{exact:true}).inputValue(),'40');await dialog.getByRole('button',{name:'取消',exact:true}).click();assert.equal(book.totalPages,300);
+ const desktop=await browser.newPage({ignoreHTTPSErrors:true,viewport:{width:1280,height:900}});
+ await desktop.route('**/assistant-api/**',mockApi);
+ await desktop.goto(base+'/reading/');
+ const desktopForm=desktop.locator('.reading-entry-fields');
+ await desktopForm.waitFor();
+ const heights=await desktopForm.locator('select,input[type=date],input[type=number]').evaluateAll(fields=>fields.map(el=>el.getBoundingClientRect().height));
+ assert.deepEqual(heights,[36,36,36,36,36]);
+ await desktop.route('**/assistant-api/status',route=>route.fulfill({json:{authenticated:false,setupRequired:false}}));
+ await desktop.goto(base+'/admin/');
+ for(const name of ['登录名','密码']) {
+   const input=desktop.getByLabel(name,{exact:true});
+   await input.waitFor();
+   assert.equal((await input.boundingBox()).height,36);
+ }
+ await desktop.close();
  assert.equal(state().growth.balance,2);assert.deepEqual(errors,[]);assert.ok(writes.length>=4);console.log('READING_BOOK_EDIT_UI_OK=true child-pencil-entry,prefilled-metadata,save-retry-keeps-draft,concurrent-edit-merges-untouched-fields,all-five-fields,progress-and-reading-draft-preserved,reload,too-small-page-error,cancel,320-390-768-1280');
 }finally{await browser.close();}

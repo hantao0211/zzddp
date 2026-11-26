@@ -103,6 +103,7 @@ try {
   for (const width of [320, 390, 1280]) {
     await page.setViewportSize({width, height: 670});
     await homeBack.locator(".back-link-label > svg[aria-hidden=true]").waitFor();
+    assert.equal((await page.locator(".hw-details-heading input[type=date]").boundingBox()).height,44);
     const backBox = await homeBack.boundingBox();
     const dateBox = await page.locator(".hw-details-heading .hw-date").boundingBox();
     assert.ok(backBox.height >= 44 && backBox.x + backBox.width <= dateBox.x);
@@ -282,6 +283,7 @@ try {
   assert.equal(await filtersDialog.getByRole("button",{name:"数与分数"}).getAttribute("aria-pressed"),"false");
   await filtersDialog.getByRole("button",{name:"数与分数"}).click();
   await filtersDialog.getByRole("button",{name:"日期范围"}).click();
+  assert.equal((await filtersDialog.getByLabel("开始日期").boundingBox()).height,44);
   await filtersDialog.getByLabel("开始日期").fill("2026-11-01");
   await filtersDialog.getByRole("button",{name:/应用筛选/}).click();
   await book.getByRole("heading",{name:"我的错题本 · 2题",exact:true}).waitFor();

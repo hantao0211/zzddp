@@ -6,21 +6,42 @@
   --form-row-gap: 8px;
 }
 
-@media (pointer: coarse) {
+@media (pointer: coarse), (max-width: 600px) {
   :root { --form-field-height: 44px; }
 }
 
 @media screen {
-  :is(.reading-main, .reading-dialog, .hw-dialog, .hw-upload-form, .hw-login,
-      .admin-app, .account-login, .exam-form, .hw-scope-form, .homework-day-settings,
-      .mistake-filter-dates, .assistant-settings, .form-row)
-    :is(input:not([type]), input[type="text"], input[type="number"], input[type="date"],
-        input[type="password"], input[type="search"], input[type="email"], input[type="url"],
-        input[type="tel"], input[type="time"], select:not([multiple]):not([size])) {
+  /* Applies to form fields in pages and portals, including new forms. */
+  :root :is(input:not([type]), input[type="text"], input[type="number"], input[type="date"],
+      input[type="time"], input[type="month"], input[type="week"], input[type="datetime-local"],
+      input[type="password"], input[type="search"], input[type="email"], input[type="url"],
+      input[type="tel"], select:not([multiple]):is(:not([size]), [size="1"])):not(.study-heading-date > input) {
     box-sizing: border-box;
+    height: var(--form-field-height);
     min-height: var(--form-field-height);
     padding-block: 4px;
     line-height: 1.35;
+  }
+  /* Paint the indicator ourselves so iOS draws the full CSS box. The
+     select remains native for tapping, keyboard navigation and its picker. */
+  :root select:not([multiple]):is(:not([size]), [size="1"]) {
+    -webkit-appearance: none;
+    appearance: none;
+    padding-inline-end: 2rem;
+    border: 1px solid var(--field-border);
+    border-radius: 10px;
+    background-color: var(--field-bg);
+    background-image: linear-gradient(45deg, transparent 50%, currentColor 50%),
+                      linear-gradient(135deg, currentColor 50%, transparent 50%);
+    background-position: right 15px center, right 10px center;
+    background-repeat: no-repeat;
+    background-size: 5px 5px;
+  }
+  @media (forced-colors: active) {
+    :root select:not([multiple]):is(:not([size]), [size="1"]) {
+      appearance: auto;
+      background-image: none;
+    }
   }
 
   :is(.reading-main, .reading-dialog, .hw-dialog, .exam-form, .admin-app) textarea {
