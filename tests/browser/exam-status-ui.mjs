@@ -20,7 +20,10 @@ try{
     {id:"first-page",number:1,status:"failed",note:"原图已保存，可重试本页。",coverage:"partial"},
     {id:"second-page",number:2,status:"done",note:"",coverage:"complete"}
   ];
-  const questions=Array.from({length:24},(_,i)=>({id:"q"+i,pageId:"second-page",label:String(i+1),question:"模拟填空题",verdict:i<3?"uncertain":"correct"}));
+  const questions=Array.from({length:24},(_,i)=>({id:"q"+i,pageId:"second-page",label:i===1?"2(1)":String(i+1),
+    question:i===0?"用乘法分配律填空。":i===1?"已知甲数是3.5，乙数是多少？":"模拟填空题",
+    knowledgePoints:i===0?["乘法分配律"]:[],
+    feedback:i===1?{status:"running"}:undefined,verdict:i<3?"uncertain":"correct"}));
   let retries=0;
   page.on("pageerror",e=>errors.push(e.message));
   await page.context().route("**/assistant-api/**",route=>{
@@ -116,6 +119,15 @@ try{
     }
     const body=modal.locator(":scope > .reading-dialog-body");
     const header=modal.locator(":scope > header");
+    const firstQuestion=modal.locator("#exam-open-q0");
+    await firstQuestion.getByText("第1题 · 乘法分配律",{exact:true}).waitFor();
+    await firstQuestion.getByText("用乘法分配律填空。",{exact:true}).waitFor();
+    const secondQuestion=modal.locator("#exam-open-q1");
+    await secondQuestion.getByText("第2题（1） · 已知甲数是3.5",{exact:true}).waitFor();
+    await secondQuestion.getByText("正在看原卷 · 乙数是多少？",{exact:true}).waitFor();
+    await secondQuestion.click();
+    await modal.getByRole("heading",{name:"第2题（1） · 已知甲数是3.5",exact:true}).waitFor();
+    await modal.getByRole("button",{name:"返回题目列表"}).click();
     for (const [width,height,full] of [[320,670,true],[390,844,true],[844,390,true],[1024,844,false]]) {
       await page.setViewportSize({width,height});
       const bounds=await modal.boundingBox();

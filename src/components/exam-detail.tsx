@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { BookOpen, Check, ChevronRight, Clock3, FileImage, MessageCircle, Pencil, Plus, RotateCw, ScanLine } from "lucide-react";
 import { examKinds, examReadingChecks, type ExamDetail, type ExamMeta, type ExamQuestion, type Observation } from "@/domain/assessment";
 import { homeworkPost, homeworkRequest } from "@/services/homework-gateway";
+import { examQuestionHeading } from "@/domain/exam-question-heading";
 import { ExamScanIcon } from "./exam-scan-icon";
 
 
@@ -54,8 +55,9 @@ export function ExamWorkspace({detail,canManage,busy,act,notify,openMistakes,put
   const page=pages.find(p=>p.id===selection?.pageId);
   if(selection&&page){
     const q=questions.find(q=>q.id===selection.id);
+    const title=q?examQuestionHeading(q):null;
     return <div className="exam-workspace"><div className="exam-tools"><Original open={openPhoto} pageId={page.id} number={page.number}/></div>
-      <div><small>第 {page.number} 页</small><h3 ref={heading} tabIndex={-1}>{q?.label??"补录题目"}</h3></div>
+      <div><small>第 {page.number} 页</small><h3 ref={heading} tabIndex={-1}>{title?.number??"补录题目"}{title?.preview&&" · "+title.summary}</h3></div>
       <QuestionDesk key={q?.id??page.id} q={q} mode={selection.form??(q?"view":"edit")} setMode={form=>select({...selection,form})} pageId={page.id} canManage={canManage} subject={exam.subject} busy={busy} act={act} notify={notify} onAdded={()=>select(null)}/>
     </div>;
   }
@@ -95,7 +97,16 @@ export function ExamWorkspace({detail,canManage,busy,act,notify,openMistakes,put
             {addQuestion}
           </div>}
         </div>}
-        {rows.map(q=><button className="exam-qrow" id={"exam-open-"+q.id} key={q.id} onClick={()=>open(p.id,q.id)}><span><strong>{q.label}</strong><small>{q.feedback?feedbackLabels[q.feedback.status]:q.question}</small></span><span className={"exam-verdict v-"+q.verdict}>{resultLabels[q.verdict]}</span><ChevronRight size={15}/></button>)}
+        {rows.map(q=>{
+          const {number,summary,preview}=examQuestionHeading(q);
+          return <button className="exam-qrow" id={"exam-open-"+q.id} key={q.id} onClick={()=>open(p.id,q.id)}>
+            <span className="exam-row-copy">
+              <strong className="exam-question-heading">{number}{summary&&<> · {summary}</>}</strong>
+              {(preview||q.feedback)&&<small>{q.feedback&&feedbackLabels[q.feedback.status]}{q.feedback&&preview&&" · "}{preview}</small>}
+            </span>
+            <span className={"exam-verdict v-"+q.verdict}>{resultLabels[q.verdict]}</span><ChevronRight size={15} aria-hidden="true"/>
+          </button>;
+        })}
         {!failed&&addQuestion}
       </section>;
     })}

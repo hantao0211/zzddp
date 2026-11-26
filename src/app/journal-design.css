@@ -646,3 +646,13 @@
   min-height:44px; margin:0; padding-inline:8px;
 }
 .exam-add-question { min-height:44px; margin-top:4px; }
+
+.exam-row-copy { min-width: 0; }
+.exam-question-heading {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  line-height: 1.45;
+}
