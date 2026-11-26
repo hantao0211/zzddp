@@ -1,3 +1,4 @@
+import { questionFromParts, assembleReadings, cropGeometry } from "../src/server/practice/exam-local-reading";
 import { checkRereadEvidence } from "../src/domain/assessment";
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -220,7 +221,7 @@ test("marked exams retain independent pages, scoped mistakes, teacher evidence a
   } finally {f.close();}
 });
 
-test("a truncated exam page retries once while page and archive status follow real work",async t=>{
+test("exam intake keeps clear outcomes and enlarges disputed writing, resuming cached groups after a failure",async t=>{
   const f=setup();
   try{
     const exams=f.store.exams;
@@ -229,28 +230,41 @@ test("a truncated exam page retries once while page and archive status follow re
     const result={coverage:"complete",note:"",questions:[]};
     exams.savePage(two.id,result);
     f.store.db.prepare("UPDATE exam_pages SET status='queued' WHERE id=?").run(one.id);
-    t.mock.method(exams as unknown as {aiImage:(id:string)=>unknown},"aiImage",async(id:string)=>({fileId:id,mimeType:"image/jpeg",base64:jpeg()}));
-    const targets=Array.from({length:7},(_,i)=>({label:String(i+1),anchor:"第"+(i+1)+"题"}));
+    const crops:number[][]=[];
+    t.mock.method(exams as unknown as {aiImage:(id:string,region?:number[])=>unknown},"aiImage",async(id:string,region?:number[])=>{
+      if(region)crops.push(region);
+      return {fileId:id,mimeType:"image/jpeg",base64:jpeg()};
+    });
+    const targets=Array.from({length:7},(_,i)=>({label:String(i+1),anchor:"第"+(i+1)+"题",box:[10,30,400,130],slots:1}));
     const calls:string[]=[];
     const worker=new PracticeWorker(f.store,()=>({async run(task,schema,metadata,images){
-      assert.equal(images?.[0].fileId,one.id);
+      assert.ok(images?.length);
       check("整理中");
-      if(task==="index_exam_page"){
+      if(task==="read_marked_exam"){
+        if(!calls.length){calls.push("attempt");throw new AIServiceError("NETWORK_ERROR",true,"模拟连接中断");}
+        return schema.parse({...result,questions:[{label:"清晰题"},...targets].map(({label},i)=>({label,
+          question:"第"+label+"题",studentAnswer:"初读",teacherMark:"勾",expectedAnswer:"",correction:"",
+          verdict:i?"uncertain":"correct",confident:i===0,knowledgePoints:[],cause:"原因待确认",causeExplanation:""}))});
+      }
+      if(task==="locate_exam_answers"){
+        assert.deepEqual((metadata as {requested:{label:string}[]}).requested.map(t=>t.label),targets.map(t=>t.label));
         calls.push("index");
         return schema.parse({targets,coverage:"complete",note:""});
       }
       const group=(metadata as {targets?:Array<{label:string,targetId:number}>}).targets;
-      if(!group){
-        calls.push("full");
-        throw new AIServiceError("INCOMPLETE_RESPONSE",true,"legacy incomplete");
-      }
+      assert.ok(group);assert.equal(task,"transcribe_exam_answers");
+      assert.deepEqual(images?.map(i=>i.fileId),group.map(t=>"target-"+t.targetId));
       const start=group[0].label;
       calls.push(start);
       const questions=group.map(({label})=>({label,question:"模拟题"+label,studentAnswer:"1",teacherMark:"勾",
         expectedAnswer:"",correction:"",verdict:"correct",confident:true,knowledgePoints:[],cause:"原因待确认",causeExplanation:""}));
       if(start==="6" && calls.length===4)questions.pop();
-      const groups=questions.map(({label,...q})=>({targetId:Number(label),questions:[{...q,part:""}]}));
-      if(start==="6" && groups.length===2)groups[1].questions=[{...groups[1].questions[0],part:"(1)"},{...groups[1].questions[0],part:"(2)"}];
+      const groups=questions.map(({label,...q})=>({targetId:Number(label),located:true,questions:[{...q,part:"",mark:"tick"}]}));
+      if(start==="6" && groups.length===2)groups[1]={targetId:7,located:false,questions:[]};
+      if(start==="7"){
+        assert.deepEqual(crops.at(-1),[0,0,490,215]);
+        groups[0].questions=[{...groups[0].questions[0],part:"(1)"},{...groups[0].questions[0],part:"(2)"}];
+      }
       return schema.parse({...result,groups});
     }}));
     function check(status:string){
@@ -259,13 +273,13 @@ test("a truncated exam page retries once while page and archive status follow re
     }
     await worker.tick();check("等待识读");
     await worker.tick();check("识读未完成");
-    await worker.tick();assert.deepEqual(calls,["full","index","1","6"]);
+    await worker.tick();assert.deepEqual(calls,["attempt","index","1","6"]);
     assert.equal(exams.detail(paper.exam.id).questions.length,0);
     assert.equal(exams.list(0,10).items[0].firstFailedPage,1);
     exams.retry(one.id);check("等待识读");
     await worker.tick();check("已整理");
-    assert.deepEqual(calls,["full","index","1","6","6"]);
-    assert.deepEqual(exams.detail(paper.exam.id).questions.map(q=>q.label),[...targets.slice(0,6).map(t=>t.label),"7 · (1)","7 · (2)"]);
+    assert.deepEqual(calls,["attempt","index","1","6","6","7"]);
+    assert.deepEqual(exams.detail(paper.exam.id).questions.map(q=>q.label),["清晰题",...targets.map(t=>t.label)]);
     assert.equal(exams.page(two.id).attempts,0);
   }finally{f.close();}
 });
@@ -362,9 +376,14 @@ test("exam explanations use the selected photo, keep the verdict independent and
     const seen:string[][]=[];
     const ai:StructuredAI={async run(task,schema,raw,images){
       const input=raw as {questionId:string;familyNote:string;readingChecks:string[]};
+      if(task==="locate_exam_answers")return schema.parse({targets:[{label:value.label,anchor:value.question,box:[10,20,340,150],slots:1}],coverage:"complete",note:""});
+      if(task==="transcribe_exam_answers"){
+        assert.ok(!JSON.stringify(input).includes(cmd.note));
+        return schema.parse({groups:[{targetId:1,located:true,questions:[{...value,part:"",mark:"tick"}]}]});
+      }
       if(task==="explain_exam_reading"){
-        assert.equal(input.familyNote,cmd.note);assert.equal(images?.[0].fileId,pageId);assert.equal(images?.length,5);
-        return schema.parse({answerMarks:[{position:"作答处",handwriting:"两种写法",mark:"tick"}],questionId:q.id,located:true,reply:"红勾在这题作答下方。",evidence:"第2小题答案下方有勾。",check:"marks",change:{...value,verdict:"correct",teacherMark:"作答下方有勾"}});
+        assert.equal(input.familyNote,cmd.note);assert.equal(images?.[0].fileId,pageId);assert.equal(images?.length,2);
+        return schema.parse({answerMarks:[{position:"作答处",handwriting:"解释时误改的字",mark:"cross"}],questionId:q.id,located:true,reply:"红勾在这题作答下方。",evidence:"第2小题答案下方有勾。",check:"marks",change:{...value,verdict:"correct",teacherMark:"作答下方有勾"}});
       }
       assert.equal(task,"read_marked_exam");seen.push(input.readingChecks);
       assert.ok(!JSON.stringify(input).includes(cmd.note));
@@ -373,6 +392,8 @@ test("exam explanations use the selected photo, keep the verdict independent and
     const worker=new PracticeWorker(f.store,()=>ai);await worker.tick();
     const feedback=question().feedback!;
     assert.equal(feedback.status,"done");assert.equal(question().verdict,"uncertain");
+    assert.equal(feedback.result?.change?.studentAnswer,"1处：两种写法");
+    assert.equal(feedback.result?.change?.verdict,"correct");
     assert.deepEqual(exams.readingChecks("数学"),[]);
     exams.learn(pageId,{id:feedback.id,enabled:true});
     const next=async(sha:string,subject:string)=>{const page=paper(sha,subject).pages[0];f.store.db.prepare("UPDATE exam_pages SET status='queued' WHERE id=?").run(page.id);await worker.tick();};
@@ -427,4 +448,22 @@ test("mixed teacher marks take precedence over a proposed all-correct reread and
   assert.equal(review.change?.studentAnswer,"甲：12；乙：原答看不清");
   assert.equal(checkRereadEvidence({...old,answerMarks:[first,{...second,mark:"tick"}]},change.question).change?.verdict,"correct");
   assert.equal(checkRereadEvidence({...old,answerMarks:[first]},change.question).change,null);
+});
+
+test("local exam transcription keeps visible ink independent from marks and the printed reference",()=>{
+  const target={targetId:1,label:"二（1）",anchor:"填数",slots:2,box:[0,0,1000,1000] as [number,number,number,number]};
+  const base={part:"甲",question:"填数",studentAnswer:"9",teacherMark:"红勾",mark:"tick" as const,
+    expectedAnswer:"",correction:"",knowledgePoints:[],cause:"原因待确认" as const,causeExplanation:""};
+  const read=(questions:Parameters<typeof assembleReadings>[1]["groups"][0]["questions"])=>assembleReadings([target],
+    {groups:[{targetId:1,located:true,questions}]});
+  const result=read([base,{...base,part:"乙",studentAnswer:"0",teacherMark:"红叉",mark:"cross",expectedAnswer:"8"}]);
+  assert.deepEqual(result.questions.map(q=>[q.studentAnswer,q.verdict]),[["9","correct"],["0","wrong"]]);
+  const question=questionFromParts(target,result.questions);
+  assert.equal(question.verdict,"wrong");
+  assert.equal(question.studentAnswer,"第1处：9；第2处：0");
+  assert.equal(question.expectedAnswer,"第2处：8");
+  assert.equal(read([base]).partial,true);
+  assert.equal(read([base]).questions[0].verdict,"uncertain");
+  assert.equal(read([base,{...base,part:"乙",mark:"unmarked",teacherMark:""}]).questions[1].verdict,"uncertain");
+  assert.equal(cropGeometry([0,0,1000,1000],1900,2700),"1900x2700+0+0");
 });

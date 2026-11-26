@@ -2,18 +2,17 @@ import { record, failureCode } from "../diagnostics/events";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync, renameSync } from "node:fs";
 import { join } from "node:path";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import type { IncomingMessage } from "node:http";
 import { z } from "zod";
-import { checkRereadEvidence, examReadingChecks, examReread, emptyExam, readExamHints, examMeta, examManifest, markedPage, observation, type ExamMeta, type ExamRecord, type ExamPage, type ExamDetail, type Observation } from "../../domain/assessment";
+import { printedBlankCount, checkRereadEvidence, examReadingChecks, examReread, emptyExam, readExamHints, examMeta, examManifest, markedPage, observation, type ExamMeta, type ExamRecord, type ExamPage, type ExamDetail, type Observation } from "../../domain/assessment";
 import { AIServiceError, type AIImage, type StructuredAI } from "../ai/provider";
 import { detectMime } from "../homework/images";
 import { HomeworkError } from "../homework/store";
 import type { HomeworkExecution } from "../homework/execution";
 import type { PracticeStore } from "./store";
+import { questionFromParts, assembleReadings, paperLayout, localReadings, type ReadingTarget, type Region } from "./exam-local-reading";
+import { examImage, type ExamView } from "./exam-image";
 
-const convert = promisify(execFile);
 const digest = (v: string|Buffer) => createHash("sha256").update(v).digest("hex");
 type StoredPage = ExamPage & {exam_id:string; sha:string; bytes:number; mime:string; attempts:number};
 function examStatus(states:string[]){
@@ -138,11 +137,12 @@ export class Assessments {
       const readingChecks=this.readingChecks(meta.subject);
       const context={subject:meta.subject,readingChecks};
       const key=digest(JSON.stringify([p.sha,meta.subject,readingChecks]));
-      const previousCutoff=p.attempts>0 && db.prepare(`SELECT 1 FROM homework_ai_calls WHERE page_id=?
-        AND task='read_marked_exam' AND error_code IN ('INCOMPLETE_RESPONSE','EXAM_OUTPUT_LIMIT','EXAM_STOP_UNKNOWN') LIMIT 1`).get(p.id);
-      const result=previousCutoff
-        ? await this.readPageInGroups(execution,ai,image,key,context)
-        : await execution.cached("marked-page-v4:"+key,()=>ai.run("read_marked_exam",markedPage,context,[image]));
+      const legacyProgress=p.attempts>0&&db.prepare("SELECT 1 FROM analysis_cache WHERE key=?").get("marked-groups-v1:"+key+":index");
+      const cutoff=p.attempts>0&&db.prepare(`SELECT 1 FROM homework_ai_calls WHERE page_id=? AND task='read_marked_exam'
+        AND error_code IN ('INCOMPLETE_RESPONSE','EXAM_OUTPUT_LIMIT','EXAM_STOP_UNKNOWN') LIMIT 1`).get(p.id);
+      const first=legacyProgress?await this.readPageInGroups(execution,ai,image,key,context):
+        cutoff?undefined:await execution.cached("marked-page-v4:"+key,()=>ai.run("read_marked_exam",markedPage,context,[image]));
+      const result=await this.reviewPage(execution,ai,image,key,context,first);
       this.savePage(p.id,result);
       record({ event: "exam.process", ref: p.id.slice(0, 8), attempt: p.attempts + 1 });
     } catch(e) {
@@ -154,6 +154,73 @@ export class Assessments {
       db.prepare("UPDATE exam_pages SET status=?,note=? WHERE id=?").run(again?"queued":"failed",note,p.id);
     }
     return true;
+  }
+  private async reviewPage(execution:HomeworkExecution,ai:StructuredAI,image:AIImage,key:string,context:object,first?:z.infer<typeof markedPage>){
+    const review=first?.questions.filter(q=>!q.confident||q.verdict==="uncertain"||!q.teacherMark.trim()||
+      printedBlankCount(q.question)>1||/难辨|疑似|未辨清|看不清/.test(q.teacherMark+q.studentAnswer));
+    if(first&&!review?.length)return first;
+    const requested=review?.map(q=>({label:q.label,anchor:q.question,slots:Math.max(1,printedBlankCount(q.question))}));
+    const prefix="exam-located-v2:"+key+":"+digest(JSON.stringify(requested??null));
+    const layout=await execution.cached(prefix+":layout",()=>ai.run("locate_exam_answers",paperLayout,{...context,requested},[image]));
+    const targetsToRead=requested?layout.targets.flatMap(t=>{
+      const matches=requested.filter(q=>q.label===t.label);
+      const match=matches.length===1?matches[0]:undefined;
+      return match?[{...t,slots:Math.max(t.slots,match.slots)}]:[];
+    }):layout.targets;
+    const byLabel=new Map<string,Observation>();
+    const questions:Observation[]=[];
+    let partial=layout.coverage==="partial"||!targetsToRead.length;
+    for(let offset=0;offset<targetsToRead.length;offset+=5){
+      const targets=targetsToRead.slice(offset,offset+5).map((t,i)=>({...t,targetId:offset+i+1}));
+      this.store.db.prepare("UPDATE exam_pages SET note=? WHERE id=? AND status='running'")
+        .run("正在放大作答位置，已读 "+offset+"/"+targetsToRead.length+" 题。",image.fileId);
+      const group=await execution.cached(prefix+":"+digest(JSON.stringify(targets)),async()=>{
+        const first=await execution.cached(prefix+":ink:"+offset,async()=>{
+          const read=await this.transcribeTargets(ai,image.fileId,context,targets,false);
+          assembleReadings(targets,read); // Only cache a response whose IDs match this batch.
+          return read;
+        });
+        const initial=assembleReadings(targets,first);
+        if(!initial.partial)return initial;
+        const missed=targets.filter(t=>first.groups.some(g=>g.targetId===t.targetId&&(!g.located||!g.questions.length)));
+        if(!missed.length)return initial;
+        const second=await this.transcribeTargets(ai,image.fileId,context,missed,true);
+        assembleReadings(missed,second);
+        const rescued=new Map(second.groups.filter(g=>g.located&&g.questions.length).map(g=>[g.targetId,g]));
+        return assembleReadings(targets,{groups:first.groups.map(g=>rescued.get(g.targetId)??g)});
+      });
+      for(const [index,t] of targets.entries()){
+        const question=questionFromParts(t,group.byTarget[index]);
+        byLabel.set(t.label,question);
+        questions.push(question);
+      }
+      partial ||= group.partial;
+    }
+    if(first&&review){
+      const disputed=new Set(review);
+      const merged=first.questions.flatMap(q=>{
+        if(!disputed.has(q))return [q];
+        const replacement=byLabel.get(q.label);
+        if(replacement)return [replacement];
+        partial=true;
+        return [{...q,verdict:"uncertain" as const,confident:false,causeExplanation:"局部照片未定位到这题的作答。"}];
+      });
+      return {...first,questions:merged,coverage:partial?"partial":first.coverage};
+    }
+    return {questions,metadata:layout.metadata,coverage:partial?"partial":"complete",
+      note:[layout.note,partial?"有部分作答未能完整定位。":""].filter(Boolean).join(" ").slice(0,500)};
+  }
+  private async transcribeTargets(ai:StructuredAI,pageId:string,context:object,targets:ReadingTarget[],expand:boolean){
+    const images:AIImage[]=[];
+    for(const target of targets){
+      const [left,top,right,bottom]=target.box;
+      const area:Region=expand?[Math.max(0,left-90),Math.max(0,top-85),Math.min(1000,right+90),Math.min(1000,bottom+85)]:target.box;
+      const crop=await this.aiImage(pageId,area);
+      images.push({...crop,fileId:"target-"+target.targetId});
+    }
+    return ai.run("transcribe_exam_answers",localReadings,{
+      ...context,targets:targets.map(({box,...location})=>location)
+    },images);
   }
   private async readPageInGroups(execution:HomeworkExecution,ai:StructuredAI,image:AIImage,key:string,context:object) {
     const pageKey="marked-groups-v1:"+key;
@@ -199,10 +266,8 @@ export class Assessments {
     }
     return {questions,metadata,coverage,note:[...notes].filter(Boolean).join(" ").slice(0,500)};
   }
-  private async aiImage(pageId:string,corner?:"NorthWest"|"NorthEast"|"SouthWest"|"SouthEast") {
-    const crop=corner?["-gravity",corner,"-crop","56%x56%+0+0","+repage"]:[];
-    const {stdout}=await convert("/usr/bin/convert",["-limit","memory","64MiB","-limit","map","128MiB","-limit","disk","512MiB",join(this.directory,pageId)+"[0]","-auto-orient",...crop,"-resize",corner?"1600x1800>":"1800x2400>","-background","white","-alpha","remove","-strip","-quality","85","jpeg:-"],{encoding:"buffer",timeout:60000,maxBuffer:3*1024*1024});
-    return {fileId:corner?pageId+"-"+corner:pageId,mimeType:"image/jpeg" as const,base64:stdout.toString("base64")};
+  private aiImage(pageId:string,view?:ExamView){
+    return examImage(join(this.directory,pageId),pageId,view);
   }
   readingChecks(subject:ExamMeta["subject"]){
     if(!subject)return [];
@@ -242,13 +307,33 @@ export class Assessments {
       const meta=JSON.parse(row.metadata) as ExamMeta;
       const ai=execution.forJob(undefined,undefined,{date:meta.date??this.store.today(),title:"试卷说明复读",pageId:row.page_id,runId:row.id});
       const original=JSON.parse(row.payload) as Observation;
-      const images=[await this.aiImage(row.page_id)];
-      // Crop from the uploaded file before resizing. Overlap keeps answers beside column boundaries visible.
-      for(const corner of ["NorthWest","NorthEast","SouthWest","SouthEast"] as const){
-        images.push(await this.aiImage(row.page_id,corner));
+      const image=await this.aiImage(row.page_id);
+      const context={subject:meta.subject,readingChecks:this.readingChecks(meta.subject)};
+      const slots=Math.max(1,printedBlankCount(original.question));
+      const requested=[{label:original.label,anchor:original.question,slots}];
+      const layout=await ai.run("locate_exam_answers",paperLayout,{...context,requested},[image]);
+      const location=layout.targets.find(t=>t.label===original.label);
+      const target=location?{...location,slots:Math.max(slots,location.slots),targetId:1}:undefined;
+      let parts:z.infer<typeof localReadings>["groups"][number]["questions"]=[];
+      if(target){
+        for(const expand of [false,true]){
+          const ink=await this.transcribeTargets(ai,row.page_id,context,[target],expand);
+          assembleReadings([target],ink);
+          if(ink.groups[0].located&&ink.groups[0].questions.length){
+            parts=ink.groups[0].questions;
+            break;
+          }
+        }
       }
+      const marks=parts.map((part,i)=>({position:(i+1)+(part.part?" "+part.part:"处"),handwriting:part.studentAnswer.slice(0,160),mark:part.teacherMark.trim()?part.mark:"unclear" as const}));
+      const canRead=target&&marks.length>=target.slots;
       const schema=examReread.required({answerMarks:true});
-      const reread=await ai.run("explain_exam_reading",schema,{subject:meta.subject,questionId:row.question_id,original,familyNote:row.note,readingChecks:this.readingChecks(meta.subject)},images);
+      const reread=canRead?await ai.run("explain_exam_reading",schema,{
+        ...context,questionId:row.question_id,original,familyNote:row.note,transcribedMarks:marks
+      },[image,await this.aiImage(row.page_id,target.box)]):{
+        questionId:row.question_id,located:false,answerMarks:[],reply:"没有看全这道题的作答位置，已保留原记录。",evidence:"",check:null,change:null
+      };
+      reread.answerMarks=marks;
       if(reread.questionId!==row.question_id)throw new HomeworkError(422,"原图定位未对应。");
       const result=!reread.located||!reread.evidence?{...reread,change:null,check:null}:checkRereadEvidence(reread,original.question);
       db.prepare("UPDATE exam_explanations SET status='done',result=? WHERE id=?").run(JSON.stringify(result),row.id);

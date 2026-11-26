@@ -43,7 +43,7 @@ export class VisionAI implements StructuredAI {
     validateAIImages(images);
     const userText = `${AI_INSTRUCTIONS[task]}\nJSON Schema：${JSON.stringify(z.toJSONSchema(schema))}\n任务数据：${JSON.stringify(metadata)}\n图片顺序：${JSON.stringify(images.map((image) => image.fileId))}`;
     const isDeepSeek = this.config.provider === "deepseek";
-    const detailed = ["read_marked_exam", "generate_practice", "verify_practice", "index_curriculum", "grade_practice", "grade_homework", "verify_homework_grading", "assess_written_completion", "recheck_written_parts"].includes(task);
+    const detailed = ["locate_exam_answers","transcribe_exam_answers","read_marked_exam", "generate_practice", "verify_practice", "index_curriculum", "grade_practice", "grade_homework", "verify_homework_grading", "assess_written_completion", "recheck_written_parts"].includes(task);
     const body = isDeepSeek ? {
       model: this.config.model,
       messages: [{ role: "system", content: AI_SYSTEM_INSTRUCTIONS }, { role: "user", content: [{ type: "text", text: userText }, ...images.map((image) => ({ type: "image_url", image_url: { url: `data:${image.mimeType};base64,${image.base64}` } }))] }],
@@ -66,7 +66,7 @@ export class VisionAI implements StructuredAI {
     try { payload = await response.json(); if (!payload || typeof payload !== "object") throw new Error("Invalid envelope"); }
     catch { throw new AIServiceError("INVALID_ENVELOPE", true, "AI响应格式不完整，结果未发布。"); }
     if ((isDeepSeek && payload.choices?.[0]?.finish_reason !== "stop") || (!isDeepSeek && payload.status !== "completed")) {
-      if (task === "read_marked_exam" || task === "index_exam_page")
+      if (task === "transcribe_exam_answers" || task === "locate_exam_answers" || task === "read_marked_exam" || task === "index_exam_page")
         throw examStopError(isDeepSeek ? payload.choices?.[0]?.finish_reason : payload.incomplete_details?.reason);
       throw new AIServiceError("INCOMPLETE_RESPONSE", true, "AI输出未完整结束，结果未发布。");
     }

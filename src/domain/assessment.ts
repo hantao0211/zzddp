@@ -99,7 +99,7 @@ export type ExamFeedback = {
 };
 
 type RereadResult = z.infer<typeof examReread>;
-function printedBlankCount(question:string){
+export function printedBlankCount(question:string){
   return question.normalize("NFKC").match(/\(\s*\)|_{2,}/g)?.length??0;
 }
 
