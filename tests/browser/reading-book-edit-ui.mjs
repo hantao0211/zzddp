@@ -112,6 +112,10 @@ try{
  const shelf=page.locator('.reading-books');
  await shelf.getByText('全258页 · 暂无打卡',{exact:true}).waitFor();
  const picker=shelf.getByLabel(`《${book.title}》的阅读状态`);
+ const gridView=page.getByRole('button',{name:'方块视图',exact:true});
+ const listView=page.getByRole('button',{name:'列表视图',exact:true});
+ assert.equal(await listView.getAttribute('aria-pressed'),'true');
+ assert.equal(await shelf.locator('.shelf-book-icon:visible').count(),2);
  for(const width of [320,390,768,1280]){
   await page.setViewportSize({width,height:844});
   const rows=await shelf.locator('article').evaluateAll(items=>items.map(el=>Math.round(el.getBoundingClientRect().height)));
@@ -120,8 +124,21 @@ try{
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
   if(width===390)await shelf.screenshot({path:output+'/compact-shelf.png'});
   console.log('SHELF_ROWS',width,rows);
+  await gridView.click();assert.equal(await gridView.getAttribute('aria-pressed'),'true');
+  const [first,second]=await shelf.locator('article').evaluateAll(items=>items.map(el=>el.getBoundingClientRect().toJSON()));
+  assert.ok(second.left>first.right && Math.abs(second.top-first.top)<1);
+  assert.ok(first.height/first.width<1.3 && first.height/first.width>=.98,JSON.stringify(first));
+  assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+  const cover=shelf.locator('.shelf-book-icon').first();
+  await cover.scrollIntoViewIfNeeded();
+  assert.ok(await cover.evaluate(el=>{
+    const r=el.getBoundingClientRect();return !!document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)?.closest('.shelf-book-open');
+  }));
+  if(width===390)await page.locator('.reading-library').screenshot({path:output+'/shelf-grid.png'});
+  await listView.click();
  }
  await page.setViewportSize({width:390,height:844});
+ await gridView.click();
  await picker.selectOption('wanted');
  await shelf.locator('.shelf-wanted').waitFor();
  await page.getByRole('button',{name:`修改${book.title}的书籍信息`,exact:true}).click();
@@ -137,7 +154,7 @@ try{
  await page.locator('.reading-notice').filter({hasText:'书籍信息已更新，阅读记录和小脚步都保留了。'}).waitFor();await page.locator('.reading-books').getByRole('heading',{name:book.title,exact:true}).waitFor();await page.locator('.reading-books').getByText('已记录22 / 300页 · 25分钟',{exact:true}).waitFor();assert.equal(book.id,bookId);assert.equal(book.logCount,1);
  await page.getByRole('button',{name:'继续填写',exact:true}).click();
  assert.equal(await page.getByLabel('开始页',{exact:true}).inputValue(),'49');assert.equal(await page.getByLabel('结束页',{exact:true}).inputValue(),'52');assert.equal(await page.getByLabel('时长（分钟）',{exact:true}).inputValue(),'12');assert.equal(await page.locator('#reading-summary').inputValue(),'还没提交的阅读概括。');
- await page.reload({waitUntil:'networkidle'});await page.locator('.reading-library > summary').click();await page.getByRole('button',{name:`修改${book.title}的书籍信息`,exact:true}).click();await dialog.getByLabel('总页数（选填）',{exact:true}).fill('40');await dialog.getByRole('button',{name:'保存书籍信息',exact:true}).click();await dialog.locator('.form-error[role=alert]').filter({hasText:'48页'}).waitFor();assert.equal(await dialog.getByLabel('总页数（选填）',{exact:true}).inputValue(),'40');await dialog.getByRole('button',{name:'取消',exact:true}).click();assert.equal(book.totalPages,300);
+ await page.reload({waitUntil:'networkidle'});await page.locator('.reading-library > summary').click();assert.equal(await gridView.getAttribute('aria-pressed'),'true');await listView.click();await page.getByRole('button',{name:`修改${book.title}的书籍信息`,exact:true}).click();await dialog.getByLabel('总页数（选填）',{exact:true}).fill('40');await dialog.getByRole('button',{name:'保存书籍信息',exact:true}).click();await dialog.locator('.form-error[role=alert]').filter({hasText:'48页'}).waitFor();assert.equal(await dialog.getByLabel('总页数（选填）',{exact:true}).inputValue(),'40');await dialog.getByRole('button',{name:'取消',exact:true}).click();assert.equal(book.totalPages,300);
  const desktop=await browser.newPage({ignoreHTTPSErrors:true,viewport:{width:1280,height:900}});
  await desktop.route('**/assistant-api/**',mockApi);
  await desktop.goto(base+'/reading/');
