@@ -40,7 +40,8 @@ try{
  assert.equal(await dialog.getByLabel("孩子原答").isVisible(),false);
  await dialog.getByRole("button",{name:"取消",exact:true}).click();
  await dialog.getByRole("button",{name:"查看原卷",exact:true}).click();
- await page.getByRole("dialog",{name:"照片预览"}).getByRole("button",{name:"关闭照片"}).click();
+ assert.equal(await page.locator("dialog[open]").count(),1);
+ await dialog.getByRole("button",{name:"返回题目",exact:true}).click();
  await dialog.getByRole("button",{name:"向小步说明",exact:true}).click();
  await dialog.getByRole("textbox",{name:"向小步说明"}).fill("请看答案下面的勾。");
  await dialog.getByRole("button",{name:"请小步看原卷"}).click();
@@ -51,8 +52,14 @@ try{
  await dialog.getByRole("button",{name:"停用这条方法"}).waitFor();
  await dialog.getByRole("button",{name:"采用这次修改"}).click();
  await dialog.locator(".exam-question-text .v-correct").waitFor();
- await dialog.getByRole("button",{name:"返回题目"}).click();
+ await dialog.getByRole("button",{name:"返回题目列表",exact:true}).click();
  await dialog.getByText("已收录 1 道错题",{exact:true}).waitFor();
+ await dialog.getByRole("button",{name:"关闭试卷档案"}).click();
+ await page.getByRole("button",{name:/全部试卷/}).click();
+ await dialog.locator(".exam-line").first().click();
+ await dialog.getByRole("button",{name:/^全部 [0-9]+$/}).waitFor();
+ await dialog.getByRole("button",{name:"返回全部试卷"}).click();
+ await dialog.locator(".exam-line").first().waitFor();
  await dialog.getByRole("button",{name:"关闭试卷档案"}).click();
  assert.equal((await api("session","POST",{username:"exam-child",password})).status,200);
  await page.reload();await page.locator(".exam-shelf .exam-line").first().click();

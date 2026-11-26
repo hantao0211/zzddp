@@ -26,11 +26,6 @@ export function PhotoPreviewButton({ src, alt, label, children, className = "tex
 function PhotoPreview({ src, alt, close }: { src: string; alt: string; close: () => void }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
-  const stage = useRef<HTMLDivElement>(null);
-  const [zoomed, setZoomed] = useState(false);
-  const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
-  const [attempt, setAttempt] = useState(0);
-
   useEffect(() => {
     const element = dialog.current;
     element?.showModal();
@@ -41,11 +36,6 @@ function PhotoPreview({ src, alt, close }: { src: string; alt: string; close: ()
   function dismiss() {
     dialog.current?.close();
     close();
-  }
-
-  function toggleZoom() {
-    setZoomed(value => !value);
-    stage.current?.scrollTo({ top: 0, left: 0, behavior: "instant" });
   }
 
   return <dialog className="photo-viewer" ref={dialog} aria-label="照片预览" onCancel={event => {
@@ -59,6 +49,22 @@ function PhotoPreview({ src, alt, close }: { src: string; alt: string; close: ()
         <X size={20} aria-hidden="true" />关闭照片
       </button>
     </header>
+    <PhotoPreviewContent src={src} alt={alt}/>
+  </dialog>;
+}
+
+export function PhotoPreviewContent({src,alt}:{src:string;alt:string}) {
+  const stage = useRef<HTMLDivElement>(null);
+  const [zoomed, setZoomed] = useState(false);
+  const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [attempt, setAttempt] = useState(0);
+
+  function toggleZoom() {
+    setZoomed(value => !value);
+    stage.current?.scrollTo({ top: 0, left: 0, behavior: "instant" });
+  }
+
+  return <>
     <div ref={stage} className="photo-viewer-stage" data-zoom={zoomed}>
       {status === "loading" && <p role="status">正在加载照片…</p>}
       {status === "error" && <div className="photo-viewer-error">
@@ -77,5 +83,5 @@ function PhotoPreview({ src, alt, close }: { src: string; alt: string; close: ()
         {zoomed ? "缩回整页" : "放大看细节"}
       </button>
     </footer>}
-  </dialog>;
+  </>;
 }

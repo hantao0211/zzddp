@@ -18,7 +18,7 @@ import { useStudyNavigation } from "./study-navigation";
 import { useStudyRefresh } from "./app-interactions";
 import { StudyShell } from "./study-shell";
 import { StudyHeadingDate, StudyPageHeading } from "./study-page-heading";
-import { ExamShelf } from "./exam-shelf";
+import { ExamShelf, type ExamReturn } from "./exam-shelf";
 import { HomeStudyTools } from "./study-companion";
 import { JournalGarden, useJournalDecoration } from "./journal-garden";
 import { FamilyNotes } from "./family-notes";
@@ -96,6 +96,7 @@ export function HomeworkApp({ onDemo, onDateChange, active=true }: { onDemo: () 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const examReturn=useRef<(ExamReturn & {viewerId:string})|undefined>(undefined);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [tab, setTab] = useState<"today" | "archive" | "grading" | "mistakes" | "practice" | "materials">("today");
   const [focusGradingFailures, setFocusGradingFailures] = useState(false);
@@ -165,8 +166,9 @@ export function HomeworkApp({ onDemo, onDateChange, active=true }: { onDemo: () 
   const rowStatus = summary?.rows.find(row => row.id === rowStatusId) || null;
   useEffect(() => { if (snapshot?.homeworkReward?.earned) window.dispatchEvent(new Event("xiaobu:growth-updated")); }, [date, snapshot?.homeworkReward?.earned]);
   const alreadyCovered = !!summary?.rows.length && summary.rows.every(row=>row.photo.tone==="good"&&row.activity.tone==="good");
-  useEffect(()=>{const showHome=()=>{setDetailsOpen(false);window.scrollTo({top:0,behavior:"instant"});};window.addEventListener("xiaobu:home-home",showHome);return()=>window.removeEventListener("xiaobu:home-home",showHome);},[]);
-  function showDetails(value: boolean) { setDetailsOpen(value); window.scrollTo({ top: 0, behavior: "instant" }); }
+  useEffect(()=>{const showHome=()=>{examReturn.current=undefined;setDetailsOpen(false);window.scrollTo({top:0,behavior:"instant"});};window.addEventListener("xiaobu:home-home",showHome);return()=>window.removeEventListener("xiaobu:home-home",showHome);},[]);
+  useEffect(()=>{if(!detailsOpen)examReturn.current=undefined;},[detailsOpen]);
+  function showDetails(value: boolean) { if(value)examReturn.current=undefined;setDetailsOpen(value); window.scrollTo({ top: 0, behavior: "instant" }); }
   function showGrading(view: "grading" | "mistakes" | "practice" | "materials", focusFailures = false) { setFocusGradingFailures(focusFailures); setTab(view); showDetails(true); }
   function uploadTarget(row: Pick<HomeworkSummaryRow,"id">): UploadTarget | undefined {
     const task = snapshot?.report?.tasks.find(task => task.id === row.id);
@@ -223,7 +225,7 @@ export function HomeworkApp({ onDemo, onDateChange, active=true }: { onDemo: () 
               </div>
             </div>
           </section>}
-          {active && viewer && <ExamShelf key={viewer.id} openMistakes={()=>showGrading("mistakes")} canManage={canManage}/>}
+          {active && viewer && <ExamShelf key={viewer.id} resume={examReturn.current?.viewerId===viewer.id?examReturn.current:undefined} openMistakes={place=>{showGrading("mistakes");examReturn.current={...place,viewerId:viewer.id};}} canManage={canManage}/>}
           <HomeStudyTools grading={snapshot?.grading} homeworkReward={dayPlan.noHomework ? undefined : snapshot?.homeworkReward} onNavigate={showGrading} />
           <div className="hw-day-plan-line"><span>{snapshot && dayPlan.noHomework ? dayPlan.source === "date" ? "这一天设为无作业日" : "按每周安排休息" : ""}</span><button className="text-button" disabled={!snapshot || dayPlanBusy} onClick={() => { setDayPlanError(""); setDaySettingsOpen(true); }}><CalendarDays size={16} aria-hidden="true" />无作业日设置</button></div>
           {dayPlanError && !daySettingsOpen && <p className="error-text" role="alert">{dayPlanError}</p>}
@@ -231,7 +233,7 @@ export function HomeworkApp({ onDemo, onDateChange, active=true }: { onDemo: () 
           {(!summary || !summary.rows.length) && <button className="hw-details-link" onClick={() => showDetails(true)}><FolderOpen size={18} />查看详情</button>}
           </div></div>
         </section> : <section className="hw-details-page" aria-label="作业详情">
-          <div className="hw-details-heading"><button className="button secondary" onClick={() => showDetails(false)}>返回首页</button><label className="hw-date">作业日期<input type="date" value={date} onChange={(e) => { if (e.target.value) { setDate(e.target.value); setDetailId(null); setMemoEdit(null); setRowStatusId(null); } }} /></label></div>
+          <div className="hw-details-heading"><button className="button secondary" onClick={() => showDetails(false)}>{examReturn.current?.viewerId===viewer?.id&&examReturn.current?"返回试卷":"返回首页"}</button><label className="hw-date">作业日期<input type="date" value={date} onChange={(e) => { if (e.target.value) { setDate(e.target.value); setDetailId(null); setMemoEdit(null); setRowStatusId(null); } }} /></label></div>
         <nav className="hw-tabs" aria-label="学习资料导航"><button className={tab === "today" ? "selected" : ""} onClick={() => setTab("today")}><ClipboardList size={19} /> 作业清单</button>{snapshot?.grading?.enabled && <><button className={tab === "grading" ? "selected" : ""} onClick={() => setTab("grading")}>批改结果</button><button className={tab === "mistakes" ? "selected" : ""} onClick={() => setTab("mistakes")}>错题本</button></>}<button className={tab === "archive" ? "selected" : ""} onClick={() => setTab("archive")}><FolderOpen size={19} /> 历史资料</button><button className={tab === "practice" ? "selected" : ""} onClick={() => setTab("practice")}>小练习</button><button className={tab === "materials" ? "selected" : ""} onClick={() => setTab("materials")}>课程资料库</button><button className="hw-refresh" onClick={() => void refresh()} aria-label="刷新作业状态"><RefreshCw size={18} /></button></nav>
         {(tab === "today" || tab === "archive") && snapshot && <div className={`hw-status ${snapshot.status === "failed" ? "hw-status-error" : ""}`} role="status">{snapshot.pending ? <LoaderCircle size={20} className="spin" /> : <Sparkles size={20} />}<div><strong>{labels[snapshot.status] || "正在整理"}</strong><p>{snapshot.note}</p>{snapshot.pending && snapshot.report && <p>下方暂时展示上一次结果，新资料整理完成后会自动更新。</p>}</div>{snapshot.status === "failed" && canManage && <button className="button primary compact" onClick={retryDay}>重新查缺</button>}</div>}
         {(tab === "today" || tab === "archive") && snapshot?.reviewPolicy && <section className="hw-review-policy"><details><summary>预习复习按学习痕迹检查</summary><p>{snapshot.reviewPolicy.description}</p></details>{canManage && <button className="button primary compact" onClick={retryDay}>重新整理</button>}{oldReviewTasks.length > 0 && !snapshot.pending && <p>部分预习、复习还是旧版结果，尚未按新规则判断。重新整理会由AI检查已上传照片，无需重新上传。</p>}</section>}

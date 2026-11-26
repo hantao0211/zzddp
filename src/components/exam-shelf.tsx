@@ -1,13 +1,14 @@
 "use client";
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { ChevronRight, CircleAlert, CircleCheck, ClipboardCheck, Clock3, FileText, Upload, X, type LucideIcon } from "lucide-react";
+import { ArrowLeft, ChevronRight, CircleAlert, CircleCheck, ClipboardCheck, Clock3, FileText, Upload, X, type LucideIcon } from "lucide-react";
 import { type ExamRecord, type ExamDetail } from "@/domain/assessment";
 import { homeworkPost, homeworkRequest } from "@/services/homework-gateway";
 import { ExamMilestonePanel } from "./exam-milestones";
 import { isMilestone, type MilestoneData } from "@/domain/exam-milestones";
 import { Flag } from "lucide-react";
 import { ExamScanIcon } from "./exam-scan-icon";
-import { ExamWorkspace } from "./exam-detail";
+import { PhotoPreviewContent } from "./photo-preview";
+import { ExamWorkspace, type ExamSelection, type ExamPhoto } from "./exam-detail";
 
 const endpoint="/practice/exams";
 type ArchiveItem=ExamRecord & {firstFailedPage?:number|null};
@@ -30,17 +31,23 @@ function ExamRow({exam,open}:{exam:ArchiveItem;open:(id:string)=>void}){
   const label=running?"正在识读":stopped?"识读已停止":exam.status;
   const progress=exam.status!=="已整理" && exam.pages>1 && ("共"+exam.pages+"页，已完成"+exam.done+"页");
   const info=[exam.date,exam.subject,progress,stopped&&exam.firstFailedPage&&("第"+exam.firstFailedPage+"页未读完")].filter(Boolean).join(" · ");
-  return <button className={`exam-line exam-status-row status-${tone}`} onClick={()=>open(exam.id)}>
+  return <button data-exam-id={exam.id} className={`exam-line exam-status-row status-${tone}`} onClick={()=>open(exam.id)}>
     <span className="exam-row-info"><strong>{exam.title||"已批试卷"}</strong>{info&&<small>{info}</small>}</span>
     <span className="exam-row-state">{running?<ExamScanIcon/>:<Icon size={16} aria-hidden="true"/>}{label}<ChevronRight size={14} aria-hidden="true"/></span>
   </button>;
 }
 
-export function ExamShelf({canManage,openMistakes}:{canManage:boolean;openMistakes:()=>void}){
-  const [mode,setMode]=useState<"new"|"list"|"detail"|"milestones"|null>(null),[latest,setLatest]=useState<Archive|null>(null),[archive,setArchive]=useState<Archive|null>(null);
-  const [offset,setOffset]=useState(0),[selected,select]=useState(""),[detail,setDetail]=useState<ExamDetail|null>(null),[version,refresh]=useState(0);
-  const [milestones,setMilestones]=useState<MilestoneData|null>(null),[initialSubject,setInitialSubject]=useState<string>(),[fromMilestones,setFromMilestones]=useState(false);
-  function showMilestones(subject?:string){setNotice("");setError("");setInitialSubject(subject);setMilestones(null);setMode("milestones");}
+export type ExamReturn = {id:string;origin:"list"|"milestones"|null;offset:number};
+export function ExamShelf({canManage,openMistakes,resume}:{canManage:boolean;openMistakes:(place:ExamReturn)=>void;resume?:ExamReturn}){
+
+  const [mode,setMode]=useState<"new"|"list"|"detail"|"milestones"|null>(resume?"detail":null),[latest,setLatest]=useState<Archive|null>(null),[archive,setArchive]=useState<Archive|null>(null);
+  const [offset,setOffset]=useState(resume?.offset??0),[selected,select]=useState(resume?.id??""),[detail,setDetail]=useState<ExamDetail|null>(null),[version,refresh]=useState(0);
+  const [milestones,setMilestones]=useState<MilestoneData|null>(null),[initialSubject,setInitialSubject]=useState<string>();
+  const [origin,setOrigin]=useState<"list"|"milestones"|null>(resume?.origin??null);
+  const [selection,setSelection]=useState<ExamSelection|null>(null),[photo,setPhoto]=useState<ExamPhoto|null>(null);
+  const [milestoneFromPaper,setMilestoneFromPaper]=useState(false);
+  const photoTrigger=useRef<HTMLButtonElement|null>(null),backButton=useRef<HTMLButtonElement>(null);
+  function showMilestones(subject?:string){setMilestoneFromPaper(mode==="detail");setNotice("");setError("");setInitialSubject(subject);setMilestones(null);setMode("milestones");}
   const [error,setError]=useState(""),[busy,setBusy]=useState(""),[notice,setNotice]=useState("");
   const submitting=useRef(false),dialog=useRef<HTMLDialogElement>(null);
   useEffect(()=>{const el=dialog.current;if(mode&&!el?.open)el?.showModal();if(!mode)el?.close();},[mode]);
@@ -65,8 +72,30 @@ export function ExamShelf({canManage,openMistakes}:{canManage:boolean;openMistak
     }catch(e){if(!controller.signal.aborted){setError(message(e));if(mode==="list"||!mode||mode==="detail")timer=setTimeout(load,15000);}}}
     void load();return ()=>{controller.abort();clearTimeout(timer);};
   },[mode,selected,offset,version]);
-  function openDetail(id:string){setFromMilestones(mode==="milestones");select(id);setNotice("");setDetail(null);setError("");setMode("detail");}
-  function close(){if(!submitting.current){setMode(null);refresh(n=>n+1);}}
+  function openDetail(id:string){setOrigin(mode==="list"||mode==="milestones"?mode:null);setMilestoneFromPaper(false);setSelection(null);setPhoto(null);select(id);setNotice("");setDetail(null);setError("");setMode("detail");}
+  function close(){if(!submitting.current){setMode(null);setSelection(null);setPhoto(null);setOrigin(null);setMilestoneFromPaper(false);refresh(n=>n+1);}}
+  const inQuestionForm=selection?.id&&selection.form&&selection.form!=="view";
+  const backLabel=photo?(selection?"返回题目":"返回试卷"):inQuestionForm?"返回题目":selection?"返回题目列表":
+    mode==="detail"&&origin?(origin==="list"?"返回全部试卷":"返回考试里程碑"):
+    mode==="milestones"&&milestoneFromPaper?"返回试卷":null;
+  function goBack(){
+    if(submitting.current)return;
+    setNotice("");setError("");
+    if(photo){setPhoto(null);requestAnimationFrame(()=>photoTrigger.current?.focus());return;}
+    if(inQuestionForm&&selection){setSelection({...selection,form:"view"});return;}
+    if(selection){setSelection(null);return;}
+    if(mode==="detail"&&origin){
+      setMode(origin);
+      requestAnimationFrame(()=>dialog.current?.querySelector<HTMLButtonElement>('[data-exam-id="'+CSS.escape(selected)+'"]')?.focus());
+      return;
+    }
+    if(mode==="milestones"&&milestoneFromPaper){setMode("detail");setMilestoneFromPaper(false);return;}
+    close();
+  }
+  function openPhoto(value:ExamPhoto,trigger:HTMLButtonElement){
+    photoTrigger.current=trigger;setPhoto(value);
+    requestAnimationFrame(()=>{dialog.current?.scrollTo(0,0);backButton.current?.focus();});
+  }
   async function act(fn:()=>Promise<void>){if(submitting.current)return;submitting.current=true;setBusy("正在保存…");setError("");setNotice("");
     try{await fn();refresh(n=>n+1);}catch(e){setError(message(e));}finally{submitting.current=false;setBusy("");}}
   function upload(event:FormEvent<HTMLFormElement>){
@@ -88,21 +117,23 @@ export function ExamShelf({canManage,openMistakes}:{canManage:boolean;openMistak
     <button className="button secondary compact plum-action mile-home" onClick={()=>showMilestones()}><Flag size={16}/>考试里程碑</button>
     {latestPaper&&<button className="text-button" onClick={()=>{setOffset(0);setError("");setNotice("");setMode("list");}}>全部试卷（{latest?.total}）</button>}
     {!mode&&error&&<p role="alert">{error} <button className="text-button" onClick={()=>{setError("");refresh(n=>n+1);}}>重试</button></p>}
-    <dialog ref={dialog} className="reading-dialog exam-dialog" aria-label="试卷档案" onCancel={e=>{e.preventDefault();close();}}>
-      <header><h2>{mode==="new"?"上传已批试卷":mode==="list"?"全部试卷":mode==="milestones"?"考试里程碑":detail?.exam.title||"试卷详情"}</h2><button className="icon-button" disabled={!!busy} aria-label="关闭试卷档案" onClick={close}><X/></button></header>
+    <dialog ref={dialog} className="reading-dialog exam-dialog" aria-label="试卷档案" onCancel={e=>{e.preventDefault();goBack();}}>
+      <header>{backLabel&&<button ref={backButton} type="button" className="text-button exam-nav-back" aria-label={backLabel} disabled={!!busy} onClick={goBack}><ArrowLeft size={18}/>返回</button>}<h2>{photo?photo.alt:selection?(selection.id?"题目详情":"补录题目"):mode==="new"?"上传已批试卷":mode==="list"?"全部试卷":mode==="milestones"?"考试里程碑":detail?.exam.title||"试卷详情"}</h2><button className="icon-button" disabled={!!busy} aria-label="关闭试卷档案" onClick={close}><X/></button></header>
       <div className="reading-dialog-body">
+      {photo&&<div className="exam-photo-content"><PhotoPreviewContent {...photo}/></div>}
+      <div hidden={!!photo}>
       {notice&&<p className="exam-notice" role="status">{notice}</p>}{error&&<p className="form-error" role="alert">{error}</p>}
       {mode==="new"&&<form onSubmit={upload} className="exam-form"><label>选择已批试卷照片<input required name="photos" type="file" multiple accept="image/jpeg,image/png,image/webp"/></label>
         <small>按页序选 1～12 张。小步会识别老师标出的错题，试卷资料可稍后补充。</small>
         <label>试卷归属<select name="scope" defaultValue=""><option value="">自动判断</option><option value="curricular">课内</option><option value="extracurricular">课外</option></select></label>
         <small>自动判断时，卷面有明确课外来源才归为课外，其余归为课内。</small><button className="button primary" disabled={!!busy}>{busy||"上传并整理错题"}</button></form>}
       {mode==="list"&&<>{archive?.items.map(e=><ExamRow key={e.id} exam={e} open={openDetail}/>)}<div className="reading-record-actions"><button className="text-button" disabled={!offset} onClick={()=>setOffset(n=>n-10)}>上一页</button><button className="text-button" disabled={offset+10>=(archive?.total??0)} onClick={()=>setOffset(n=>n+10)}>下一页</button></div></>}
-      {mode==="milestones"&&(milestones?<ExamMilestonePanel data={milestones} canManage={canManage} act={act} busy={!!busy} openExam={openDetail} initialSubject={initialSubject}/>:!error&&<p>正在读取考试里程碑…</p>)}
-      {mode==="detail"&&detail&&(fromMilestones||isMilestone(detail.exam.kind))&&<button className="text-button" onClick={()=>showMilestones(detail.exam.subject??"待补科目")}><Flag size={15}/>查看考试里程碑</button>}
-      {mode==="detail"&&detail&&<ExamWorkspace key={detail.exam.id} detail={detail} canManage={canManage} busy={!!busy} act={act} notify={setNotice}
-        openMistakes={()=>{close();openMistakes();}} putPhoto={putPhoto}/>}
+      {(mode==="milestones"||(mode==="detail"&&origin==="milestones"))&&<div hidden={mode!=="milestones"}>{milestones?<ExamMilestonePanel data={milestones} canManage={canManage} act={act} busy={!!busy} openExam={openDetail} initialSubject={initialSubject}/>:!error&&<p>正在读取考试里程碑…</p>}</div>}
+      {mode==="detail"&&detail&&!selection&&origin!=="milestones"&&isMilestone(detail.exam.kind)&&<button className="text-button" onClick={()=>showMilestones(detail.exam.subject??"待补科目")}><Flag size={15}/>查看考试里程碑</button>}
+      {mode==="detail"&&detail&&<ExamWorkspace key={detail.exam.id} detail={detail} selection={selection} select={setSelection} openPhoto={openPhoto} canManage={canManage} busy={!!busy} act={act} notify={setNotice}
+        openMistakes={()=>{close();openMistakes({id:selected,origin,offset});}} putPhoto={putPhoto}/>}
       {mode==="detail"&&!detail&&!error&&<p role="status">正在读取试卷…</p>}
       {busy&&<p role="status">{busy}</p>}
-      </div></dialog>
+      </div></div></dialog>
   </section>;
 }

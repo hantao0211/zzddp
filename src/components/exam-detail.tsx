@@ -1,10 +1,10 @@
 "use client";
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { ArrowLeft, BookOpen, Check, ChevronRight, Clock3, FileImage, MessageCircle, Pencil, Plus, RotateCw, ScanLine } from "lucide-react";
+import { BookOpen, Check, ChevronRight, Clock3, FileImage, MessageCircle, Pencil, Plus, RotateCw, ScanLine } from "lucide-react";
 import { examKinds, examReadingChecks, type ExamDetail, type ExamMeta, type ExamQuestion, type Observation } from "@/domain/assessment";
 import { homeworkPost, homeworkRequest } from "@/services/homework-gateway";
 import { ExamScanIcon } from "./exam-scan-icon";
-import { PhotoPreviewButton } from "./photo-preview";
+
 
 const choices=["语文","数学","英语"];
 const pagePath=(id:string)=>"/practice/exam-pages/"+id;
@@ -29,30 +29,34 @@ function PaperFields({meta}:{meta:ExamMeta}){
         <label>单元（选填）<input name="unit" defaultValue={meta?.unit} maxLength={100}/></label></>;
 }
 
-function Original({pageId,number}:{pageId:string;number:number}){
-  return <PhotoPreviewButton src={"/assistant-api/learning"+pagePath(pageId)+"/photo"} alt={"试卷第"+number+"页"}><FileImage size={16}/>查看原卷</PhotoPreviewButton>;
+type QuestionMode = "view"|"explain"|"edit";
+export type ExamSelection = {pageId:string;id?:string;form?:QuestionMode};
+export type ExamPhoto = {src:string;alt:string};
+type OpenPhoto = (photo:ExamPhoto, trigger:HTMLButtonElement)=>void;
+function Original({pageId,number,open}:{pageId:string;number:number;open:OpenPhoto}){
+  return <button className="text-button" onClick={e=>open({src:"/assistant-api/learning"+pagePath(pageId)+"/photo",alt:"试卷第"+number+"页"},e.currentTarget)}><FileImage size={16}/>查看原卷</button>;
 }
 type WorkspaceProps={
   detail:ExamDetail;canManage:boolean;busy:boolean;act:Act;notify:(text:string)=>void;
+  selection:ExamSelection|null;select:(selection:ExamSelection|null)=>void;openPhoto:OpenPhoto;
   openMistakes:()=>void;putPhoto:(id:string,file:File)=>Promise<void>;
 };
-export function ExamWorkspace({detail,canManage,busy,act,notify,openMistakes,putPhoto}:WorkspaceProps){
+export function ExamWorkspace({detail,canManage,busy,act,notify,openMistakes,putPhoto,selection,select,openPhoto}:WorkspaceProps){
   const {exam,questions,pages}=detail;
   const [filter,setFilter]=useState<"all"|"wrong"|"uncertain">("all");
-  const [selection,select]=useState<{pageId:string;id?:string}|null>(null);
   const [meta,setMeta]=useState<ExamMeta|null>(null);
   const heading=useRef<HTMLHeadingElement>(null), lastRow=useRef("");
   useEffect(()=>{
     if(selection){heading.current?.focus();heading.current?.scrollIntoView({block:"nearest"});}
     else if(lastRow.current)document.getElementById(lastRow.current)?.focus();
-  },[selection]);
+  },[selection?.id,selection?.pageId]);
   function open(pageId:string,id?:string){lastRow.current="exam-open-"+(id??pageId);notify("");select({pageId,id});}
   const page=pages.find(p=>p.id===selection?.pageId);
   if(selection&&page){
     const q=questions.find(q=>q.id===selection.id);
-    return <div className="exam-workspace"><div className="exam-tools"><button className="text-button" disabled={busy} onClick={()=>{select(null);notify("");}}><ArrowLeft size={16}/>返回题目</button><Original pageId={page.id} number={page.number}/></div>
+    return <div className="exam-workspace"><div className="exam-tools"><Original open={openPhoto} pageId={page.id} number={page.number}/></div>
       <div><small>第 {page.number} 页</small><h3 ref={heading} tabIndex={-1}>{q?.label??"补录题目"}</h3></div>
-      <QuestionDesk key={q?.id??page.id} q={q} pageId={page.id} canManage={canManage} subject={exam.subject} busy={busy} act={act} notify={notify} onAdded={()=>select(null)}/>
+      <QuestionDesk key={q?.id??page.id} q={q} mode={selection.form??(q?"view":"edit")} setMode={form=>select({...selection,form})} pageId={page.id} canManage={canManage} subject={exam.subject} busy={busy} act={act} notify={notify} onAdded={()=>select(null)}/>
     </div>;
   }
   const counts={all:questions.length,uncertain:questions.filter(q=>q.verdict==="uncertain").length,wrong:questions.filter(q=>q.verdict==="wrong").length};
@@ -78,7 +82,7 @@ export function ExamWorkspace({detail,canManage,busy,act,notify,openMistakes,put
         className={failed?"button secondary compact plum-action":"text-button exam-add-question"}>
         <Plus size={16} aria-hidden="true"/>手动补题
       </button>;
-      return <section key={p.id} className="exam-sheet"><div className="exam-tools"><h3>第 {p.number} 页 <small className={"exam-page-state"+(failed?" is-stopped":"")}>{p.status==="running"&&<ExamScanIcon/>}{pageStatus[p.status]}</small></h3>{p.status!=="awaiting"&&<Original pageId={p.id} number={p.number}/>}</div>
+      return <section key={p.id} className="exam-sheet"><div className="exam-tools"><h3>第 {p.number} 页 <small className={"exam-page-state"+(failed?" is-stopped":"")}>{p.status==="running"&&<ExamScanIcon/>}{pageStatus[p.status]}</small></h3>{p.status!=="awaiting"&&<Original open={openPhoto} pageId={p.id} number={p.number}/>}</div>
         {p.status==="awaiting"&&<label>补传本页原照片<input type="file" accept="image/jpeg,image/png,image/webp" disabled={busy} onChange={e=>{const f=e.target.files?.[0];if(f)act(()=>putPhoto(p.id,f));}}/></label>}
         {p.note&&!failed&&(p.status==="done"?<details><summary>识读说明</summary><p>{p.note}</p></details>:<p className="reading-muted" role="status">{p.note}</p>)}
         {failed&&(p.note||canManage)&&<div className="exam-page-recovery">
@@ -98,8 +102,7 @@ export function ExamWorkspace({detail,canManage,busy,act,notify,openMistakes,put
   </div>;
 }
 
-function QuestionDesk({q,pageId,canManage,subject,busy,act,notify,onAdded}:{q?:ExamQuestion;pageId:string;canManage:boolean;subject:ExamMeta["subject"];busy:boolean;act:Act;notify:(t:string)=>void;onAdded:()=>void}){
-  const [mode,setMode]=useState<"view"|"explain"|"edit">(q?"view":"edit");
+function QuestionDesk({q,mode,setMode,pageId,canManage,subject,busy,act,notify,onAdded}:{q?:ExamQuestion;mode:QuestionMode;setMode:(mode:QuestionMode)=>void;pageId:string;canManage:boolean;subject:ExamMeta["subject"];busy:boolean;act:Act;notify:(t:string)=>void;onAdded:()=>void}){
   const [note,setNote]=useState(""),[requestId,setRequestId]=useState(()=>crypto.randomUUID());
   const feedback=q?.feedback, reply=feedback?.result;
   const pending=feedback?.status==="queued"||feedback?.status==="running";
