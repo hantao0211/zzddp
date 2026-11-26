@@ -112,6 +112,7 @@ export function ReadingApp({active=true}:{active?:boolean}={}){
   setShelfView(view);
   try{if(shelfPreference)localStorage.setItem(shelfPreference,view);}catch{/* The selection still applies to this session. */}
  }
+ const [preferredReadingId,setPreferredReadingId]=useState<string|null>(null);
  const [entryOpen,setEntryOpen]=useState(false);
  const [deletingLog,setDeletingLog]=useState<ReadingLog|null>(null);
  const [receipt,setReceipt]=useState<{log:ReadingLog;book:ReadingBook;pointsAdded:number;reused?:boolean;wasEdit:boolean}|null>(null);
@@ -124,7 +125,7 @@ export function ReadingApp({active=true}:{active?:boolean}={}){
  const homeDate=workspace?.date||savedHomeDate;
  function changeTab(value:"reading"|"growth"|"mall"|"manage",push=true){if(workspace){workspace.navigate(value,!push);return;}if(value===tab){window.scrollTo({top:0,behavior:"instant"});return;}setTab(value);if(push){const url=new URL(location.href);if(value==="reading")url.searchParams.delete("view");else url.searchParams.set("view",value);window.history.pushState(null,"",url);}window.scrollTo({top:0,behavior:"instant"});}
  useEffect(()=>{const update=()=>{const q=new URLSearchParams(location.search),v=q.get("view"),d=q.get("studyDate");setTab(v==="growth"||v==="mall"||v==="manage"?v:"reading");setHomeDate(d&&/^\d{4}-\d{2}-\d{2}$/.test(d)?d:undefined);};update();window.addEventListener("popstate",update);return()=>window.removeEventListener("popstate",update);},[]);
- async function load(background=false,signal?:AbortSignal,reportFailure=false){if(background&&pendingReads.current)return;const sequence=++loadSequence.current;pendingReads.current++;try{const s=await accountRequest("reading/state?logLimit=1",undefined,"GET",signal) as ReadingState;if(sequence!==loadSequence.current)return;if(loadedViewer.current!==s.viewer.id){loadedViewer.current=s.viewer.id;editingLogRef.current=null;savedReceipt.current=false;setReceipt(null);setDeletingLog(null);setEditingBook(null);setAddBook(false);setEntryOpen(false);setForm(null);setPhoto(undefined);setPhotoName("");setHistoryDate("");setHistoryBook("");setHistoryPage(0);setExpandedHistoryId(null);setHistoryOpen(false);setHistory(null);setHistoryRevision(value=>value+1);setAssistantLogId(undefined);}if(s.viewer.role==="child"&&location.pathname==="/reading/"&&new URLSearchParams(location.search).get("view")==="manage"){setTab("reading");if(workspace)workspace.navigate("reading",true);const url=new URL(location.href);url.searchParams.delete("view");window.history.replaceState(null,"",url);}setData(s);setLocked(false);if(!background)setError("");const preferredBook=s.books.find(b=>bookStatus(b)==="reading")??s.books.find(b=>!b.finished)??s.books[0];setForm(old=>old||{...emptyForm(),bookId:preferredBook?.id||"",date:s.today,...nextReadingPages(preferredBook)});}catch(e){if(sequence!==loadSequence.current)return;if((e as Error).message.includes("登录")){setLocked(true);setData(null);loadedViewer.current=null;setEditingBook(null);setAddBook(false);setEntryOpen(false);setForm(null);setPhoto(undefined);setPhotoName("");}setError(signal?.aborted?"刷新未完成，请稍后重试。":errorText(e));if(signal||reportFailure)throw e;}finally{pendingReads.current--;}}
+ async function load(background=false,signal?:AbortSignal,reportFailure=false){if(background&&pendingReads.current)return;const sequence=++loadSequence.current;pendingReads.current++;try{const s=await accountRequest("reading/state?logLimit=1",undefined,"GET",signal) as ReadingState;if(sequence!==loadSequence.current)return;if(loadedViewer.current!==s.viewer.id){loadedViewer.current=s.viewer.id;setPreferredReadingId(null);editingLogRef.current=null;savedReceipt.current=false;setReceipt(null);setDeletingLog(null);setEditingBook(null);setAddBook(false);setEntryOpen(false);setForm(null);setPhoto(undefined);setPhotoName("");setHistoryDate("");setHistoryBook("");setHistoryPage(0);setExpandedHistoryId(null);setHistoryOpen(false);setHistory(null);setHistoryRevision(value=>value+1);setAssistantLogId(undefined);}if(s.viewer.role==="child"&&location.pathname==="/reading/"&&new URLSearchParams(location.search).get("view")==="manage"){setTab("reading");if(workspace)workspace.navigate("reading",true);const url=new URL(location.href);url.searchParams.delete("view");window.history.replaceState(null,"",url);}setData(s);setLocked(false);if(!background)setError("");const preferredBook=s.books.find(b=>bookStatus(b)==="reading")??s.books.find(b=>!b.finished)??s.books[0];setForm(old=>old||{...emptyForm(),bookId:preferredBook?.id||"",date:s.today,...nextReadingPages(preferredBook)});}catch(e){if(sequence!==loadSequence.current)return;if((e as Error).message.includes("登录")){setLocked(true);setData(null);loadedViewer.current=null;setEditingBook(null);setAddBook(false);setEntryOpen(false);setForm(null);setPhoto(undefined);setPhotoName("");}setError(signal?.aborted?"刷新未完成，请稍后重试。":errorText(e));if(signal||reportFailure)throw e;}finally{pendingReads.current--;}}
  useStudyRefresh(async signal=>{await load(false,signal);setHistoryRevision(value=>value+1);},active);
  useEffect(()=>{const v=new URLSearchParams(location.search).get("view");if(v==="growth"||v==="mall"||v==="manage")setTab(v);void load();const t=setInterval(()=>{if(activeRef.current&&!document.hidden)void load(true);},5000);return()=>{loadSequence.current++;clearInterval(t);recordingController.current?.abort();recordingRef.current?.cancel();};},[]);
  useEffect(()=>{if(!data)return;setTimer(null);try{const saved=JSON.parse(localStorage.getItem("xiaobu-reading-timer:"+data.viewer.id)||"null");if(saved&&typeof saved.startedAt==="number"&&saved.startedAt<=Date.now()&&Date.now()-saved.startedAt<12*3600000&&data.books.some(b=>b.id===saved.bookId)){setTimer(saved);setForm(f=>f?{...f,bookId:saved.bookId,...nextReadingPages(data.books.find(b=>b.id===saved.bookId))}:f);}}catch{}},[data?.viewer.id]);
@@ -142,7 +143,8 @@ export function ReadingApp({active=true}:{active?:boolean}={}){
    setHistory(null);setHistoryRevision(value=>value+1);
   });
  }
- function startAnotherReading(){if(!data||!form||busy)return;editingLogRef.current=null;const book=receipt?.book||data.books.find(book=>book.id===form.bookId);savedReceipt.current=false;setReceipt(null);setForm({...emptyForm(),separateSession:true,date:data.today,bookId:form.bookId,...nextReadingPages(book)});setPhoto(undefined);setPhotoName("");setError("");setNotice("");formRef.current?.scrollIntoView({behavior:"smooth",block:"start"});}
+ function startAnotherReading(){resetReadingForm(receipt?.book??entryBook);}
+ function resetReadingForm(book?:ReadingBook){if(!book||!data||busy)return;editingLogRef.current=null;savedReceipt.current=false;setReceipt(null);setForm({...emptyForm(),separateSession:true,date:data.today,bookId:book.id,...nextReadingPages(book)});setPhoto(undefined);setPhotoName("");setError("");setNotice("");formRef.current?.scrollIntoView({behavior:"smooth",block:"start"});}
  useEffect(()=>{const refresh=()=>{mutationEpoch.current++;actionLock.current=false;savedReceipt.current=false;setBusy(false);setReceipt(null);setDeletingLog(null);void load();};window.addEventListener("xiaobu:session-changed",refresh);return()=>window.removeEventListener("xiaobu:session-changed",refresh);},[]);
  useEffect(()=>{if(receipt||!form||(!form.summary.trim()&&!form.reflection.trim()&&!form.excerpt.trim()&&!form.chapter.trim()&&!photo&&!form.minutes))return;const protect=(e:BeforeUnloadEvent)=>{e.preventDefault();e.returnValue="";};window.addEventListener("beforeunload",protect);return()=>window.removeEventListener("beforeunload",protect);},[form,photo,receipt]);
  function stopTimer(){if(!timer||!form||!data)return;const minutes=Math.max(1,Math.ceil((Date.now()-timer.startedAt)/60000));setForm({...form,minutes:Math.min(720,form.minutes+minutes)});setTimer(null);try{localStorage.removeItem("xiaobu-reading-timer:"+data.viewer.id);}catch{};setNotice(`已把${minutes}分钟计入本次阅读，可在保存前调整。`);}
@@ -181,10 +183,24 @@ export function ReadingApp({active=true}:{active?:boolean}={}){
   finally{if(sequence===historySequence.current){historyPending.current=false;setHistoryBusy(false);}}
  }
  const entryBook=data?.books.find(book=>book.id===form?.bookId);
+ const readingBooks=data?.books.filter(book=>bookStatus(book)==="reading")??[];
+ const currentBook=readingBooks.find(book=>book.id===preferredReadingId)
+  ?? readingBooks.find(book=>book.id===entryBook?.id) ?? readingBooks[0] ?? entryBook ?? data?.books[0];
  const defaultPages=nextReadingPages(entryBook);
  const draftStarted=!!form&&(!!(form.summary||form.chapter||form.reflection||form.excerpt||form.minutes||photo)||
   form.startPage!==defaultPages.startPage||form.endPage!==defaultPages.endPage||form.date!==data?.today);
  const entryAction=timer?"返回阅读计时":receipt?"再记一次阅读":form?.version?"继续修改":draftStarted?"继续填写":"阅读打卡";
+ const resumeEntry=!!(timer||(!receipt&&(form?.version||draftStarted)));
+ function openHomeEntry(){
+  if(!form||!currentBook||!data)return;
+  setNotice("");
+  if(receipt){
+   resetReadingForm(currentBook);
+  }else if(!resumeEntry&&form.bookId!==currentBook.id){
+   setForm({...emptyForm(),date:data.today,bookId:currentBook.id,...nextReadingPages(currentBook)});
+  }
+  setEntryOpen(true);
+ }
  function leaveEntry(){
   recordingController.current?.abort();
   if(recordingRef.current)void endVoice();
@@ -206,15 +222,16 @@ export function ReadingApp({active=true}:{active?:boolean}={}){
  {tab==="reading"&&<><StudyPageHeading className="reading-heading" title="我的阅读手帐" subtitle={<><BookOpen size={16} aria-hidden="true"/><span>{data.stats.minutes ? `累计阅读 ${data.stats.minutes} 分钟` : "读一读，说一说"}</span></>} aside={<span className="reading-streak study-heading-badge"><Flame aria-hidden="true"/><span className="study-streak-value">连续<strong>{data.stats.currentStreak}</strong>天</span></span>}/>
  <div className="study-reading-main reading-journal-home">
  <section className="card">
-  <div className="reading-section-heading"><h2><BookFlip />{entryBook&&bookStatus(entryBook)==="reading"?"正在读":"我的读物"}</h2>
+  <div className="reading-section-heading"><h2><BookFlip />{currentBook&&bookStatus(currentBook)==="reading"?"正在读":"我的读物"}</h2>
    {data.books.length>0&&<button className="text-button" disabled={busy} onClick={()=>setAddBook(true)}><Plus size={18} aria-hidden="true"/>添加书籍</button>}
   </div>
-  {entryBook?<div className="reading-current-book">
+  {currentBook?<div className="reading-current-book" data-current-book-id={currentBook.id}>
    <span className="reading-pocket-cover" aria-hidden="true"><Bookmark size={18}/><BookOpen size={28}/></span>
-   <div className="reading-current-copy"><h3>{entryBook.title}</h3>{entryBook.author&&<p>{entryBook.author}</p>}
-    <small>{entryBook.lastReadPage ? `上次读到第 ${entryBook.lastReadPage} 页` : shelfStatusLabels[bookStatus(entryBook)]}{entryBook.totalPages ? ` · 共 ${entryBook.totalPages} 页` : ""}</small>
+   <div className="reading-current-copy"><h3>{currentBook.title}</h3>{currentBook.author&&<p>{currentBook.author}</p>}
+    <small>{currentBook.lastReadPage && bookStatus(currentBook)==="reading" ? `上次读到第 ${currentBook.lastReadPage} 页` : shelfStatusLabels[bookStatus(currentBook)]}{currentBook.totalPages ? ` · 共 ${currentBook.totalPages} 页` : ""}</small>
+    {resumeEntry&&entryBook&&entryBook.id!==currentBook.id&&<small>未完成的打卡 · {entryBook.title}</small>}
    </div>
-   <button className="button primary reading-entry-trigger" disabled={busy||transcribing} onClick={()=>{setNotice("");if(receipt)startAnotherReading();setEntryOpen(true);}}>
+   <button className="button primary reading-entry-trigger" disabled={busy||transcribing} onClick={openHomeEntry}>
     <NotebookPen size={17} aria-hidden="true"/>{entryAction}
    </button>
   </div>:<div className="reading-empty"><BookOpen size={36} aria-hidden="true"/><h3>先选一本喜欢的书</h3><button className="button primary" disabled={busy} onClick={()=>setAddBook(true)}><Plus size={18} aria-hidden="true"/>添加第一本书</button></div>}
@@ -254,6 +271,9 @@ export function ReadingApp({active=true}:{active?:boolean}={}){
     </div>
     <ShelfStatusPicker status={bookStatus(b)} label={`《${b.title}》的阅读状态`} disabled={busy} onChange={status=>void action(async()=>{
      const updated:ReadingBook=await call(`books/${b.id}/status`,{status});
+     if(loadedViewer.current!==data.viewer.id)return;
+     loadSequence.current++;
+     if(status==="reading")setPreferredReadingId(updated.id);
      setData(current=>current?.viewer.id===data.viewer.id?{...current,books:current.books.map(book=>book.id===updated.id?updated:book)}:current);
     })}/>
    </article>)}</div>
@@ -263,7 +283,7 @@ export function ReadingApp({active=true}:{active?:boolean}={}){
  {tab==="growth"&&<><StudyPageHeading className="reading-heading growth-heading" title="我的小脚步" subtitle={data.studentProfile?<StudentProfileSummary profile={data.studentProfile}/>:<><Sprout size={16} aria-hidden="true"/><span>记录每一点成长</span></>} aside={<span className="reading-points study-heading-badge"><StepAmount value={data.growth.balance}/></span>}/>{active&&<GrowthRecapCard key={data.viewer.id} today={data.today}/>}<GrowthActivities data={data} refresh={async message=>{await load();setNotice(message);}}/><section className="card reading-homework-reward"><h2>{data.activities ? <Footprints aria-hidden="true"/> : <GrowingSprout />}每天作业，走一小步</h2>{(data.homeworkRewardRules?.dailyPoints??1)>0?<><p>当天作业全部做完，自动攒 <StepAmount value={data.homeworkRewardRules?.dailyPoints??1} signed/>。</p><p className="reading-muted">每天只奖励一次，不要求全部答对。可和阅读奖励一起攒，用来兑换心愿。</p></>:<p className="reading-muted">家长暂时关闭了作业完成奖励，已攒的小脚步会保留。</p>}</section><details className="card reading-growth-details"><summary><Flame size={19} aria-hidden="true"/>阅读成长与连续奖励</summary><div className="reading-stats">{[[Flame,"连续阅读",data.stats.currentStreak,"天"],[BookOpen,"累计阅读",data.stats.days,"天"],[Clock3,"累计时长",data.stats.minutes,"分钟"],[Check,"读完书籍",data.stats.booksFinished,"本"]].map(([Icon,label,value,unit])=>{const I=Icon as typeof Flame;return <div className="card" key={String(label)}><I aria-hidden="true"/><span>{String(label)}</span><strong>{String(value)}<small>{String(unit)}</small></strong></div>;})}</div><section className="card"><h2><Flame aria-hidden="true"/>连续阅读的小目标</h2><p>每日打卡攒 <StepAmount value={data.rules.dailyPoints}/>。断签不扣已有小脚步，累计成果会保留。</p><div className="reading-milestones">{data.rules.milestones.map(m=><span key={m.days} className={data.stats.currentStreak>=m.days?"reached":""}>{data.stats.currentStreak>=m.days?<Check aria-hidden="true"/>:<Flame aria-hidden="true"/>}<strong>{m.days}天</strong><StepAmount value={m.points} signed/></span>)}</div><p className="reading-muted">最长连续{data.stats.bestStreak}天 · 累计读{data.stats.pages}页（含重读）。{data.rules.backfillCounts?"补记可计入连续奖励。":"补记保留记录，不补领打卡或连续奖励。"}</p><details><summary>最近的阅读日历</summary><div className="reading-calendar">{data.calendar.map(d=><span key={d.date}><CalendarDays size={15} aria-hidden="true"/>{d.date} · {d.minutes}分钟{d.backfilled?"（补记）":""}</span>)}</div></details></section></details><details className="card"><summary>小脚步明细 · 累计攒了{data.growth.earned}个小脚步</summary>{data.growth.ledger.map(l=><div className="reading-ledger" key={l.id}><span>{l.date} · {l.label}</span><strong><StepAmount value={l.points} signed/></strong></div>)}</details></>}
  {tab==="mall"&&<><StudyPageHeading className="reading-heading" title="我的心愿商城" subtitle={<><Heart size={16} aria-hidden="true"/><span>攒小步，换心愿</span></>} aside={<span className="reading-points study-heading-badge"><StepAmount value={data.growth.balance}/></span>}/><FamilyRewardShop data={data} refresh={async message=>{await load();setNotice(message);}}/><WishPanel data={data} refresh={async message=>{await load();setNotice(message);}}/><RedemptionHistory data={data} refresh={async message=>{await load();setNotice(message);}}/></>}
  {tab==="manage"&&<section className="card"><h1>这里需要家长账号</h1><a href="/admin/">打开家长登录</a></section>}
- </>}{deletingLog&&<ReadingLogDelete log={deletingLog} book={data?.books.find(book=>book.id===deletingLog.bookId)} close={()=>setDeletingLog(null)} deleted={logDeleted}/>}{editingBook&&<ReadingBookEditor book={editingBook} close={()=>setEditingBook(null)} saved={book=>{setEditingBook(null);setData(current=>current?{...current,books:current.books.map(item=>item.id===book.id?book:item)}:current);setNotice("书籍信息已更新，阅读记录和小脚步都保留了。");void load();}}/>}{addBook&&<BookPicker close={()=>setAddBook(false)} added={b=>{setAddBook(false);if(form?.bookId&&(timer||(!receipt&&(draftStarted||form.version))||bookStatus(b)==="wanted"||bookStatus(b)==="finished")){setNotice(`已在书架标为「${shelfStatusLabels[bookStatus(b)]}」。`);void load();return;}const wasSaved=savedReceipt.current;savedReceipt.current=false;setReceipt(null);setForm(f=>f?{...(wasSaved?{...emptyForm(),date:data?.today||f.date}:f),id:crypto.randomUUID(),version:0,bookId:b.id,...nextReadingPages(b)}:f);setNotice(`已加入书架 · ${shelfStatusLabels[bookStatus(b)]}`);void load();}}/>}</main>{!workspace&&<StudyAssistant navigationManaged readingMode readingLogId={assistantLogId}/>}</StudyShell>;
+ </>}{deletingLog&&<ReadingLogDelete log={deletingLog} book={data?.books.find(book=>book.id===deletingLog.bookId)} close={()=>setDeletingLog(null)} deleted={logDeleted}/>}{editingBook&&<ReadingBookEditor book={editingBook} close={()=>setEditingBook(null)} saved={book=>{setEditingBook(null);setData(current=>current?{...current,books:current.books.map(item=>item.id===book.id?book:item)}:current);setNotice("书籍信息已更新，阅读记录和小脚步都保留了。");void load();}}/>}{addBook&&<BookPicker close={()=>setAddBook(false)} added={b=>{setAddBook(false);if(bookStatus(b)==="reading")setPreferredReadingId(b.id);if(form?.bookId&&(timer||(!receipt&&(draftStarted||form.version))||bookStatus(b)==="wanted"||bookStatus(b)==="finished")){setNotice(`已在书架标为「${shelfStatusLabels[bookStatus(b)]}」。`);void load();return;}const wasSaved=savedReceipt.current;savedReceipt.current=false;setReceipt(null);setForm(f=>f?{...(wasSaved?{...emptyForm(),date:data?.today||f.date}:f),id:crypto.randomUUID(),version:0,bookId:b.id,...nextReadingPages(b)}:f);setNotice(`已加入书架 · ${shelfStatusLabels[bookStatus(b)]}`);void load();}}/>}</main>{!workspace&&<StudyAssistant navigationManaged readingMode readingLogId={assistantLogId}/>}</StudyShell>;
 }
 function CircleSuccess(){return <Check size={19} aria-hidden="true"/>;}
 const rewardSections = [

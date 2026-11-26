@@ -7,7 +7,8 @@ const base=process.env.SMOKE_BASE_URL,output=process.env.SMOKE_OUTPUT_DIR;assert
 const viewer={id:'11111111-1111-4111-8111-111111111111',name:'模拟孩子',username:'qa-child',role:'child'},bookId='22222222-2222-4222-8222-222222222222';
 let book={id:bookId,revision:'a'.repeat(64),title:'模拟书名（待更正）',author:'模拟作者',publisher:'模拟出版社',isbn:'',totalPages:241,catalogId:null,description:'',sourceUrl:'https://example.org/book',createdAt:'2026-11-22T00:00:00Z',finished:false,lastReadPage:48,uniquePages:22,minutes:25,logCount:1},failNext=true,conflictNext=false;
 const log={id:'33333333-3333-4333-8333-333333333333',bookId,version:1,date:'2026-11-22',startPage:27,endPage:48,minutes:25,summary:'人物遇到困难后，和朋友一起想办法。',chapter:'',reflection:'',excerpt:'',imageId:null,actorId:viewer.id,backfilled:false,createdAt:'',updatedAt:'',reviewStatus:'done',canEdit:true,review:{summaryFeedback:'你把遇到的事情说明白了。',strengths:[],nextStep:'',followUpQuestion:'',expression:'clear',comparison:'insufficient_evidence',comparisonReason:'仅评价你的概括。',evidenceQuote:'',evidenceReadable:false,basis:'none',timingNote:'时长是阅读记录。'}};
-const state=()=>({today:'2026-11-23',viewer,books:[book,{...book,id:'44444444-4444-4444-8444-444444444444',title:'一本有很长很长书名的探险故事',totalPages:258,shelfStatus:'finished',finished:true,uniquePages:0,minutes:0,logCount:0,lastReadPage:0},{...book,id:'55555555-5555-4555-8555-555555555555',title:'模拟探险故事',uniquePages:0,minutes:0,logCount:0,lastReadPage:0,shelfStatus:'unread'}],logs:[log],rules:{dailyPoints:2,backfillCounts:false,milestones:[]},stats:{days:1,minutes:25,pages:22,currentStreak:1,bestStreak:1,booksFinished:0},growth:{balance:2,earned:2,ledger:[]},wishes:[],rewards:[],redemptions:[],calendar:[],reviewBudget:{used:0,limit:20},hasMore:false});
+let otherBook={...book,id:'55555555-5555-4555-8555-555555555555',title:'模拟探险故事',uniquePages:0,minutes:0,logCount:0,lastReadPage:0,shelfStatus:'unread'};
+const state=()=>({today:'2026-11-23',viewer,books:[book,{...book,id:'44444444-4444-4444-8444-444444444444',title:'一本有很长很长书名的探险故事',totalPages:258,shelfStatus:'finished',finished:true,uniquePages:0,minutes:0,logCount:0,lastReadPage:0},otherBook],logs:[log],rules:{dailyPoints:2,backfillCounts:false,milestones:[]},stats:{days:1,minutes:25,pages:22,currentStreak:1,bestStreak:1,booksFinished:0},growth:{balance:2,earned:2,ledger:[]},wishes:[],rewards:[],redemptions:[],calendar:[],reviewBudget:{used:0,limit:20},hasMore:false});
 const writes=[],errors=[],browser=await (process.env.SMOKE_BROWSER==='webkit'?webkit:chromium).launch({headless:true});
 try{
  const page=await browser.newPage({ ignoreHTTPSErrors:true, colorScheme:process.env.SMOKE_COLOR_SCHEME || 'light',viewport:{width:390,height:844},hasTouch:true,isMobile:true});page.on('pageerror',e=>errors.push(e.message));
@@ -22,6 +23,9 @@ try{
    assert.equal(saved.id,log.id);assert.equal(saved.version,log.version);
    Object.assign(log,saved,{version:saved.version+1});
    return send({log,book,pointsAdded:0});
+  }
+  if(path.endsWith('/books/'+otherBook.id+'/status') && req.method()==='POST'){
+   otherBook={...otherBook,shelfStatus:req.postDataJSON().status}; return send(otherBook);
   }
   if(path.endsWith('/books/'+bookId+'/status') && req.method()==='POST'){
    book={...book,shelfStatus:req.postDataJSON().status}; return send(book);
@@ -45,6 +49,22 @@ try{
  assert.equal(await page.locator('.reading-entry-fields').count(),0);
  await page.locator('.reading-current-book').getByText(/上次读到第 48 页/).waitFor();
  await page.screenshot({path:output+'/reading-home.png'});
+ const shelfToggle=page.locator('.reading-library > summary');
+ const current=page.locator('.reading-current-book');
+ const mainStatus=page.getByLabel(`《${book.title}》的阅读状态`);
+ const otherStatus=page.getByLabel(`《${otherBook.title}》的阅读状态`);
+ await shelfToggle.click();
+ await mainStatus.selectOption('wanted');
+ await current.getByText('想读 · 共 241 页',{exact:true}).waitFor();
+ await otherStatus.selectOption('reading');
+ await current.getByRole('heading',{name:otherBook.title}).waitFor();
+ await openEntry();
+ assert.equal(await page.getByLabel('正在读的书',{exact:true}).inputValue(),otherBook.id);
+ assert.equal(await page.getByLabel('开始页',{exact:true}).inputValue(),'1');
+ await goBack();
+ await mainStatus.selectOption('reading');
+ await current.getByRole('heading',{name:book.title}).waitFor();
+ await shelfToggle.click();
  await openEntry();
  const entry=page.getByRole('dialog',{name:'阅读打卡',exact:true});
  await entry.waitFor();
@@ -151,6 +171,8 @@ try{
  await gridView.click();
  await picker.selectOption('wanted');
  await shelf.locator('.shelf-wanted').waitFor();
+ await current.getByRole('heading',{name:otherBook.title}).waitFor();
+ await current.getByText('未完成的打卡 · '+book.title,{exact:true}).waitFor();
  await page.getByRole('button',{name:`修改${book.title}的书籍信息`,exact:true}).click();
  const dialog=page.getByRole('dialog',{name:'修改书籍信息',exact:true});await dialog.waitFor();assert.equal(await dialog.getByLabel('书名',{exact:true}).inputValue(),book.title);assert.equal(await dialog.getByLabel('总页数（选填）',{exact:true}).inputValue(),'241');
  for(const field of ['书名','总页数（选填）']) assert.equal((await dialog.getByLabel(field,{exact:true}).boundingBox()).height,40);
@@ -190,7 +212,8 @@ try{
  await goBack();
  await page.getByRole('button',{name:'再记一次阅读',exact:true}).click();
  assert.equal(await page.locator('#reading-summary').inputValue(),'');
- assert.equal(await page.getByLabel('开始页',{exact:true}).inputValue(),'49');
+ assert.equal(await page.getByLabel('正在读的书',{exact:true}).inputValue(),otherBook.id);
+ assert.equal(await page.getByLabel('开始页',{exact:true}).inputValue(),'1');
  await desktop.close();
  assert.equal(state().growth.balance,2);assert.deepEqual(errors,[]);assert.ok(writes.length>=4);console.log('READING_BOOK_EDIT_UI_OK=true child-pencil-entry,prefilled-metadata,save-retry-keeps-draft,concurrent-edit-merges-untouched-fields,all-five-fields,progress-and-reading-draft-preserved,reload,too-small-page-error,cancel,320-390-768-1280');
 }finally{await browser.close();}
