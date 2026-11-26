@@ -35,12 +35,16 @@ try {
     for(const [i,icon] of ["calendar-range","calendar-days","graduation-cap"].entries()){
       const symbol=buttons.nth(i).locator("svg.lucide-"+icon+"[aria-hidden=true]");
       assert.ok(await symbol.isVisible());
-      boxes.push(await buttons.nth(i).boundingBox());
+      const target=await buttons.nth(i).boundingBox();
+      const face=await buttons.nth(i).locator(".recap-choice-face").boundingBox();
+      assert.ok(target.height>=44 && face.height<=30);
+      boxes.push(target);
     }
     assert.ok(boxes.every(box=>Math.abs(box.y-boxes[0].y)<1 && box.x>=0 && box.x+box.width<=320));
   }
   await page.setViewportSize({width:320,height:844});
   await checkPeriodButtons(page.locator(".recap-entries"));
+  await page.locator(".growth-recap").screenshot({path:process.env.SMOKE_OUTPUT_DIR+"/entries.png"});
   await page.getByRole("button",{name:"周小结",exact:true}).click();
   const dialog=page.getByRole("dialog",{name:"我的成长小结"});
   await checkPeriodButtons(dialog.locator(".recap-periods"));

@@ -10,7 +10,9 @@ const periodIcons = { week: CalendarRange, month: CalendarDays, term: Graduation
 
 function PeriodLabel({period}:{period:RecapPeriod}) {
   const Icon = periodIcons[period];
-  return <><Icon className="recap-period-icon" size={17} aria-hidden="true"/>{recapPeriods[period]}小结</>;
+  return <span className="recap-choice-face">
+    <Icon size={15} aria-hidden="true"/>{recapPeriods[period]}小结
+  </span>;
 }
 
 function RecapPage({period,day,today,onDay}: {
@@ -70,10 +72,10 @@ export function GrowthRecapCard({today}:{today:string}) {
   const periods=Object.keys(recapPeriods) as RecapPeriod[];
   return <section className="card growth-recap">
     <h2><Sprout size={20}/>我的成长小结</h2>
-    <div className="recap-entries">{periods.map(p=><button key={p} className="button secondary compact" onClick={()=>{setDay(today);setPeriod(p);}}><PeriodLabel period={p}/></button>)}</div>
+    <div className="recap-entries">{periods.map(p=><button key={p} className="recap-choice" onClick={()=>{setDay(today);setPeriod(p);}}><PeriodLabel period={p}/></button>)}</div>
     {period&&<ReadingCheckinDialog title="我的成长小结" backText="返回成长" onBack={()=>setPeriod(null)}>
       <div className="recap-page">
-        <div className="recap-periods" role="group" aria-label="小结周期">{periods.map(p=><button key={p} aria-pressed={period===p} onClick={()=>setPeriod(p)}><PeriodLabel period={p}/></button>)}</div>
+        <div className="recap-periods" role="group" aria-label="小结周期">{periods.map(p=><button key={p} className="recap-choice" aria-pressed={period===p} onClick={()=>setPeriod(p)}><PeriodLabel period={p}/></button>)}</div>
         <RecapPage key={period+day} period={period} day={day} today={today} onDay={setDay}/>
       </div>
     </ReadingCheckinDialog>}
