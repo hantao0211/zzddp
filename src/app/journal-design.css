@@ -591,6 +591,10 @@
 .exam-evidence dd,.exam-reply blockquote { white-space:pre-wrap; }
 .exam-reply { display:grid; gap:8px; background:var(--journal-sage); }
 .exam-reply h4 { justify-content:flex-start; }
+.exam-reread-status { display:flex; align-items:center; gap:8px; }
+.exam-reread-status > :first-child { flex:none; color:var(--journal-green); }
+.exam-reread-status .exam-scan-icon svg { width:26px; height:26px; }
+.exam-reread-status .exam-scan-icon::after { top:8px; left:3px; right:3px; }
 .exam-reply blockquote { padding-inline-start:10px; border-inline-start:2px solid var(--journal-green); }
 .exam-check { border-top:1px solid var(--border); padding-top:8px; }
 .exam-workspace textarea { box-sizing:border-box; width:100%; resize:vertical; }

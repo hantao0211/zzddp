@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { ArrowLeft, BookOpen, Check, ChevronRight, FileImage, MessageCircle, Pencil, Plus, RotateCw, ScanLine } from "lucide-react";
+import { ArrowLeft, BookOpen, Check, ChevronRight, Clock3, FileImage, MessageCircle, Pencil, Plus, RotateCw, ScanLine } from "lucide-react";
 import { examKinds, examReadingChecks, type ExamDetail, type ExamMeta, type ExamQuestion, type Observation } from "@/domain/assessment";
 import { homeworkPost, homeworkRequest } from "@/services/homework-gateway";
 import { ExamScanIcon } from "./exam-scan-icon";
@@ -8,6 +8,7 @@ import { PhotoPreviewButton } from "./photo-preview";
 
 const choices=["语文","数学","英语"];
 const pagePath=(id:string)=>"/practice/exam-pages/"+id;
+const feedbackLabels={queued:"等待看原卷",running:"正在看原卷",done:"小步已回复",failed:"复读未完成"};
 const resultLabels={correct:"正确",wrong:"错误",uncertain:"待核对",blank:"未作答"};
 const pageStatus:Record<string,string>={awaiting:"待补传",queued:"等待识读",running:"正在识读",done:"已整理",failed:"识读已停止"};
 type Act=(fn:()=>Promise<void>)=>void;
@@ -90,7 +91,7 @@ export function ExamWorkspace({detail,canManage,busy,act,notify,openMistakes,put
             {addQuestion}
           </div>}
         </div>}
-        {rows.map(q=><button className="exam-qrow" id={"exam-open-"+q.id} key={q.id} onClick={()=>open(p.id,q.id)}><span><strong>{q.label}</strong><small>{q.feedback?(q.feedback.status==="done"?"小步已回复":q.feedback.status==="failed"?"复读未完成":"小步正在看原卷"):q.question}</small></span><span className={"exam-verdict v-"+q.verdict}>{resultLabels[q.verdict]}</span><ChevronRight size={15}/></button>)}
+        {rows.map(q=><button className="exam-qrow" id={"exam-open-"+q.id} key={q.id} onClick={()=>open(p.id,q.id)}><span><strong>{q.label}</strong><small>{q.feedback?feedbackLabels[q.feedback.status]:q.question}</small></span><span className={"exam-verdict v-"+q.verdict}>{resultLabels[q.verdict]}</span><ChevronRight size={15}/></button>)}
         {!failed&&addQuestion}
       </section>;
     })}
@@ -112,7 +113,10 @@ function QuestionDesk({q,pageId,canManage,subject,busy,act,notify,onAdded}:{q?:E
   return <><div className="exam-question-text"><span className={"exam-verdict v-"+q.verdict}>{resultLabels[q.verdict]}</span><p>{q.question}</p></div>
     <dl className="exam-evidence"><dt>孩子原答</dt><dd>{q.studentAnswer||"未辨清"}</dd><dt>老师批注</dt><dd>{q.teacherMark||"待核对"}</dd>{q.correction&&<><dt>卷面订正</dt><dd>{q.correction}</dd></>}{q.expectedAnswer&&<><dt>参考答案</dt><dd>{q.expectedAnswer}</dd></>}</dl>
     {feedback&&<section className="exam-reply" aria-live="polite"><h4><MessageCircle size={16}/>这道题的说明</h4><blockquote>{feedback.note}</blockquote>
-      {pending?<p>小步正在重看原卷，可以先离开。</p>:reply?<><strong>小步的回复</strong><p>{reply.reply}</p>{reply.evidence&&<p><small>原卷依据</small> {reply.evidence}</p>}
+      {pending?<p className="exam-reread-status">
+        {feedback.status==="running"?<ExamScanIcon/>:<Clock3 size={20} aria-hidden="true"/>}
+        <span>{feedback.status==="running"?"小步正在重看原卷":"已排队，等小步看原卷"}，可以先离开。</span>
+      </p>:reply?<><strong>小步的回复</strong><p>{reply.reply}</p>{reply.evidence&&<p><small>原卷依据</small> {reply.evidence}</p>}
       {change&&<details><summary>查看建议的修改</summary><dl className="exam-evidence">{(["question","studentAnswer","teacherMark","correction","verdict"] as const).filter(k=>q[k]!==change[k]).map(k=><div key={k}><dt>{{question:"题干",studentAnswer:"孩子原答",teacherMark:"老师批注",correction:"卷面订正",verdict:"核对结果"}[k]}</dt><dd>{k==="verdict"?resultLabels[change[k]]:change[k]||"留空"}</dd></div>)}</dl>{alreadyApplied&&<p>当前记录已一致。</p>}</details>}
       {canManage&&change&&!alreadyApplied&&feedback.revision===q.revision&&<button className="button primary compact" disabled={busy} onClick={()=>save({...q,...change,confident:change.verdict!=="uncertain"},q.id,feedback.revision)}>采用这次修改</button>}
       {change&&!alreadyApplied&&feedback.revision!==q.revision&&<small>题目记录已更新，请对照当前记录。</small>}
@@ -120,7 +124,7 @@ function QuestionDesk({q,pageId,canManage,subject,busy,act,notify,onAdded}:{q?:E
     {mode==="explain"?<form className="exam-form exam-compose" onSubmit={e=>{e.preventDefault();if(!note.trim())return;act(async()=>{await homeworkPost(pagePath(pageId)+"/explain",{requestId,questionId:q.id,revision:q.revision,note:note.trim()});setMode("view");setNote("");setRequestId(crypto.randomUUID());notify("说明已收到，小步会重看这道题的原卷。");});}}>
       <label>向小步说明<textarea autoFocus rows={3} maxLength={500} required value={note} onChange={e=>setNote(e.target.value)} placeholder="例如：题号旁的红圈是题型标记，请再看答案下方的勾。"/></label>
       <div className="exam-tools"><button type="button" className="text-button" disabled={busy} onClick={()=>setMode("view")}>取消</button><button className="button primary compact" disabled={busy||!note.trim()||pending}><ScanLine size={16}/>请小步看原卷</button></div>
-    </form>:<div className="exam-tools"><button className="button primary compact" disabled={busy||pending} onClick={()=>{setNote(feedback?.status==="failed"?feedback.note:"");setMode("explain");}}><MessageCircle size={16}/>{pending?"正在看原卷":feedback?.status==="failed"?"重新说明":"向小步说明"}</button>
+    </form>:<div className="exam-tools"><button className="button primary compact" disabled={busy||pending} onClick={()=>{setNote(feedback?.status==="failed"?feedback.note:"");setMode("explain");}}><MessageCircle size={16}/>{pending?feedbackLabels[feedback.status]:feedback?.status==="failed"?"重新说明":"向小步说明"}</button>
     {canManage&&<button className="text-button" disabled={busy} onClick={()=>setMode("edit")}><Pencil size={15}/>手动核对</button>}</div>}
   </>;
 }
