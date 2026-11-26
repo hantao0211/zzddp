@@ -14,10 +14,9 @@ import { useEffect, useRef, useState } from "react";
 import { homeworkPost, homeworkRequest } from "@/services/homework-gateway";
 import type { GradedQuestion, GradingReading, GradingBatchView, GradingSummary, MistakeView } from "@/domain/grading";
 import { Image, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, MessageCircle, PencilLine, Lightbulb, X } from "lucide-react";
+import { GradingFilters, filterLabels, type GradingFilter } from "./grading-filters";
 import { StatusIndicator } from "./status-indicator";
 const verdicts = { passedWithNote: "通过但存疑", correct: "正确", wrong: "错误 · 已入错题本", blank: "未作答", uncertain: "AI尚未确认", feedback: "主观题点评" };
-const filterLabels = { correct: "正确", passedWithNote: "通过但存疑", wrong: "错误", blank: "未作答", uncertain: "未确认", feedback: "点评" };
-type GradingFilter = "attention" | "all" | "ungraded" | GradedQuestion["verdict"];
 function Photo({ id, url, alwaysOpen = false }: { id: string; url?: string; alwaysOpen?: boolean }) {
   const [open, setOpen] = useState(false);
   const alt = url ? "这道题所在的原卷" : "这道题所在的作业原图";
@@ -163,17 +162,7 @@ export function GradingPanel({ date, canManage = true, focusFailures = false }: 
   return <section className="card grade-panel" aria-label="批改结果"><h2>批改结果</h2>
     {error && <p role="alert" className="form-error">{error}</p>}
     {!data ? <p>正在读取批改记录…</p> : !data.summary.enabled ? <p>自动批改尚未启用。</p> : <>
-      <div className="grade-filter-bar" role="group" aria-label="按批改结果筛选">
-        <button type="button" aria-label="全部题目" aria-pressed={filter === "all"} onClick={() => chooseFilter("all")}>全部</button>
-        <div className="grade-filter-options">
-          <button type="button" aria-pressed={filter === "ungraded"} onClick={() => chooseFilter("ungraded")}>未批改 <span>{ungradedPages.length}页</span></button>
-          <button type="button" aria-label="先看需要留意的题" aria-pressed={filter === "attention"} onClick={() => chooseFilter("attention")}>需留意</button>
-          {(Object.keys(filterLabels) as GradedQuestion["verdict"][]).map(kind =>
-            <button type="button" key={kind} className="grade-stat-filter" aria-pressed={filter === kind} aria-label={`${filterLabels[kind]} ${data.summary[kind] ?? 0}题`} onClick={() => chooseFilter(kind)}>
-              {filterLabels[kind]} <span>{data.summary[kind] ?? 0}</span>
-            </button>)}
-        </div>
-      </div>
+      <GradingFilters value={filter} onChange={chooseFilter} summary={data.summary} ungraded={ungradedPages.length} />
       {!data.batches.length && <div><p>还没有批改记录。新上传的书面作业会自动处理；已上传的作业可以直接开始，无需重新上传。</p>{canManage && <button className="button primary" disabled={retrying} onClick={async () => { setRetrying(true); try { await homeworkPost("/grading/start", { date }); setError(""); } catch (e) { setError(e instanceof Error ? e.message : "暂时无法开始批改"); } finally { setRetrying(false); } }}>批改这一天的作业</button>}</div>}
       {!!batches.length && <h3 ref={listHeading} tabIndex={-1} className="grade-list-caption">{filter === "ungraded" ? `未批改 · ${ungradedPages.length}页` : isCategory ? `只看${filterLabels[filter]} · ${shownCount}题` : `${filter === "all" ? "全部题目" : "需要留意"} · ${shownCount}题`}</h3>}
       {!!batches.length && !rows.length && <p className="grade-filter-empty">{filter === "ungraded" ? "暂无未批改的页面。" : filter === "feedback" ? "暂无点评。" : isCategory ? `暂无${filterLabels[filter]}的题目。` : "当前没有需要留意的题。"}</p>}

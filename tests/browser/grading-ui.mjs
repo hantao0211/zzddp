@@ -96,6 +96,13 @@ try {
   const rows = panel.locator(".grade-result-row");
   const detail = page.getByRole("dialog",{name:"批改详情"});
   const categoryButton = label => panel.getByRole("group", {name:"按批改结果筛选"}).getByRole("button",{name:new RegExp("^" + label + " ")});
+  const more = panel.getByRole("button",{name:"更多",exact:true});
+  async function reveal(label) {
+    const button = categoryButton(label);
+    if (!await button.isVisible()) await more.click();
+    await button.waitFor();
+    return button;
+  }
   const all = panel.getByRole("button",{name:"全部题目",exact:true});
   await rows.first().waitFor();
   assert.equal(await rows.count(),4);
@@ -126,26 +133,26 @@ try {
   await all.click();
   assert.equal(await rows.count(),7);
   for (const [label, count] of [["通过但存疑",1],["正确",2],["错误",1],["未作答",1],["未确认",1],["点评",1]]) {
-    await categoryButton(label).click();
+    await (await reveal(label)).click();
     assert.equal(await rows.count(),count);
     assert.ok((await rows.locator(".grade-row-status").allTextContents()).every(text=>text===label));
     assert.equal(await panel.locator(".grade-list-group").count(),label==="正确"?2:1);
   }
-  await categoryButton("点评").click();
+  await (await reveal("点评")).click();
   assert.equal(await all.getAttribute("aria-pressed"),"true");
-  await categoryButton("未批改").click();
+  await (await reveal("未批改")).click();
   await panel.getByText("暂无未批改的页面。").waitFor();
   partial = true;
   await rows.getByText("部分已批",{exact:true}).waitFor();
   assert.equal(await rows.count(),1);
   partial = false; blankVisible = false; counts.blank=0;
-  await categoryButton("未作答").click();
+  await (await reveal("未作答")).click();
   await panel.getByText("暂无未作答的题目。").waitFor();
-  await categoryButton("错误").click();
+  await (await reveal("错误")).click();
   extraWrong=true; counts.wrong=2;
   await panel.getByText("只看错误 · 2题").waitFor();
   assert.equal(await rows.count(),2);
-  await categoryButton("正确").focus(); await page.keyboard.press("Enter");
+  await (await reveal("正确")).focus(); await page.keyboard.press("Enter");
   assert.equal(await categoryButton("正确").getAttribute("aria-pressed"),"true");
   many=true; counts.correct+=15;
   await all.click();
@@ -158,14 +165,40 @@ try {
   await detail.waitFor({state:"hidden"});
   assert.equal(await rows.first().innerText(),firstOnPage);
   await panel.getByRole("navigation",{name:"批改结果翻页"}).getByText("2 / 3").waitFor();
-  await categoryButton("错误").click();
+  await (await reveal("错误")).click();
   many=false; counts.correct-=15;
   for (const width of [320,390,768,1280]) {
     await page.setViewportSize({width,height:800});
-    assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+    await page.waitForFunction(()=>document.documentElement.scrollWidth<=innerWidth,null,{timeout:4000}).catch(async error=>{
+      console.error("Overflow after resize", width, await page.locator(".grade-filter-bar").evaluate(el=>({
+        viewport:innerWidth, page:document.documentElement.scrollWidth, bar:el.clientWidth,
+        items:[...el.children].map(child=>[child.textContent, Math.round(child.getBoundingClientRect().width)])
+      })));
+      throw error;
+    });
     const bar = panel.getByRole("group",{name:"按批改结果筛选"});
     assert.ok((await bar.boundingBox()).height <= 62);
     for (const button of await bar.getByRole("button").all()) assert.ok((await button.boundingBox()).height >= 44);
+    assert.ok(await bar.evaluate(el=>el.scrollWidth<=el.clientWidth),"No horizontal filter scrolling");
+    if (width <= 390) {
+      await more.click();
+      const dropdown = bar.getByRole("group",{name:"更多筛选"});
+      const hiddenButtons = dropdown.getByRole("button");
+      assert.ok(await hiddenButtons.count() >= 2);
+      const first = await hiddenButtons.nth(0).boundingBox(), second = await hiddenButtons.nth(1).boundingBox();
+      assert.ok(second.y >= first.y + first.height - 1);
+      assert.equal(await dropdown.getByRole("button",{pressed:true}).count(),0);
+      const color = await categoryButton("错误").locator(".grade-filter-pill").evaluate(el=>getComputedStyle(el).backgroundColor);
+      const correctColor = await categoryButton("正确").locator(".grade-filter-pill").evaluate(el=>getComputedStyle(el).backgroundColor);
+      assert.notEqual(color,correctColor);
+      await page.screenshot({path:output + `/grading-more-${width}.png`});
+      await page.keyboard.press("Escape");
+      assert.equal(await more.getAttribute("aria-expanded"),"false");
+      await more.click();
+      await panel.getByRole("heading",{name:"批改结果",exact:true}).click();
+      await dropdown.waitFor({state:"hidden"});
+    }
+    if (width===1280) assert.equal(await more.count(),0);
     const rowBox = await rows.first().boundingBox();
     assert.ok(rowBox.height>=44 && rowBox.height<=85);
     await panel.screenshot({path:output + `/grading-${width}.png`});
@@ -273,11 +306,11 @@ try {
   const ungraded = categoryButton("未批改");
   await rows.getByText("批改未完成",{exact:true}).waitFor();
   assert.equal(await ungraded.getAttribute("aria-pressed"),"true");
-  await categoryButton("正确").click();
+  await (await reveal("正确")).click();
   assert.equal(await rows.count(),1);
-  await ungraded.click(); await ungraded.click();
+  await (await reveal("未批改")).click(); await (await reveal("未批改")).click();
   assert.equal(await all.getAttribute("aria-pressed"),"true");
-  await ungraded.click(); await rows.first().click();
+  await (await reveal("未批改")).click(); await rows.first().click();
   const failures = detail.getByRole("region",{name:"本页批改情况"});
   await failures.getByText("AI返回的内容未能正常解析，没能读到可用的批改回复。",{exact:true}).waitFor();
   assert.match(await failures.innerText(),/已尝试3次.*独立复核/);
