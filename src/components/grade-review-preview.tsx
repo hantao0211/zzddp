@@ -41,8 +41,8 @@ export function GradeReviewPreview({preview, canConfirm, onSaved}: {preview: Gra
   </section>;
 }
 
-export function FamilyGradeReview({runId,questionId,version,initial}: {runId:string;questionId:string;version:string;initial:{original:string;expected:string;correction:string}}) {
-  const [open,setOpen] = useState(false);
+export function FamilyGradeReview({runId,questionId,version,initial,initiallyOpen = false}: {initiallyOpen?:boolean;runId:string;questionId:string;version:string;initial:{original:string;expected:string;correction:string}}) {
+  const [open,setOpen] = useState(initiallyOpen);
   const [error,setError] = useState("");
   const [busy,setBusy] = useState(false);
   const [preview,setPreview] = useState<GradePreview>();

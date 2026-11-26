@@ -62,3 +62,42 @@
   background: currentColor;
 }
 .grade-filter-bar button:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; }
+
+.grade-list-caption, .grade-detail-source { font-size: .875rem; font-weight: 400; color: var(--muted); margin: 12px 0; }
+.grade-list-group { margin: 18px 0 2px; font-size: .9rem; color: var(--muted); }
+.grade-result-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  width: 100%;
+  text-align: left;
+  padding: 9px 2px;
+  background: transparent;
+  border-bottom: 1px solid var(--border);
+  color: var(--ink);
+  font: inherit;
+}
+.grade-row-copy { display: grid; min-width: 0; gap: 3px; }
+.grade-row-copy strong, .grade-row-copy small { white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
+.grade-row-copy strong { font-weight: 550; font-size: 1rem; }
+.grade-row-copy small, .grade-result-row > svg { color: var(--muted); }
+.grade-row-status { font-size: .8125rem; color: var(--status-color); background: var(--status-bg); border-radius: 6px; padding: 3px 7px; }
+.grade-list-pages, .grade-detail-nav, .grade-detail-nav > div { display: flex; align-items: center; gap: 8px; }
+.grade-list-pages { justify-content: center; margin-top: 12px; }
+.grade-list-pages button, .grade-detail-nav button { display: inline-flex; justify-content: center; align-items: center; gap: 3px; color: var(--accent); background: transparent; min-height: 44px; min-width: 44px; padding: 0 6px; font: inherit; }
+.grade-list-pages span, .grade-detail-nav span { font-size: .85rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.grade-detail-dialog[open] { display: flex; flex-direction: column; width: min(640px, calc(100% - 32px)); max-height: 85dvh; padding: 0; overflow: hidden; color: var(--ink); background: var(--journal-paper,var(--white)); }
+.grade-detail-nav { flex: none; justify-content: space-between; border-bottom: 1px solid var(--border); padding: 4px 14px; }
+.grade-detail-body { overflow: auto; overscroll-behavior: contain; padding: 0 18px 20px; }
+.grade-page-detail { display: grid; gap: 10px; }
+.grade-page-detail > button { justify-self: start; }
+@media(max-width:600px) {
+  .grade-detail-dialog[open] { margin: 0; inset: 0; width: 100%; max-width: none; height: 100dvh; max-height: none; border: 0; border-radius: 0; }
+  .grade-detail-nav { padding-top: max(4px,env(safe-area-inset-top)); }
+  .grade-detail-body { padding-bottom: max(20px,env(safe-area-inset-bottom)); }
+}
+.grade-detail-tabs { display: flex; gap: 4px; margin-block: 14px; border-bottom: 1px solid var(--border); }
+.grade-detail-tabs button { min-height: 44px; padding: 0 10px; color: var(--muted); background: transparent; font: inherit; font-size: .9rem; border-bottom: 2px solid transparent; }
+.grade-detail-tabs button[aria-pressed=true] { color: var(--accent); border-color: currentColor; }

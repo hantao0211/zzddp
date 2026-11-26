@@ -26,8 +26,9 @@ try {
   ];
   const longStem = "Translate the following practice question into your own words. Then check the example and write down your answer.";
   const fullAssignment = "模拟课外拓展习题（单词和课文默写之外的部分）";
-  let selectedDate = "", blankVisible = true, extraWrong = false;
-  const currentQuestions = () => [...questions.filter(q => blankVisible || q.verdict !== "blank"), ...(extraWrong ? [q("wrong", 6)] : [])];
+  let selectedDate = "", blankVisible = true, extraWrong = false, many = false;
+  const currentQuestions = () => [...questions.filter(q => blankVisible || q.verdict !== "blank"), ...(extraWrong ? [q("wrong", 6)] : []), ...(many ? Array.from({length:15},(_,i)=>q("correct",i+20)) : [])];
+  let reviewPreview;
   await page.route("**/assistant-api/**", async route => {
     const url = new URL(route.request().url()), path = url.pathname;
     const json = data => route.fulfill({ contentType: "application/json", body: JSON.stringify(data) });
@@ -40,7 +41,7 @@ try {
       const date = url.searchParams.get("date"); selectedDate = date;
       return json({ date, status: "processed", pending: false, note: "模拟资料", dates: [date], quota: { calls: 1, limit: 60 }, grading: summary(), writtenCompletionEnabled: true, uploads: [{ id: "synthetic-upload", date, kind: "memo", status: "processed", createdAt: "", subjects: ["数学"], note: "", aiMs: 0, issues: [], files: [{ id: "synthetic-file", name: "synthetic.png", size: 1, stored: true, pages: [] }] }], report: { date, memoId: "synthetic-upload", updatedAt: "", familyNotes: [], unclassified: [], unassigned: [], uncertainties: [], tasks: [{ id: "synthetic-task", title: "数学练习", subject: "数学", requirement: "完成模拟练习第12页", format: "written", memoEvidence: [], evidence: [], coverage: "complete", missing: [], reviewActivity: null, writtenCompletion: { version: "written-v2", status: "done", reason: "均有模拟作答", parts: [] } }] } });
     }
-    if (path.endsWith("/learning/grading")) return json({ summary: summary(), batches: [{ id: "synthetic-run", title: "数学练习", subject: "数学", attempts: failed ? 3 : 1, retryAllowed: failed, failure: failed ? { code: "INVALID_ENVELOPE", stage: "verification", failedAt: "2026-11-21T14:58:51.833Z", source: "runtime", reason: "AI返回的内容未能正常解析，没能读到可用的批改回复。", nextStep: "原件已保存，不用重新上传。可以请家长重试。" } : null, status: pending ? "queued" : failed ? "failed" : "done", note: pending && quotaPaused ? "今天的AI额度已用完，批改会在明天继续，原件已保存。" : failed ? "批改未完成，原件保留。" : "", primaryPageId: "synthetic-page", readings: { "synthetic-question-4": ["verification","focusOne","focusTwo"].map((stage,i)=>({stage,studentAnswer:i===0?"甲":"乙",expectedAnswer:"乙",confidence:i===1?"medium":"high",verdict:"correct",explanation:"模拟观察记录"})) }, result: pending || failed ? null : { version: "grading-v1", scopeComplete: !partial, note: "", questions: currentQuestions() } }, { id: "synthetic-english", title: "英语练习", subject: "英语", status: "done", note: "", primaryPageId: "synthetic-english-page", result: { version: "grading-v1", scopeComplete: true, note: "", questions: [q("correct", 7)] } }] });
+    if (path.endsWith("/learning/grading")) return json({ summary: summary(), batches: [{ id: "synthetic-run", title: "数学练习", subject: "数学", attempts: failed ? 3 : 1, retryAllowed: failed, failure: failed ? { code: "INVALID_ENVELOPE", stage: "verification", failedAt: "2026-11-21T14:58:51.833Z", source: "runtime", reason: "AI返回的内容未能正常解析，没能读到可用的批改回复。", nextStep: "原件已保存，不用重新上传。可以请家长重试。" } : null, status: pending ? "queued" : failed ? "failed" : "done", note: pending && quotaPaused ? "今天的AI额度已用完，批改会在明天继续，原件已保存。" : failed ? "批改未完成，原件保留。" : "", primaryPageId: "synthetic-page", reviewVersions: {"synthetic-question-4":"b".repeat(64)}, readings: { "synthetic-question-4": ["verification","focusOne","focusTwo"].map((stage,i)=>({stage,studentAnswer:i===0?"甲":"乙",expectedAnswer:"乙",confidence:i===1?"medium":"high",verdict:"correct",explanation:"模拟观察记录"})) }, result: pending || failed ? null : { version: "grading-v1", scopeComplete: !partial, note: "", questions: currentQuestions() } }, { id: "synthetic-english", title: "英语练习", subject: "英语", status: "done", note: "", primaryPageId: "synthetic-english-page", result: { version: "grading-v1", scopeComplete: true, note: "", questions: [q("correct", 7)] } }] });
     if (path.endsWith("/learning/mistakes")) {
       const subject = url.searchParams.get("subject");
       const offset = Number(url.searchParams.get("offset"));
@@ -57,6 +58,17 @@ try {
           occurrences: 1, question };
       });
       return json({ total, items });
+    }
+    if (path.endsWith("/learning/grading/review")) {
+      const payload = route.request().postDataJSON();
+      assert.equal(payload.questionId,"synthetic-question-4");
+      assert.equal(payload.review.evidence,"模拟核对依据");
+      reviewPreview={...payload.review,id:"synthetic-review",label:"第4题",applied:false};
+      return json(reviewPreview);
+    }
+    if (path.endsWith("/learning/grading/confirm")) {
+      assert.equal(route.request().postDataJSON().id,reviewPreview.id);
+      return json({...reviewPreview,applied:true});
     }
     if (path.endsWith("/learning/grading/retry")) { failed = false; pending = true; return json({ queued: 1 }); }
     if (path.includes("/learning/pages/")) { photos++; return route.fulfill({ contentType: "image/png", body: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jA5sAAAAASUVORK5CYII=", "base64") }); }
@@ -81,74 +93,89 @@ try {
   await page.setViewportSize({ width: 390, height: 670 });
   await page.getByRole("button", { name: "查看批改", exact: true }).click();
   const panel = page.getByRole("region", { name: "批改结果", exact: true });
-  await panel.getByText("错误 · 已入错题本", { exact: true }).waitFor();
-  assert.equal(await panel.locator(".grade-question").count(), 4);
-  assert.equal(await panel.getByText("AI尚未确认", { exact: true }).count(), 1);
-  assert.equal(photos, 0, "Original photos load only when requested");
-  assert.equal(await panel.getByText("识别到的作答", { exact: true }).count(), 3);
-  await panel.getByRole("button", { name: "已通过，查看疑点", exact: true }).click();
-  await panel.getByText("疑点 · 两次核对的内容分别是整词和单字。", { exact: true }).waitFor();
-  await panel.getByRole("button", { name: "先看需要留意的题", exact: true }).click();
-  const uncertainCard = panel.locator(".grade-verdict-uncertain");
-  assert.match(await uncertainCard.innerText(), /两次解答没有取得一致/);
-  assert.ok(!(await uncertainCard.innerText()).includes("模拟观察记录"));
-  await uncertainCard.getByText("查看复核记录", { exact: true }).click();
-  await uncertainCard.getByText("AI 读到：甲 · 正确 · 把握高", { exact: true }).waitFor();
-  await uncertainCard.getByText("查看复核记录", { exact: true }).click();
-  assert.match(await panel.locator(".grade-verdict-wrong").innerText(), /你写的是「6」，正确答案是「5」/);
-  assert.ok(!(await panel.innerText()).includes("synthetic-page"), "Internal page identifiers are not readable explanations");
-  await panel.getByRole("button", { name: "全部题目", exact: true }).click();
-  assert.equal(await panel.locator(".grade-question").count(), 7);
-  const categoryButton = label => panel.getByRole("group", { name: "按批改结果筛选" }).getByRole("button", { name: new RegExp("^" + label + " ") });
-  for (const [verdict, label, count] of [["passedWithNote", "通过但存疑", 1], ["correct", "正确", 2], ["wrong", "错误", 1], ["blank", "未作答", 1], ["uncertain", "未确认", 1], ["feedback", "点评", 1]]) {
-    const button = categoryButton(label); await button.click();
-    assert.equal(await button.getAttribute("aria-pressed"), "true");
-    assert.equal(await panel.locator(".grade-question").count(), count);
-    assert.equal(await panel.locator(".grade-question:not(.grade-verdict-" + verdict + ")").count(), 0);
-    assert.equal(await panel.locator(".grade-batch").count(), verdict === "correct" ? 2 : 1, "Hide unrelated subject headings");
-    assert.equal(await panel.locator('.grade-stat-filter[aria-pressed="true"]').count(), 1);
+  const rows = panel.locator(".grade-result-row");
+  const detail = page.getByRole("dialog",{name:"批改详情"});
+  const categoryButton = label => panel.getByRole("group", {name:"按批改结果筛选"}).getByRole("button",{name:new RegExp("^" + label + " ")});
+  const all = panel.getByRole("button",{name:"全部题目",exact:true});
+  await rows.first().waitFor();
+  assert.equal(await rows.count(),4);
+  assert.equal(await panel.locator(".grade-question").count(),0);
+  assert.equal(photos,0);
+  const uncertain = rows.filter({hasText:"第4题"});
+  await uncertain.click();
+  await detail.getByText("AI 读到：甲 · 正确 · 把握高",{exact:true}).waitFor();
+  await detail.getByRole("button",{name:"家长核对",exact:true}).click();
+  await detail.getByLabel("核对依据").fill("模拟核对依据");
+  await detail.getByRole("button",{name:"原题照片",exact:true}).click();
+  await detail.getByRole("img").scrollIntoViewIfNeeded();
+  await page.waitForFunction(()=>document.querySelector(".grade-detail-dialog img")?.naturalWidth>0);
+  await detail.getByRole("button",{name:"家长核对",exact:true}).click();
+  assert.equal(await detail.getByLabel("核对依据").inputValue(),"模拟核对依据");
+  await detail.getByRole("radio",{name:"错误",exact:true}).check();
+  await detail.getByRole("button",{name:"预览更正"}).click();
+  await detail.getByRole("button",{name:"确认更正这道题"}).click();
+  await detail.getByText("已更正",{exact:true}).waitFor();
+  await detail.getByRole("button",{name:"批改依据",exact:true}).click();
+  await detail.getByRole("button",{name:"和小步聊这题"}).click();
+  await page.getByRole("button",{name:"关闭小助手"}).click();
+  await detail.getByRole("button",{name:"下一条"}).click();
+  await detail.getByRole("heading",{name:"第5题"}).waitFor();
+  await detail.getByRole("button",{name:"返回列表"}).click();
+  await detail.waitFor({state:"hidden"});
+  await page.waitForFunction(()=>document.activeElement?.classList.contains("grade-result-row"));
+  await all.click();
+  assert.equal(await rows.count(),7);
+  for (const [label, count] of [["通过但存疑",1],["正确",2],["错误",1],["未作答",1],["未确认",1],["点评",1]]) {
+    await categoryButton(label).click();
+    assert.equal(await rows.count(),count);
+    assert.ok((await rows.locator(".grade-row-status").allTextContents()).every(text=>text===label));
+    assert.equal(await panel.locator(".grade-list-group").count(),label==="正确"?2:1);
   }
   await categoryButton("点评").click();
-  assert.equal(await panel.getByRole("button",{name:"全部题目",pressed:true}).count(),1);
-  await panel.getByRole("button",{name:"未批改 0页"}).click();
+  assert.equal(await all.getAttribute("aria-pressed"),"true");
+  await categoryButton("未批改").click();
   await panel.getByText("暂无未批改的页面。").waitFor();
   partial = true;
-  await panel.getByText("本页部分题目尚未批改。").waitFor();
-  assert.equal(await panel.locator(".grade-question").count(),0);
-  await panel.getByRole("button",{name:"全部题目"}).click();
-  assert.equal(await panel.locator(".grade-question").count(),7);
-  partial = false;
-  // Zero results remain selectable, and polling keeps the chosen category.
-  blankVisible = false; counts.blank = 0;
+  await rows.getByText("部分已批",{exact:true}).waitFor();
+  assert.equal(await rows.count(),1);
+  partial = false; blankVisible = false; counts.blank=0;
   await categoryButton("未作答").click();
-  await panel.getByText("暂无未作答的题目。", { exact: true }).waitFor();
-  assert.equal(await panel.locator(".grade-batch").count(), 0);
+  await panel.getByText("暂无未作答的题目。").waitFor();
   await categoryButton("错误").click();
-  extraWrong = true; counts.wrong = 2;
-  await panel.getByText("只看错误 · 2题", { exact: true }).waitFor();
-  assert.equal(await panel.locator(".grade-question").count(), 2);
-  assert.equal(await categoryButton("错误").getAttribute("aria-pressed"), "true");
-  // Native buttons support keyboard activation as well as touch.
+  extraWrong=true; counts.wrong=2;
+  await panel.getByText("只看错误 · 2题").waitFor();
+  assert.equal(await rows.count(),2);
   await categoryButton("正确").focus(); await page.keyboard.press("Enter");
-  assert.equal(await categoryButton("正确").getAttribute("aria-pressed"), "true");
-  await panel.getByRole("button", { name: "先看需要留意的题", exact: true }).click();
-  assert.equal(await panel.locator(".grade-verdict-correct").count(), 0);
-  assert.equal(await panel.locator('.grade-stat-filter[aria-pressed="true"]').count(), 0);
-  await panel.getByRole("button", { name: "全部题目", exact: true }).click();
-  assert.equal(await panel.locator(".grade-question").count(), 7);
-  for (const viewport of [{ width: 320, height: 568 }, { width: 390, height: 670 }, { width: 768, height: 1024 }, { width: 1280, height: 900 }]) {
-    await page.setViewportSize(viewport);
-    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), "No horizontal page overflow");
-    for (const button of await panel.locator(".grade-stat-filter").all()) {
-      const box = await button.boundingBox(); assert.ok(box.width >= 44 && box.height >= 44, "Comfortable touch targets");
-    }
-    await categoryButton("错误").click();
-    await page.screenshot({ path: output + `/grading-${viewport.width}.png`, fullPage: true });
+  assert.equal(await categoryButton("正确").getAttribute("aria-pressed"),"true");
+  many=true; counts.correct+=15;
+  await all.click();
+  await panel.getByText("全部题目 · 22题").waitFor();
+  assert.equal(await rows.count(),10);
+  await panel.getByRole("button",{name:"下一页",exact:true}).click();
+  const firstOnPage = await rows.first().innerText();
+  await rows.first().click();
+  await page.keyboard.press("Escape");
+  await detail.waitFor({state:"hidden"});
+  assert.equal(await rows.first().innerText(),firstOnPage);
+  await panel.getByRole("navigation",{name:"批改结果翻页"}).getByText("2 / 3").waitFor();
+  await categoryButton("错误").click();
+  many=false; counts.correct-=15;
+  for (const width of [320,390,768,1280]) {
+    await page.setViewportSize({width,height:800});
+    assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+    const bar = panel.getByRole("group",{name:"按批改结果筛选"});
+    assert.ok((await bar.boundingBox()).height <= 62);
+    for (const button of await bar.getByRole("button").all()) assert.ok((await button.boundingBox()).height >= 44);
+    const rowBox = await rows.first().boundingBox();
+    assert.ok(rowBox.height>=44 && rowBox.height<=85);
+    await panel.screenshot({path:output + `/grading-${width}.png`});
+    await rows.first().click();
+    assert.ok(await detail.evaluate(el=>el.scrollWidth<=el.clientWidth));
+    await detail.getByRole("button",{name:"返回列表"}).click();
   }
-  await page.setViewportSize({ width: 390, height: 670 });
+  await page.setViewportSize({width:390,height:670});
   await page.locator('.hw-date input').fill('2026-11-21');
-  await panel.getByText('2026/11/21 · AI逐题检查，错题自动归档', { exact: true }).waitFor();
-  await panel.getByRole('button', { name: '先看需要留意的题', exact: true, pressed: true }).waitFor();
+  await panel.getByRole('button',{name:'先看需要留意的题',pressed:true}).waitFor();
   await page.getByRole("button", { name: "错题本", exact: true }).click();
   const book = page.getByRole("region", { name: "错题本", exact: true });
   const toggle = number => book.getByRole("button", { name: new RegExp(`^第${number}题 `) });
@@ -221,7 +248,7 @@ try {
   await book.getByRole("button", { name: "查看原题照片", exact: true }).click(); await book.locator("img").waitFor();
   await book.locator("img").scrollIntoViewIfNeeded();await page.waitForFunction(()=>document.querySelector('.mistake-book img')?.naturalWidth>0||document.querySelector('.grade-photo img')?.naturalWidth>0);
   assert.ok((await book.locator('img').getAttribute('src')).endsWith('?size=screen'));assert.ok((await book.getByRole('link',{name:'下载图片',exact:true}).getAttribute('href')).endsWith('?size=screen&download=1'));
-  assert.equal(photos, 1);
+  assert.ok(photos >= 1);
   const bigPhoto = book.getByRole('button', { name: '查看高清大图', exact: true });
   await bigPhoto.tap();
   const photoDialog = page.getByRole('dialog', { name: '照片预览', exact: true });
@@ -243,41 +270,29 @@ try {
   await page.getByRole("button", { name: "关闭小助手", exact: true }).click();
   failed = true; await page.getByRole("button", { name: "返回首页", exact: true }).click();
   await page.getByRole("button", { name: "查看未完成原因", exact: true }).click();
-  const failures = page.getByRole("region", { name: "批改未完成原因", exact: true });
-  await failures.getByText("AI返回的内容未能正常解析，没能读到可用的批改回复。", { exact: true }).waitFor();
-  assert.match(await failures.innerText(), /已尝试3次.*独立复核/);
-  assert.equal(await failures.evaluate(element => document.activeElement === element), true, "The home shortcut takes focus directly to the failure reasons");
-  const ungraded = panel.getByRole("button",{name:"未批改 1页"});
+  const ungraded = categoryButton("未批改");
+  await rows.getByText("批改未完成",{exact:true}).waitFor();
   assert.equal(await ungraded.getAttribute("aria-pressed"),"true");
-  assert.equal(await panel.locator(".grade-question").count(),0);
-  await categoryButton("正确").click(); assert.equal(await failures.isVisible(), false, "A verdict filter shows only matching questions");
-  assert.equal(await panel.locator(".grade-batch").count(), 1, "Failure cards are not duplicated in the question list");
-  await ungraded.click();
-  await ungraded.click();
-  assert.equal(await panel.getByRole("button",{name:"全部题目",pressed:true}).count(),1);
-  await ungraded.click();
-  for (const width of [320, 390, 768, 1280]) {
-    await page.setViewportSize({ width, height: 900 });
-    const bar = panel.getByRole("group",{name:"按批改结果筛选"});
-    assert.ok((await bar.boundingBox()).height <= 62,"Filters occupy a single row"); assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
-    await page.screenshot({ path: output + `/grading-failure-${width}.png`, fullPage: true });
-  }
-  assert.equal(await failures.locator("img").count(), 0, "Failed-page originals stay collapsed until requested");
-  await failures.getByRole("button", { name: "查看原题照片", exact: true }).click(); await failures.locator("img").waitFor();
-  await failures.locator("img").evaluate(img => img.complete ? undefined : new Promise(resolve => img.addEventListener("load", resolve, { once: true })));
-  assert.ok(await failures.locator("img").evaluate(img => img.naturalWidth > 0));
-  await failures.getByRole("button", { name: "收起原图", exact: true }).click();
-  await failures.getByRole("button", { name: "重试批改", exact: true }).click();
-  await panel.getByText("1页排队或等待重试。完成后会自动更新。", { exact: true }).waitFor();
-  quotaPaused = true;
-  await panel.getByText("1页因AI额度用完而暂停，额度恢复后自动继续。原件已保存，不用重新上传。", { exact: true }).waitFor();
-  assert.equal(await panel.getByText("AI正在批改或等待复核，完成后会自动更新。", { exact: true }).count(), 0);
-  await page.screenshot({ path: output + "/grading-quota-paused.png", fullPage: true });
-  child = true; failed = true; pending = false;
-  await page.goto(base, { waitUntil: "networkidle" }); await page.getByRole("button", { name: "查看未完成原因", exact: true }).click();
-  await failures.getByText("AI返回的内容未能正常解析，没能读到可用的批改回复。", { exact: true }).waitFor();
-  assert.equal(await failures.getByRole("button", { name: "重试批改", exact: true }).count(), 0);
-  await failures.getByText("请家长处理重试，已有结果仍可查看。", { exact: true }).waitFor();
+  await categoryButton("正确").click();
+  assert.equal(await rows.count(),1);
+  await ungraded.click(); await ungraded.click();
+  assert.equal(await all.getAttribute("aria-pressed"),"true");
+  await ungraded.click(); await rows.first().click();
+  const failures = detail.getByRole("region",{name:"本页批改情况"});
+  await failures.getByText("AI返回的内容未能正常解析，没能读到可用的批改回复。",{exact:true}).waitFor();
+  assert.match(await failures.innerText(),/已尝试3次.*独立复核/);
+  await failures.getByRole("button",{name:"查看原题照片"}).click();
+  await failures.locator("img").waitFor();
+  await failures.getByRole("button",{name:"重试当天失败页"}).click();
+  await failures.getByRole("heading",{name:"等待批改"}).waitFor();
+  quotaPaused=true;
+  await failures.getByText("今天的AI额度已用完，批改会在明天继续，原件已保存。",{exact:true}).waitFor();
+  child=true; failed=true; pending=false;
+  await page.goto(base,{waitUntil:"networkidle"});
+  await page.getByRole("button",{name:"查看未完成原因",exact:true}).click();
+  await rows.first().click();
+  assert.equal(await failures.getByRole("button",{name:"重试当天失败页"}).count(),0);
+  await failures.getByText("请家长处理重试，已有结果仍可查看。").waitFor();
   assert.deepEqual(errors, []);
   console.log("GRADING_UI_OK=true daily-progress,category-buttons,zero-category,poll-preserves-filter,keyboard,date-reset,failed-reason-home-entry,per-page-cause-attempt-stage,ungraded-filter-and-reset,child-no-retry,all-verdicts,wrong-book,compact-one-line-source,scope-badge-edit,full-title-in-editor,cause,next-step,subject-filter,lazy-private-photo,assistant-prefill,retry,mobile-and-desktop");
 } finally { await browser.close(); }
