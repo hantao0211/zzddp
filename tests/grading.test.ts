@@ -312,3 +312,36 @@ test("语文家默在逐题批改、盲核和疑题复查都取得家长确认�
     assert.deepEqual(memories.forJudgment("homework_grading", ["语文"], "下一份家默"), []);
   } finally { f.close(); }
 });
+
+test("家庭约定更新后可按原图重批一页，保留旧判且不复用旧答案", async () => {
+  const f = fixture(undefined, "语文", "家默");
+  try {
+    const calls: string[] = [];
+    const rule = "这类家默只检查实际写下的字词，不对照原词。";
+    const grader = new HomeworkGrader(f.store, () => ({async run(task,schema,metadata) {
+      const input = metadata as {familyRules?: unknown;source?: {familyRules?:unknown};questions?: {questionId:string}[]};
+      const current = Boolean((input.source ?? input).familyRules);
+      calls.push(task);
+      const item = {...question(f.page,current ? "correct":"wrong"),label:"一个词",question:"默写词语",studentAnswer:"晴朗",expectedAnswer:current?"晴朗":"清朗"};
+      if(task==="grade_homework")return schema.parse({scopeComplete:true,note:"",questions:[item]});
+      return schema.parse({scopeComplete:true,omittedLabels:[],checks:[{...item,questionId:input.questions![0].questionId}]});
+    }}), {images:()=>[]});
+    await grader.tick();
+    const old = f.store.grading.results(date).batches[0];
+    assert.equal(old.rulesChanged,false);
+    assert.equal(old.result?.questions[0].verdict,"wrong");
+    new LearnedMemories(f.store).remember([{kind:"homework_grading",trigger:"家默",subject:"语文",summary:rule,evidenceQuote:rule,confirmationQuote:null,replacesMemoryId:null}],rule,date,[],true);
+    assert.equal(f.store.grading.results(date).batches[0].rulesChanged,true);
+    const next=f.store.grading.regradeWithCurrentRules(old.id);
+    assert.throws(()=>f.store.grading.regradeWithCurrentRules(old.id));
+    f.store.transaction(()=>f.store.grading.queueDay(date,null));
+    assert.equal(f.store.grading.results(date).batches[0].id,next.id);
+    await grader.tick();
+    const current=f.store.grading.results(date).batches[0];
+    assert.deepEqual(calls,["grade_homework","verify_homework_grading","grade_homework","verify_homework_grading"]);
+    assert.equal(current.rulesChanged,false);
+    assert.equal(current.result?.questions[0].verdict,"correct");
+    assert.equal(f.store.grading.mistakes(null).total,0);
+    assert.deepEqual(JSON.parse(String(f.store.db.prepare("select result from grading_runs where id=? and active=0").get(old.id)?.result)),old.result);
+  }finally{f.close();}
+});

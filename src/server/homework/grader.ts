@@ -27,7 +27,8 @@ export class HomeworkGrader {
         if (!current.active) throw new HomeworkError(409, "这页的作业要求已更新，使用新的批改任务继续。");
       }, { date: source.date, title: source.title, runId: run.id, pageId: source.primaryPageId, attempt: run.attempts });
       const expectedLabels = source.expectedLabels.filter(label => !source.requirements.some(req => isMemoTrackingPart(label, req)));
-      const inputSource = { ...source, expectedLabels, requirements: source.requirements.map(assignmentRequirement), pages: source.pages.map(p => ({ fileId: p.id, page: p.number })) };
+      const { regradesRunId: _previousRun, ...assignment } = source;
+      const inputSource = { ...assignment, expectedLabels, requirements: source.requirements.map(assignmentRequirement), pages: source.pages.map(p => ({ fileId: p.id, page: p.number })) };
       const { expectedLabels: _expectedLabels, taskIds: _taskIds, ...verificationSource } = inputSource;
       const first = await this.cached(`grade-first:${GRADING_VERSION}:${run.id}`, async () => {
         const value = await ai.run("grade_homework", GradingInspectionSchema, inputSource, images);

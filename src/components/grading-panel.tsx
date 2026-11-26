@@ -204,6 +204,19 @@ export function GradingPanel({ date, canManage = true, focusFailures = false }: 
       }} position={selectedIndex} count={navigation.current.length} move={index => setSelected(navigation.current[index])} itemKey={JSON.stringify(selected)}>
         {selectedBatch && (selectedQuestion || !selected.questionId) ? <>
           <p className="grade-detail-source">{date.replaceAll("-","/")} · {selectedBatch.subject} · {selectedBatch.title}</p>
+          {selectedBatch.rulesChanged && <div className="grade-explanation">
+            <small>这页批改后，家庭约定有更新。</small>
+            {canManage && <button type="button" className="text-button" disabled={retrying} onClick={async () => {
+              setRetrying(true);
+              try {
+                const next = await homeworkPost<{id:string}>("/grading/regrade", {runId:selectedBatch.id});
+                const refreshed = await homeworkRequest<{summary:GradingSummary;batches:GradingBatchView[]}>(`/grading?date=${date}`);
+                setData(refreshed); setError(""); navigation.current = [{batchId:next.id}]; setSelected({batchId:next.id});
+              } catch (e) { setError(e instanceof Error ? e.message : "暂时无法重新批改"); }
+              finally { setRetrying(false); }
+            }}>按当前约定重批本页</button>}
+            {error && <p role="alert">{error}</p>}
+          </div>}
           {selectedQuestion ? <QuestionCard detailMode key={JSON.stringify(selected)} question={selectedQuestion} preview={selectedBatch.previews?.[selectedQuestion.id]} runId={selectedBatch.id} version={selectedBatch.reviewVersions?.[selectedQuestion.id]} canConfirm={canManage} readings={selectedBatch.readings?.[selectedQuestion.id]} date={date} subject={selectedBatch.subject} title={selectedBatch.title} pageId={selectedBatch.primaryPageId} /> :
             <section className="grade-page-detail" aria-label="本页批改情况">
               <h3>{pageStatus(selectedBatch)}</h3>

@@ -16,7 +16,7 @@ import { GRADING_VERSION, GradingResultSchema, emptyCounts, type GradingResult, 
 import type { GradeReview, GradePreview } from "../../domain/grade-review";
 import { HomeworkError, type HomeworkStore } from "./store";
 import type { DailyReport } from "../../domain/homework";
-export type GradingSource = { familyRules?: HomeworkRule[]; date: string; title: string; subject: string; assigned: boolean; requirements: string[]; taskIds: string[]; primaryPageId: string; pages: { id: string; file_id: string; number: number }[]; expectedLabels: string[] };
+export type GradingSource = { regradesRunId?: string; familyRules?: HomeworkRule[]; date: string; title: string; subject: string; assigned: boolean; requirements: string[]; taskIds: string[]; primaryPageId: string; pages: { id: string; file_id: string; number: number }[]; expectedLabels: string[] };
 export type GradingRun = { id: string; primary_page_id?: string; source: string; status: string; attempts: number; result: string | null; note: string };
 const digest = (v: unknown) => createHash("sha256").update(JSON.stringify(v)).digest("hex");
 export class GradingStore {
@@ -92,6 +92,7 @@ export class GradingStore {
   reuseCompleted(run: GradingRun): GradingResult | null {
     const source = JSON.parse(run.source) as GradingSource;
     if (!source.pages?.some(page => page.id === source.primaryPageId)) return null;
+    if (source.regradesRunId) return null;
     const key = this.contentKey(source);
     for (const saved of this.store.db.prepare("SELECT source,result FROM grading_runs WHERE active=1 AND status='done' AND result IS NOT NULL ORDER BY rowid DESC").all() as { source: string; result: string }[]) {
       const previous = JSON.parse(saved.source) as GradingSource; if (this.contentKey(previous) !== key) continue;
@@ -160,12 +161,35 @@ export class GradingStore {
       const id = digest({ version: GRADING_VERSION, source });
       const existing = byContent.get(this.contentKey(source));
       if (existing && existing.primary_page_id === source.primaryPageId) {
+        const previousSource = JSON.parse(existing.source) as GradingSource;
+        if (previousSource.regradesRunId) source.regradesRunId = previousSource.regradesRunId;
         this.store.db.prepare("UPDATE grading_runs SET active=1,source=? WHERE id=?").run(JSON.stringify(source), existing.id);
         continue;
       }
       this.store.db.prepare("INSERT INTO grading_runs(id,date,primary_page_id,source,created_at,updated_at) VALUES(?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET active=1").run(id, date, primary.fileId, JSON.stringify(source), time, time);
     }
     this.deduplicate(date);
+  }
+  private changedRules(source: GradingSource) {
+    const rules = new LearnedMemories(this.store).forJudgment("homework_grading", [source.subject], [source.title, ...source.requirements].join(" "));
+    return digest(rules) === digest(source.familyRules ?? []) ? null : rules;
+  }
+  regradeWithCurrentRules(runId: string) {
+    if (!this.store.autoGradingEnabled) throw new HomeworkError(503, "自动批改尚未启用。");
+    return this.store.transaction(() => {
+      const old = this.store.db.prepare("SELECT * FROM grading_runs WHERE id=? AND active=1 AND status='done'").get(runId) as GradingRun | undefined;
+      if (!old) throw new HomeworkError(409, "本页批改已更新，请查看最新结果。");
+      const source = JSON.parse(old.source) as GradingSource;
+      const rules = this.changedRules(source);
+      if (!rules) throw new HomeworkError(409, "本页已经使用当前家庭约定。");
+      source.familyRules = rules;
+      source.regradesRunId = runId;
+      const id = randomUUID(), time = new Date(this.store.now()).toISOString();
+      this.store.db.prepare("UPDATE grading_runs SET active=0 WHERE id=?").run(runId);
+      this.store.db.prepare("INSERT INTO grading_runs(id,date,primary_page_id,source,created_at,updated_at) VALUES(?,?,?,?,?,?)")
+        .run(id, source.date, source.primaryPageId, JSON.stringify(source), time, time);
+      return {id};
+    });
   }
   claim(): GradingRun | undefined {
     if (!this.store.autoGradingEnabled) return;
@@ -187,6 +211,12 @@ export class GradingStore {
       this.store.db.prepare("UPDATE grading_runs SET status='done',result=?,note='',updated_at=? WHERE id=?").run(JSON.stringify(GradingResultSchema.parse(result)), new Date(this.store.now()).toISOString(), run.id);
       if (!active.active) return;
       for (const question of result.questions) this.syncMistake(run, source, question);
+      if (source.regradesRunId && result.scopeComplete) {
+        this.store.db.prepare(`UPDATE grading_mistakes SET status='withdrawn'
+          WHERE status='verified' AND id IN (SELECT mistake_id FROM grading_occurrences WHERE run_id=?)
+          AND NOT EXISTS (SELECT 1 FROM grading_occurrences o JOIN grading_runs r ON r.id=o.run_id
+            WHERE o.mistake_id=grading_mistakes.id AND r.active=1)`).run(source.regradesRunId);
+      }
     });
   }
   private syncMistake(run: GradingRun, source: GradingSource, question: GradingResult["questions"][number]) {
@@ -291,7 +321,7 @@ export class GradingStore {
         const q = result?.questions.find(item => item.id === row.question_id);
         if (q && reviewVersions[q.id] === row.base) previews[q.id] = {...(isSignatureRecord(q) ? signatureReview(JSON.parse(row.payload)) : JSON.parse(row.payload)),id:row.id,label:q.label,applied:false};
       }
-      return { reviewVersions, previews, readings, attempts: run.attempts, retryAllowed: run.status === "failed" && run.attempts < 6, failure: run.status === "done" ? null : this.failure(run.id), id: run.id, subject: source.subject, title: source.title, status: run.status, note: run.note, primaryPageId: run.primary_page_id, result }; }) };
+      return { rulesChanged: run.status === "done" && this.changedRules(source) !== null, reviewVersions, previews, readings, attempts: run.attempts, retryAllowed: run.status === "failed" && run.attempts < 6, failure: run.status === "done" ? null : this.failure(run.id), id: run.id, subject: source.subject, title: source.title, status: run.status, note: run.note, primaryPageId: run.primary_page_id, result }; }) };
   }
   private failure(runId: string): GradingFailure | null {
     const row = this.store.db.prepare("SELECT code,stage,failed_at,source FROM grading_diagnostics WHERE run_id=?").get(runId) as { code: string; stage: GradingStage; failed_at: string; source: GradingFailure["source"] } | undefined;

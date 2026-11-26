@@ -94,6 +94,12 @@ export class HomeworkHTTP {
         this.store.transaction(() => this.store.grading.queueDay(date.data, snapshot.report));
         json(res, this.store.grading.summary(date.data)); return;
       }
+      if (path === "/grading/regrade" && req.method === "POST") {
+        if (!isParent(viewer)) throw new HomeworkError(403, "请家长发起重新批改。");
+        const value = z.object({runId:z.string().min(1).max(200)}).strict().safeParse(await input(req));
+        if (!value.success) throw new HomeworkError(400, "请选择要重新批改的页面。");
+        json(res, this.store.grading.regradeWithCurrentRules(value.data.runId)); return;
+      }
       if (path === "/grading/retry" && req.method === "POST") {
         const date = DaySchema.safeParse((await input(req))?.date);
         if (!date.success) throw new HomeworkError(400, "请选择有效日期。");
