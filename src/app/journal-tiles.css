@@ -83,3 +83,46 @@
 }
 .study-shell .growth-activities .economy-grid > .journal-tile[data-described] { aspect-ratio: auto; }
 .activity-management .activity-rule-row > div:first-child { min-width: 0; overflow-wrap: anywhere; }
+
+.collection-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.study-shell .collection-heading h2 { margin: 0; }
+.collection-heading .shelf-view-switch { float: none; margin: 0; flex: none; }
+
+.journal-item-list { margin-block: 12px 18px; }
+.journal-item-list > article + article { border-top: 1px solid var(--border); }
+.activity-list > article, .shop-list .mall-item {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center;
+  column-gap: 8px; row-gap: 2px; padding: 9px 0; min-width: 0;
+}
+.journal-item-list .journal-tile-heading {
+  display: flex; align-items: center; gap: 7px; min-width: 0; min-height: 0; margin: 0;
+}
+.journal-item-list .journal-tile-title {
+  margin: 0; color: var(--ink); font-size: 15px; font-weight: 600; line-height: 1.4; overflow-wrap: anywhere;
+}
+.study-shell .journal-item-list .journal-tile-icon {
+  display: grid; place-items: center; flex: 0 0 25px; width: 25px; height: 25px;
+  background: var(--journal-sage); color: var(--journal-green); border-radius: 6px;
+}
+.journal-item-list .journal-tile-icon > svg { width: 17px; height: 17px; }
+.journal-item-list .journal-tile-value {
+  display: flex; align-items: center; margin: 0; gap: 4px; color: var(--accent); font-size: 13px;
+}
+.activity-list .activity-heading { grid-area: 1 / 1; }
+.activity-list .activity-reward { grid-area: 2 / 1; padding-left: 32px; }
+.activity-list .activity-frequency {
+  grid-area: 3 / 1; padding-left: 32px; overflow: hidden; text-overflow: ellipsis;
+}
+.study-shell .growth-activities .activity-list .activity-frequency { white-space: nowrap; }
+.study-shell .activity-list .activity-record-action {
+  grid-area: 1 / 2 / 4; display: inline-flex; align-items: center; gap: 4px; width: auto;
+  min-height: 44px; padding: 4px 6px; font-size: 13px;
+}
+.shop-list .mall-item-heading { grid-area: 1 / 1; }
+.shop-list .mall-price { grid-area: 1 / 2; justify-self: end; }
+.shop-list .mall-terms { grid-area: 2 / 1; padding-left: 32px; }
+.shop-list .mall-terms .reward-description-preview, .shop-list .mall-terms .journal-tile-note { display: none; }
+.shop-list .mall-frequency { font-size: 12px; color: var(--muted); }
+.study-shell .shop-list .journal-tile .mall-item-footer {
+  grid-area: 2 / 2; gap: 3px; margin: 0; padding: 0; justify-content: flex-end; color: var(--muted);
+}

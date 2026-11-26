@@ -1,6 +1,7 @@
 "use client";
+import { CollectionViewSwitch, useCollectionView } from "./collection-view";
 import {useEffect,useRef,useState} from "react";
-import {BookOpen,Book,BookCheck,Bookmark,ChevronDown,List,LayoutGrid,Plus,Clock3,Flame,Sparkles,Mic,Square,Camera,Check,ChevronRight,Gift,Settings,ArrowLeft,Search,Save,MessageCircle,CalendarDays,LoaderCircle,PauseCircle,Play,History,NotebookPen,Footprints,Pencil,Trash2,Sprout,Heart} from "lucide-react";
+import {BookOpen,Book,BookCheck,Bookmark,ChevronDown,Plus,Clock3,Flame,Sparkles,Mic,Square,Camera,Check,ChevronRight,Gift,Settings,ArrowLeft,Search,Save,MessageCircle,CalendarDays,LoaderCircle,PauseCircle,Play,History,NotebookPen,Footprints,Pencil,Trash2,Sprout,Heart} from "lucide-react";
 import {useStudyNavigation} from "./study-navigation";
 import {useStudyRefresh} from "./app-interactions";
 import {AdminIdentity, AdminNavigation, useAdminSection} from "./admin-navigation";
@@ -102,16 +103,7 @@ export function ReadingApp({active=true}:{active?:boolean}={}){
  const [data,setData]=useState<ReadingState|null>(null),[locked,setLocked]=useState(false),[error,setError]=useState(""),[notice,setNotice]=useState(""),[busy,setBusy]=useState(false),[localTab,setTab]=useState("reading"),[addBook,setAddBook]=useState(false),[editingBook,setEditingBook]=useState<ReadingBook|null>(null),[form,setForm]=useState<ReturnType<typeof emptyForm>|null>(null),[photo,setPhoto]=useState<string|undefined>(),[photoName,setPhotoName]=useState(""),[assistantLogId,setAssistantLogId]=useState<string|undefined>(),[recording,setRecording]=useState(false),[transcribing,setTranscribing]=useState(false),[timer,setTimer]=useState<{startedAt:number;bookId:string}|null>(null),[historyDate,setHistoryDate]=useState(""),[historyBook,setHistoryBook]=useState(""),[history,setHistory]=useState<{items:ReadingLog[];total:number;date:string;bookId:string;offset:number}|null>(null),[historyBusy,setHistoryBusy]=useState(false),[historyOpen,setHistoryOpen]=useState(false),[historyError,setHistoryError]=useState(""),[historyRevision,setHistoryRevision]=useState(0),[historyPage,setHistoryPage]=useState(0),[expandedHistoryId,setExpandedHistoryId]=useState<string|null>(null);
  const editingLogRef=useRef<ReadingLog|null>(null),historySequence=useRef(0),historyController=useRef<AbortController|null>(null),historyPending=useRef(false),historyRetryOffset=useRef(0);
  const recordingRef=useRef<VoiceRecording|null>(null),recordingController=useRef<AbortController|null>(null),formRef=useRef<HTMLFormElement>(null),loadedViewer=useRef<string|null>(null),loadSequence=useRef(0);
- const [shelfView,setShelfView]=useState<"list"|"grid">("list");
- const shelfPreference=data?.viewer.id ? "xiaobu-shelf-view:"+data.viewer.id : null;
- useEffect(()=>{
-  try{setShelfView(shelfPreference && localStorage.getItem(shelfPreference)==="grid"?"grid":"list");}
-  catch{setShelfView("list");}
- },[shelfPreference]);
- function chooseShelfView(view:"list"|"grid"){
-  setShelfView(view);
-  try{if(shelfPreference)localStorage.setItem(shelfPreference,view);}catch{/* The selection still applies to this session. */}
- }
+ const shelf = useCollectionView("shelf", data?.viewer.id, "list");
  const [preferredReadingId,setPreferredReadingId]=useState<string|null>(null);
  const [entryOpen,setEntryOpen]=useState(false);
  const [deletingLog,setDeletingLog]=useState<ReadingLog|null>(null);
@@ -254,11 +246,8 @@ export function ReadingApp({active=true}:{active?:boolean}={}){
  </form></ReadingCheckinDialog>}
  <details className="card reading-library">
   <summary><BookOpen size={20} aria-hidden="true"/>我的书架 · {data.books.length}本</summary>
-  {!!data.books.length&&<div className="shelf-view-switch" role="group" aria-label="书架显示方式">
-   <button type="button" aria-label="列表视图" title="列表视图" aria-pressed={shelfView==="list"} onClick={()=>chooseShelfView("list")}><List size={18} aria-hidden="true"/></button>
-   <button type="button" aria-label="方块视图" title="方块视图" aria-pressed={shelfView==="grid"} onClick={()=>chooseShelfView("grid")}><LayoutGrid size={17} aria-hidden="true"/></button>
-  </div>}
-  <div className="reading-books" data-view={shelfView}>{data.books.map(b=>
+  {!!data.books.length&&<CollectionViewSwitch label="书架显示方式" {...shelf}/>}
+  <div className="reading-books" data-view={shelf.view}>{data.books.map(b=>
    <article key={b.id}>
     <span className="shelf-book-icon" aria-hidden="true"><BookOpen size={16}/></span>
     <div className="shelf-book-copy">

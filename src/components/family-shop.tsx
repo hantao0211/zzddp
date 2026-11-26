@@ -1,4 +1,5 @@
 "use client";
+import { CollectionViewSwitch, useCollectionView } from "./collection-view";
 import {useEffect,useRef,useState} from "react";
 import {Gift,ShoppingBag,Pencil,Plus,X,Footprints,ChevronRight,History,LockKeyhole,Trash2} from "lucide-react";
 import {RewardIcon} from "./reward-icon";
@@ -85,10 +86,13 @@ function Exchange({reward:r,data,refresh,close}:Props&{reward:Reward;close:()=>v
 }
 export function FamilyRewardShop({data,refresh}:Props) {
  const [selected,setSelected]=useState<Reward|null>(null);
+ const layout=useCollectionView("shop",data.viewer.id,"grid");
  const rewards=data.rewards.filter(r=>r.active);
  return <section className="card" id="family-reward-shop">
-  <h2><GiftOpening />家庭奖励商城</h2><p className="reading-muted">选一个小期待，点开查看约定。</p>
-  <div className="reading-rewards mall-grid">{rewards.map(r=>{
+  <div className="collection-heading"><h2><GiftOpening />家庭奖励商城</h2>
+    {!!rewards.length && <CollectionViewSwitch label="商城显示方式" {...layout}/>}
+  </div><p className="reading-muted">选一个小期待，点开查看约定。</p>
+  <div className={layout.view==="grid"?"reading-rewards mall-grid":"journal-item-list shop-list"}>{rewards.map(r=>{
    const status=blocked(r,data);
    const amount=r.kind==="shopping" ? `本月剩余${money(r.usage?.remainingCents??r.monthlyBudgetCents??0)}元` : r.valueCents ? `最高${money(r.valueCents)}元` : null;
    const priceLabel=r.kind==="shopping" ? `每${money(r.rateCents||200)}元` : "消耗";
