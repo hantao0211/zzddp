@@ -448,3 +448,22 @@
     padding-block: env(safe-area-inset-top) env(safe-area-inset-bottom);
   }
 }
+
+.recap-entries, .recap-periods { display: flex; flex-wrap: wrap; gap: 8px; }
+.recap-page { color: var(--ink); }
+.recap-page h3, .recap-highlight, .recap-entries button { display: flex; align-items: center; gap: 8px; }
+.recap-periods button { border: 1px solid var(--border); border-radius: 8px; padding: 7px 14px; color: var(--muted); background: transparent; font: inherit; cursor: pointer; }
+.recap-periods button[aria-pressed=true] { background: var(--theme-green-soft,#e6eee4); color: var(--theme-success-text,#46624b); border-color: currentColor; }
+.recap-navigation { margin: 13px 0; display: grid; grid-template-columns: 44px 1fr 44px; align-items: center; text-align: center; }
+.recap-navigation .text-button { justify-content: center; }
+.recap-navigation small, .recap-page td small { display: block; color: var(--muted); }
+.recap-highlight { padding: 10px 12px; background: var(--theme-green-soft,#e6eee4); border-radius: 8px; }
+.recap-highlight svg { flex: none; }
+.recap-page section { padding: 14px 0; border-bottom: 1px solid var(--border); }
+.recap-page section h3 { font-size: 16px; margin: 0 0 8px; }
+.recap-page section p { margin: 0; }
+.recap-page table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+.recap-page th, .recap-page td { text-align: start; padding: 5px 3px; }
+.recap-page th { font-weight: 500; }
+.recap-page thead, .recap-page section > small { color: var(--muted); font-size: 13px; }
+.recap-page details { margin-top: 12px; color: var(--muted); font-size: 13px; }

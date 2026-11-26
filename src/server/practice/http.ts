@@ -1,3 +1,6 @@
+import { recapRange } from "../../domain/growth-recap";
+import { DaySchema } from "../../domain/calendar";
+import { growthRecap } from "./growth-recap";
 import { compareMistakes, MistakeSortSchema } from "../../domain/mistake-sort";
 import { noteFailure } from "../diagnostics/events";
 import {z} from "zod";
@@ -94,6 +97,13 @@ export class PracticeHTTP{
  }
 
  async handle(req:IncomingMessage,res:ServerResponse,viewer:Viewer){const url=new URL(req.url!,"http://internal"),path=url.pathname.replace("/assistant-api/learning/practice","");try{
+ if(path==="/growth-recap" && req.method==="GET"){
+   const period=z.enum(["week","month","term"]).parse(url.searchParams.get("period"));
+   const day=DaySchema.parse(url.searchParams.get("day")),today=this.store.today();
+   if(day>today)throw new HomeworkError(400,"请选择今天或之前的日期。");
+   const range=recapRange(period,day);
+   send(res,growthRecap(this.store,range.start,range.end>today?today:range.end));return;
+ }
  if(path==="/milestones" && req.method==="GET"){send(res,this.store.milestones.snapshot());return;}
  if(path==="/exams" && req.method==="GET"){
    const offset=Number(url.searchParams.get("offset")??0);
