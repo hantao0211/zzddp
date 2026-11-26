@@ -33,13 +33,14 @@ try{
   throw Error('Unexpected mock API '+req.method()+' '+path);
  });
  await page.goto(base+'/reading/',{waitUntil:'networkidle'});
+ await page.locator('.reading-entry-trigger').click();
  const start=page.getByLabel('开始页',{exact:true}),end=page.getByLabel('结束页',{exact:true});
  assert.equal(await start.inputValue(),'49');assert.equal(await end.inputValue(),'49');await page.getByText('上次读到第48页，页码可按本次阅读调整。',{exact:true}).waitFor();
  await page.getByLabel('正在读的书',{exact:true}).selectOption(second);assert.equal(await start.inputValue(),'74');
  await page.getByLabel('正在读的书',{exact:true}).selectOption(id);await start.fill('45');await end.fill('68');await page.getByLabel('时长（分钟）',{exact:true}).fill('20');await page.locator('#reading-summary').fill('新的模拟阅读概括。');
  await page.waitForTimeout(5200);assert.equal(await start.inputValue(),'45','Polling must preserve an intentional rereading page');
- await page.getByRole('button',{name:'完成阅读打卡',exact:true}).click();await page.waitForFunction(()=>document.querySelector('input[type=number]').value==='69');assert.equal(posts[0].startPage,45);
- await page.getByText('查看阅读历史',{exact:true}).click();const old=page.locator('.reading-history .reading-record').filter({hasText:'27—48页'});await old.getByRole('button',{name:'修改记录',exact:true}).click();assert.equal(await start.inputValue(),'27');assert.equal(await end.inputValue(),'48');await end.fill('46');await page.getByRole('button',{name:'保存修改',exact:true}).click();await page.waitForFunction(()=>document.querySelector('input[type=number]').value==='69');
+ await page.getByRole('button',{name:'完成阅读打卡',exact:true}).click();await page.locator('.reading-save-receipt').waitFor();await page.getByRole('button',{name:'返回手帐',exact:true}).click();assert.equal(posts[0].startPage,45);
+ await page.getByText('查看阅读历史',{exact:true}).click();const old=page.locator('.reading-history .reading-record').filter({hasText:'27—48页'});await old.getByRole('button',{name:'修改记录',exact:true}).click();assert.equal(await start.inputValue(),'27');assert.equal(await end.inputValue(),'48');await end.fill('46');await page.getByRole('button',{name:'保存修改',exact:true}).click();await page.locator('.reading-save-receipt').waitFor();await page.getByRole('button',{name:'返回手帐',exact:true}).click();
  await page.getByRole('button',{name:'成长与奖励',exact:true}).tap();
  const expired=page.locator('.reading-rewards article').filter({hasText:'已经结束的模拟电影'}),today=page.locator('.reading-rewards article').filter({hasText:'今天截止的模拟电影'});
  assert.equal(await expired.getByText('本期已到期',{exact:true}).isVisible(),true);assert.equal(await today.getByRole('button').isEnabled(),true);

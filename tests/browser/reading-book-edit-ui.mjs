@@ -17,6 +17,12 @@ try{
   if(path.endsWith('/reading/state'))return send(state());
   if(path.endsWith('/learning/state'))return send({date:'2026-11-23',status:'empty',pending:false,note:'',dates:[],quota:{calls:0,limit:100},uploads:[],report:null});
   if(path.endsWith('/memories'))return send({items:[]});
+  if(path.endsWith('/reading/logs')&&req.method()==='POST'){
+   const saved=req.postDataJSON();
+   assert.equal(saved.id,log.id);assert.equal(saved.version,log.version);
+   Object.assign(log,saved,{version:saved.version+1});
+   return send({log,book,pointsAdded:0});
+  }
   if(path.endsWith('/books/'+bookId)){
    if(req.method()==='GET')return send(book);
    assert.equal(req.method(),'PATCH');const value=req.postDataJSON();writes.push(value);
@@ -30,6 +36,20 @@ try{
  };
  await page.route('**/assistant-api/**',mockApi);
  await page.goto(base+'/reading/',{waitUntil:'networkidle'});
+ const openEntry=()=>page.locator('.reading-entry-trigger').click();
+ const goBack=()=>page.getByRole('button',{name:'返回手帐',exact:true}).click();
+ await page.locator('.reading-current-book').getByRole('heading',{name:book.title}).waitFor();
+ assert.equal(await page.locator('.reading-entry-fields').count(),0);
+ await page.locator('.reading-current-book').getByText(/上次读到第 48 页/).waitFor();
+ await page.screenshot({path:output+'/reading-home.png'});
+ await openEntry();
+ const entry=page.getByRole('dialog',{name:'阅读打卡',exact:true});
+ await entry.waitFor();
+ assert.equal(Math.round((await entry.boundingBox()).height),844);
+ await page.getByRole('button',{name:'开始阅读计时',exact:true}).click();
+ await goBack();
+ await page.getByRole('button',{name:'返回阅读计时',exact:true}).click();
+ await page.getByRole('button',{name:'结束计时并计入',exact:true}).click();
  for(const width of [320,390,768,1280]){
   await page.setViewportSize({width,height:844});
   const reading=page.locator('.reading-entry-fields');await reading.waitFor();
@@ -84,6 +104,7 @@ try{
  }
  await page.setViewportSize({width:390,height:844});
  await page.getByLabel('开始页',{exact:true}).fill('49');await page.getByLabel('结束页',{exact:true}).fill('52');await page.getByLabel('时长（分钟）',{exact:true}).fill('12');await page.locator('#reading-summary').fill('还没提交的阅读概括。');
+ await goBack();
  await page.locator('.reading-library > summary').click();await page.getByRole('button',{name:`修改${book.title}的书籍信息`,exact:true}).click();
  const dialog=page.getByRole('dialog',{name:'修改书籍信息',exact:true});await dialog.waitFor();assert.equal(await dialog.getByLabel('书名',{exact:true}).inputValue(),book.title);assert.equal(await dialog.getByLabel('总页数（选填）',{exact:true}).inputValue(),'241');
  for(const field of ['书名','总页数（选填）']) assert.equal((await dialog.getByLabel(field,{exact:true}).boundingBox()).height,40);
@@ -95,11 +116,13 @@ try{
  for(const width of [320,390,768,1280]){await page.setViewportSize({width,height:900});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));const box=await dialog.boundingBox();assert.ok(box.x>=-1&&box.x+box.width<=width+1);await page.screenshot({path:output+`/book-edit-${width}.png`});}
  await dialog.getByRole('button',{name:'保存书籍信息',exact:true}).click();await dialog.waitFor({state:'hidden'});
  await page.locator('.reading-notice').filter({hasText:'书籍信息已更新，阅读记录和小脚步都保留了。'}).waitFor();await page.locator('.reading-books').getByRole('heading',{name:book.title,exact:true}).waitFor();await page.locator('.reading-books').getByText('已记录22 / 300页 · 25分钟',{exact:true}).waitFor();assert.equal(book.id,bookId);assert.equal(book.logCount,1);
+ await page.getByRole('button',{name:'继续填写',exact:true}).click();
  assert.equal(await page.getByLabel('开始页',{exact:true}).inputValue(),'49');assert.equal(await page.getByLabel('结束页',{exact:true}).inputValue(),'52');assert.equal(await page.getByLabel('时长（分钟）',{exact:true}).inputValue(),'12');assert.equal(await page.locator('#reading-summary').inputValue(),'还没提交的阅读概括。');
  await page.reload({waitUntil:'networkidle'});await page.locator('.reading-library > summary').click();await page.getByRole('button',{name:`修改${book.title}的书籍信息`,exact:true}).click();await dialog.getByLabel('总页数（选填）',{exact:true}).fill('40');await dialog.getByRole('button',{name:'保存书籍信息',exact:true}).click();await dialog.locator('.form-error[role=alert]').filter({hasText:'48页'}).waitFor();assert.equal(await dialog.getByLabel('总页数（选填）',{exact:true}).inputValue(),'40');await dialog.getByRole('button',{name:'取消',exact:true}).click();assert.equal(book.totalPages,300);
  const desktop=await browser.newPage({ignoreHTTPSErrors:true,viewport:{width:1280,height:900}});
  await desktop.route('**/assistant-api/**',mockApi);
  await desktop.goto(base+'/reading/');
+ await desktop.locator('.reading-entry-trigger').click();
  const desktopForm=desktop.locator('.reading-entry-fields');
  await desktopForm.waitFor();
  const heights=await desktopForm.locator('select,input[type=date],input[type=number]').evaluateAll(fields=>fields.map(el=>el.getBoundingClientRect().height));
@@ -111,6 +134,17 @@ try{
    await input.waitFor();
    assert.equal((await input.boundingBox()).height,36);
  }
+ await page.getByRole('button',{name:'修改记录',exact:true}).first().click();
+ const editEntry=page.getByRole('dialog',{name:'修改阅读记录'});
+ assert.equal(await editEntry.locator('#reading-summary').inputValue(),log.summary);
+ assert.equal(await editEntry.getByLabel('开始页',{exact:true}).inputValue(),'27');
+ await editEntry.getByLabel('时长（分钟）',{exact:true}).fill('26');
+ await editEntry.getByRole('button',{name:'保存修改',exact:true}).click();
+ await editEntry.getByText('阅读修改已保存',{exact:true}).waitFor();
+ await goBack();
+ await page.getByRole('button',{name:'再记一次阅读',exact:true}).click();
+ assert.equal(await page.locator('#reading-summary').inputValue(),'');
+ assert.equal(await page.getByLabel('开始页',{exact:true}).inputValue(),'49');
  await desktop.close();
  assert.equal(state().growth.balance,2);assert.deepEqual(errors,[]);assert.ok(writes.length>=4);console.log('READING_BOOK_EDIT_UI_OK=true child-pencil-entry,prefilled-metadata,save-retry-keeps-draft,concurrent-edit-merges-untouched-fields,all-five-fields,progress-and-reading-draft-preserved,reload,too-small-page-error,cancel,320-390-768-1280');
 }finally{await browser.close();}

@@ -18,14 +18,17 @@ try {
    return route.fulfill({contentType:"application/json",body:JSON.stringify(result)});
  });
  await page.goto(base+"/reading/?studyDate="+date);
+ await page.locator('.reading-entry-trigger').click();
  const summary=page.locator("#reading-summary");
  await summary.fill("小兔子把信送到了。");
  const nav=()=>page.getByRole("navigation",{name:"底部学习导航"});
+ await page.getByRole('button',{name:'返回手帐',exact:true}).click();
  await nav().getByRole("link",{name:"课业",exact:true}).tap();
  await page.getByRole("button",{name:"课业使用教程",exact:true}).tap();
  await page.waitForFunction(()=>!!document.querySelector("dialog:modal") && document.body.style.position==="fixed");
  await page.evaluate(()=>history.back());
  await page.waitForURL("**/reading/**");
+ await page.locator('.reading-entry-trigger').click();
  await summary.waitFor();
  const timer=page.getByRole("button",{name:"开始阅读计时",exact:true});
  await timer.scrollIntoViewIfNeeded();
@@ -35,6 +38,7 @@ try {
  await timer.tap({timeout:4000});
  await page.getByRole("button",{name:"结束计时并计入",exact:true}).tap();
  assert.equal(await summary.inputValue(),"小兔子把信送到了。");
+ await page.getByRole('button',{name:'返回手帐',exact:true}).click();
  await nav().getByRole("link",{name:"课业",exact:true}).tap();
  await page.getByRole("button",{name:"关闭教程",exact:true}).tap();
  await page.waitForFunction(()=>document.body.style.position!=="fixed");

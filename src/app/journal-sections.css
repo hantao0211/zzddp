@@ -395,3 +395,56 @@
   .hw-list-detail .dialog-header { padding-top: max(10px, env(safe-area-inset-top)); }
   .hw-list-detail .dialog-body { padding-bottom: max(16px, env(safe-area-inset-bottom)); }
 }
+
+@media screen {
+  .reading-current-book {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 12px 18px;
+    align-items: center;
+  }
+  .reading-pocket-cover {
+    position: relative;
+    display: grid;
+    place-items: end center;
+    width: 64px;
+    height: 84px;
+    padding-bottom: 12px;
+    box-sizing: border-box;
+    color: var(--theme-success-text, #45634d);
+    background: var(--theme-green-soft, #e3ecdf);
+    border: 1px solid currentColor;
+    border-inline-start-width: 4px;
+    border-radius: 3px 8px 8px 3px;
+  }
+  .reading-pocket-cover > svg:first-child { position: absolute; top: -2px; right: 8px; fill: var(--theme-green-soft, #e3ecdf); }
+  .reading-current-copy { min-width: 0; overflow-wrap: anywhere; }
+  .reading-current-copy h3 { margin: 0; font-size: clamp(18px, 2.8vw, 23px); line-height: 1.35; }
+  .reading-current-copy p, .reading-current-copy small { margin: 3px 0 0; color: var(--muted); font-size: 14px; }
+  .reading-current-copy small { display: block; font-variant-numeric: tabular-nums; }
+  .reading-checkin-dialog[open] {
+    display: flex;
+    flex-direction: column;
+    width: min(640px, calc(100% - 32px));
+    height: min(780px, 88dvh);
+    max-height: none;
+    overflow: hidden;
+    box-sizing: border-box;
+  }
+  .reading-checkin-dialog[open] > header { flex: none; justify-content: flex-start; gap: 18px; }
+  .reading-checkin-dialog > .reading-dialog-body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+}
+@media (max-width: 600px) {
+  .reading-current-book { grid-template-columns: auto minmax(0, 1fr); gap: 12px 14px; }
+  .reading-entry-trigger { grid-column: 1 / -1; }
+  .reading-checkin-dialog.reading-dialog[open] {
+    inset: 0;
+    width: 100%;
+    max-width: none;
+    height: 100dvh;
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+    padding-block: env(safe-area-inset-top) env(safe-area-inset-bottom);
+  }
+}

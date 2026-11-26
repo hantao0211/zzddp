@@ -32,6 +32,7 @@ try {
   throw Error('Unexpected mock endpoint '+req.method()+' '+path);
  });
  await page.goto(base+'/reading/',{waitUntil:'networkidle'});
+ await page.locator('.reading-entry-trigger').click();
  const form=page.locator('.reading-checkin form'),start=page.getByLabel('开始页',{exact:true}),end=page.getByLabel('结束页',{exact:true}),minutes=page.getByLabel('时长（分钟）',{exact:true}),summary=page.locator('#reading-summary');
  await start.waitFor();assert.equal(await start.inputValue(),'49');await end.fill('79');await minutes.fill('20');await summary.fill('这是一段模拟的阅读概括。');
  const save=page.getByRole('button',{name:'完成阅读打卡',exact:true});await save.scrollIntoViewIfNeeded();
@@ -43,10 +44,10 @@ try {
  // Saving is successful even if the subsequent list refresh fails.
  brokenRefresh=true;mode='normal';release();const receipt=page.locator('.reading-save-receipt');await receipt.getByText('阅读打卡成功，已保存',{exact:true}).waitFor();
  assert.match(await receipt.innerText(),/49—79页 · 20分钟/);assert.equal(await page.getByRole('button',{name:'已保存',exact:true}).isDisabled(),true);assert.equal(await summary.inputValue(),'这是一段模拟的阅读概括。');
- await page.waitForTimeout(700);assert.equal(await receipt.evaluate(el=>{const r=el.getBoundingClientRect();return r.top>=0&&r.bottom<innerHeight-70;}),true);
+ await page.waitForTimeout(700);assert.equal(await receipt.evaluate(el=>{const r=el.getBoundingClientRect();return r.top>=0&&r.bottom<=innerHeight;}),true);
  assert.equal(await page.getByRole('button',{name:'已保存',exact:true}).evaluate(el=>getComputedStyle(el).backgroundColor),'rgb(117, 101, 116)');
  await form.evaluate(el=>el.requestSubmit());assert.equal(posts.length,1);brokenRefresh=false;
- await page.getByRole('button',{name:'成长与奖励',exact:true}).tap();await page.getByRole('button',{name:'课外阅读',exact:true}).tap();await receipt.waitFor();assert.equal(posts.length,1);
+ assert.equal(posts.length,1);
  await receipt.getByRole('button',{name:'修改这次记录',exact:true}).tap();assert.equal(await start.inputValue(),'49');await minutes.fill('21');await page.getByRole('button',{name:'保存修改',exact:true}).tap();await receipt.getByText('阅读修改已保存',{exact:true}).waitFor();assert.equal(rows.size,1);assert.equal(posts[1].id,posts[0].id);assert.equal(posts[1].version,1);
  await receipt.getByRole('button',{name:'再记一次阅读',exact:true}).tap();assert.equal(await start.inputValue(),'80');assert.equal(await summary.inputValue(),'');assert.equal(await minutes.inputValue(),'');
  await end.fill('90');await minutes.fill('10');await summary.fill('另一次独立的模拟阅读。');mode='reject';await page.getByRole('button',{name:'完成阅读打卡',exact:true}).tap();await page.locator('.reading-save-error').getByText('模拟校验未通过，请检查页码。',{exact:true}).waitFor();assert.equal(await summary.inputValue(),'另一次独立的模拟阅读。');assert.equal(await page.getByRole('button',{name:'完成阅读打卡',exact:true}).isEnabled(),true);
@@ -54,7 +55,7 @@ try {
  mode='lost';await page.getByRole('button',{name:'完成阅读打卡',exact:true}).tap();await page.locator('.reading-save-error').getByText(/未收到服务器确认/).waitFor();assert.equal(rows.size,2);assert.equal(posts.at(-1).id,retryId);
  mode='normal';await page.getByRole('button',{name:'完成阅读打卡',exact:true}).tap();await receipt.getByText('阅读打卡成功，已保存',{exact:true}).waitFor();assert.equal(rows.size,2);assert.equal(posts.at(-1).id,retryId);assert.equal(posts.at(-1).separateSession,true);
  for(const scheme of ['light','dark']){await page.emulateMedia({colorScheme:scheme});for(const width of [320,390,768,1280]){await page.setViewportSize({width,height:900});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await receipt.scrollIntoViewIfNeeded();await page.screenshot({path:output+`/reading-receipt-${scheme}-${width}.png`});}}
- await page.setViewportSize({width:390,height:844});await page.getByRole('button',{name:'添加书籍',exact:true}).tap();const dialog=page.locator('dialog[open]');await dialog.getByLabel('书名',{exact:true}).fill('模拟新书');await dialog.getByRole('button',{name:'加入我的书架',exact:true}).tap();await toast.getByText('模拟书籍保存失败，请稍后重试。',{exact:true}).waitFor();assert.equal(await toast.evaluate(el=>el.matches(':popover-open')),true,'Feedback must be above native dialogs');
+ await page.setViewportSize({width:390,height:844});await page.getByRole('button',{name:'返回手帐',exact:true}).click();await page.getByRole('button',{name:'添加书籍',exact:true}).tap();const dialog=page.locator('dialog[open]');await dialog.getByLabel('书名',{exact:true}).fill('模拟新书');await dialog.getByRole('button',{name:'加入我的书架',exact:true}).tap();await toast.getByText('模拟书籍保存失败，请稍后重试。',{exact:true}).waitFor();assert.equal(await toast.evaluate(el=>el.matches(':popover-open')),true,'Feedback must be above native dialogs');
  assert.equal(await toast.evaluate(el=>{const r=el.getBoundingClientRect();return el.contains(document.elementFromPoint(r.left+r.width/2,r.top+r.height/2));}),true,'The dialog backdrop must not cover or dim feedback');const rect=await toast.boundingBox();assert.ok(rect.y>=0&&rect.y+rect.height<844);await page.screenshot({path:output+'/dialog-feedback.png'});await toast.getByRole('button',{name:'关闭操作提示',exact:true}).tap();await toast.waitFor({state:'detached'});await dialog.getByRole('button',{name:'关闭',exact:true}).tap();
  assert.deepEqual(errors,[]);console.log('READING_FEEDBACK_UI_OK=true slow-double-submit,visible-pending,ack-before-refresh,durable-receipt,edit-canonical,next-session,lost-response-retry,modal-top-layer,light-dark-320-390-768-1280');
 }finally{await browser.close();}

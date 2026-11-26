@@ -1,9 +1,7 @@
 "use client";
-import { Archive, ArrowRight, BookOpen, CircleAlert, ClipboardList, Pencil, Sprout } from "lucide-react";
+import { Archive, ArrowRight, BookOpen, CircleAlert, ClipboardList, Pencil } from "lucide-react";
 import type { HomeworkSnapshot } from "@/domain/homework";
-import type {ReadingBook} from "@/domain/reading";
 import {StepAmount} from "./growth-tokens";
-export function ReadingCompanion({book,days,minutes}:{book?:ReadingBook;days:number;minutes:number}){return <aside className="study-companion"><section className="study-side-card"><div className="study-book-spot" aria-hidden="true">{book?<div className="study-book-cover"><Sprout/><span>{book.title}</span></div>:<BookOpen size={48}/>}</div><h2>{book?.title||"读一点喜欢的书"}</h2>{book&&<p>{book.author}{book.author&&" · "}已记录{book.uniquePages}页</p>}<p>{days?`连续阅读${days}天 · 累计${minutes}分钟` : "从今天的一小段故事开始。"}</p>{book?.totalPages&&<progress aria-label="这本书已记录的页数" value={book.uniquePages} max={book.totalPages}/>}</section></aside>;}
 type HomeStudyView = "grading" | "mistakes" | "practice" | "materials";
 
 export function HomeStudyTools({ grading, homeworkReward, onNavigate }: {
