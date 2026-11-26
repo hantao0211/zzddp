@@ -27,7 +27,7 @@ import type {PracticePaper,PracticeGrade} from "../src/domain/practice";
 import type {StructuredAI} from "../src/server/ai/provider";
 import type {Viewer} from "../src/domain/accounts";
 const child:Viewer={id:randomUUID(),username:"child",name:"模拟孩子",role:"child"},parent:Viewer={id:randomUUID(),username:"parent",name:"模拟家长",role:"parent"};
-function setup(){const dir=mkdtempSync(join(tmpdir(),"practice-test-"));let now=Date.parse("2026-11-23T10:00:00+08:00");const homework=new HomeworkStore(join(dir,"learning"),()=>now),reading=new ReadingStore(join(dir,"reading"),()=>now);saveStudentProfile(reading,{grade:4,semester:2,region:"模拟地区",school:"模拟学校"},parent.id);const store=new PracticeStore(homework,reading);const seed=(subject="数学",title="课堂练习",id=randomUUID())=>{const q={id,kind:"objective",label:"第1题",question:"1+1等于几？",studentAnswer:"3",expectedAnswer:"2",verdict:"wrong",confidence:"high",explanation:"1加1等于2。",knowledgePoints:["整数加法"],cause:"计算错误",causeExplanation:"可能需要重新核对计算。",nextStep:"再算一次。",evidence:[{fileId:"synthetic-page",page:1,excerpt:"模拟"}],sourcePartLabels:[],verification:"agreed"};homework.db.prepare("INSERT INTO grading_mistakes(id,first_date,last_date,subject,title,page_id,payload) VALUES(?,?,?,?,?,?,?)").run(id,reading.today(),reading.today(),subject,title,"synthetic-page",JSON.stringify(q));return id;};return{dir,homework,reading,store,seed,time:(day:string)=>now=Date.parse(day+"T10:00:00+08:00"),close(){homework.close();reading.close();rmSync(dir,{recursive:true,force:true});}};}
+function setup(){const dir=mkdtempSync(join(tmpdir(),"practice-test-"));let now=Date.parse("2026-11-23T10:00:00+08:00");const homework=new HomeworkStore(join(dir,"learning"),()=>now),reading=new ReadingStore(join(dir,"reading"),()=>now);saveStudentProfile(reading,{grade:4,semester:2,region:"模拟地区",school:"模拟学校"},parent.id);const store=new PracticeStore(homework,reading);const seed=(subject="数学",title="课堂练习",id: string=randomUUID())=>{const q={id,kind:"objective",label:"第1题",question:"1+1等于几？",studentAnswer:"3",expectedAnswer:"2",verdict:"wrong",confidence:"high",explanation:"1加1等于2。",knowledgePoints:["整数加法"],cause:"计算错误",causeExplanation:"可能需要重新核对计算。",nextStep:"再算一次。",evidence:[{fileId:"synthetic-page",page:1,excerpt:"模拟"}],sourcePartLabels:[],verification:"agreed"};homework.db.prepare("INSERT INTO grading_mistakes(id,first_date,last_date,subject,title,page_id,payload) VALUES(?,?,?,?,?,?,?)").run(id,reading.today(),reading.today(),subject,title,"synthetic-page",JSON.stringify(q));return id;};return{dir,homework,reading,store,seed,time:(day:string)=>now=Date.parse(day+"T10:00:00+08:00"),close(){homework.close();reading.close();rmSync(dir,{recursive:true,force:true});}};}
 const jpeg=(n=1)=>Buffer.from([255,216,255,224,n,2,3,4]).toString("base64");
 
 test("homework uploads have a curricular default and an explicit extracurricular choice", () => {
@@ -211,6 +211,11 @@ test("marked exams retain independent pages, scoped mistakes, teacher evidence a
     assert.ok(first.items[0].imageUrl?.includes(page));
     store.analysis.saveEdit(id,{revision:0,tags:{knowledge:["主谓一致"]}},parent.id);
     assert.equal(http.mistakes("英语",undefined,0,10,new URLSearchParams("knowledge=主谓一致")).total,1);
+    const byGroup=http.mistakes("英语",undefined,0,10,new URLSearchParams("knowledge=语法与句型"));
+    assert.equal(byGroup.total,1);
+    assert.deepEqual(byGroup.options.knowledge,["语法与句型"]);
+    assert.equal(byGroup.analysis.focus[0].name,"语法与句型");
+    assert.deepEqual(byGroup.items[0].tags?.knowledge,["主谓一致"]);
     assert.deepEqual(store.selectSources("英语")[0].knowledgePoints,["主谓一致"]);
     assert.throws(()=>store.analysis.saveEdit(id,{revision:0,tags:{}},parent.id));
     exams.editMeta(exam.exam.id,{previous:meta,meta:{...meta,scope:"extracurricular"}},parent.id);
@@ -540,6 +545,28 @@ test("mistake book sorts the filtered collection before slicing into pages",()=>
     const page=(sort:string,offset:number)=>http.mistakes("数学",undefined,offset,10,new URLSearchParams({sort})).items.map(item=>item.id);
     assert.deepEqual(page("newest",10),ids.slice(0,3).reverse());
     assert.deepEqual(page("oldest",10),ids.slice(10));
+    assert.deepEqual(page("leastFrequent",10),[ids[2],ids[1],ids[0]]);
     assert.deepEqual(page("frequent",0),[ids[0],...ids.slice(4).reverse()]);
+  } finally { f.close(); }
+});
+
+
+test("knowledge filters group historical points and retain the original study cues",()=>{
+  const f=setup();
+  try {
+    const http=new PracticeHTTP(f.store);
+    for(const [index,detail] of ["write down","listen to","planet 拼写","planet的用法","选择题"].entries()){
+      const id=f.seed("英语","练习","group-"+index);
+      const row=f.homework.db.prepare("SELECT payload FROM grading_mistakes WHERE id=?").get(id)!;
+      const q=JSON.parse(String(row.payload));
+      q.knowledgePoints=[detail];
+      f.homework.db.prepare("UPDATE grading_mistakes SET payload=? WHERE id=?").run(JSON.stringify(q),id);
+    }
+    const page=(group:string)=>http.mistakes("英语",undefined,0,10,new URLSearchParams({knowledge:group}));
+    assert.deepEqual(page("短语与搭配").options.knowledge.sort(),["待分类","短语与搭配","词汇与拼写"].sort());
+    assert.equal(page("短语与搭配").total,2);
+    assert.equal(page("词汇与拼写").total,2);
+    assert.equal(page("待分类").total,1);
+    assert.deepEqual(page("短语与搭配").items.flatMap(item=>item.question.knowledgePoints).sort(),["listen to","write down"]);
   } finally { f.close(); }
 });

@@ -1,3 +1,4 @@
+import { knowledgeGroups } from "../../domain/knowledge-groups";
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { classifyQuestion, dimensions, type Analysis, type Dimension, type Tags, type Observation, type ExamMeta } from "../../domain/assessment";
@@ -11,6 +12,7 @@ const hash=(v:unknown)=>createHash("sha256").update(JSON.stringify(v)).digest("h
 const stageLabel=(grade:number,semester:number)=>grade+"年级"+(semester===1?"上":"下")+"学期";
 const term=(date:string)=>{const month=Number(date.slice(5,7));return [Number(date.slice(0,4))-(month===1?1:0),month>=9||month===1?1:2].join("/");};
 type Event={id:string;date:string;subject:string;scope:LearningScope;origin:string;tags:Tags;verdict:string;full:boolean;document:string};
+type ClassifiedEvent = Event & { knowledgeGroups: string[] };
 type Edited={revision:number; tags:Partial<Tags>};
 const editSchema=z.object({revision:z.number().int().min(0),tags:z.partialRecord(z.enum(["stage","form","scene","knowledge","skill","cause","unit","difficulty"]),z.array(z.string().trim().min(1).max(100)).min(1).max(8))}).strict();
 function period(date:string,grain:string,stage:string) {
@@ -79,7 +81,7 @@ export class MistakeAnalysis {
   }
   query(candidates:PracticeCandidate[],params:URLSearchParams,subject?:PracticeSubject,scope?:LearningScope){
     this.sync();
-    const db=this.store.db,events=new Map<string,Event>(),wrong=new Map(candidates.map(c=>[c.id,c]));
+    const db=this.store.db,events=new Map<string,ClassifiedEvent>(),wrong=new Map(candidates.map(c=>[c.id,c]));
     const edits=new Map<string,Edited>(db.prepare("SELECT id,revision,tags FROM mistake_tag_edits m WHERE revision=(SELECT MAX(revision) FROM mistake_tag_edits WHERE id=m.id)").all().map(r=>[String(r.id),{revision:Number(r.revision),tags:JSON.parse(String(r.tags))}]));
     const autoTags=new Map<string,string>();
     function add(e:Event){
@@ -91,7 +93,9 @@ export class MistakeAnalysis {
       }
       if(candidate)autoTags.set(e.id,JSON.stringify(e.tags));
       Object.assign(e.tags,edits.get(e.id)?.tags);
-      events.set(e.date+"|"+e.id,e);
+      const record = {...e, knowledgeGroups: knowledgeGroups(e.subject, e.tags.knowledge)};
+      events.set(e.date+"|"+e.id,record);
+      return record;
     }
     const rows=db.prepare("SELECT a.* FROM analysis_events a JOIN grading_runs r ON r.id=a.run_id AND r.active=1 AND r.status='done' WHERE (? IS NULL OR a.subject=?) ORDER BY r.updated_at,r.rowid").all(subject??null,subject??null);
     const origins=this.store.homework.scopes.forMistakes(rows.map(r=>({id:String(r.id),first_date:String(r.day),page_id:String(r.page_id),subject:String(r.subject)})));
@@ -121,7 +125,7 @@ export class MistakeAnalysis {
       const q=JSON.parse(String(row.payload)) as GradedQuestion;
       const tags=classifyQuestion(q.label,c.question,c.knowledgePoints,q.cause,"待确认","作业",unitOf(c.title));
       const event:Event={id:c.id,date:c.lastDate,subject:c.subject,scope:c.scope,origin:"作业",tags,verdict:"wrong",full:false,document:String(row.page_id)};
-      add(event);byId.set(c.id,event);
+      byId.set(c.id,add(event));
     }
     const tagHistory=db.prepare("SELECT id,revision,automatic,evidence FROM analysis_tag_history h WHERE revision=(SELECT MAX(revision) FROM analysis_tag_history WHERE id=h.id)").all();
     const history=new Map(tagHistory.map(row=>[String(row.id),row]));
@@ -140,10 +144,17 @@ export class MistakeAnalysis {
     const selected=dimensions.map(d=>[d,params.getAll(d)] as const).filter(([,v])=>v.length);
     const from=params.get("from"),to=params.get("to");
     const inRange=(date:string)=>(!!date||(!from&&!to))&&(!from||date>=from)&&(!to||date<=to);
-    const matchesTags=(e:Event)=>(!subject||e.subject===subject)&&(!scope||e.scope===scope)&&selected.every(([d,v])=>e.tags[d].some(t=>v.includes(t)));
+    const matchesTags=(e:ClassifiedEvent)=>(!subject||e.subject===subject)&&(!scope||e.scope===scope)&&selected.every(([d,v])=>e.tags[d].some(t=>v.includes(t)) || (d==="knowledge" && e.knowledgeGroups.some(t=>v.includes(t))));
     const list=candidates.filter(c=>{const e=byId.get(c.id);return e&&matchesTags(e)&&inRange(e.date);});
     const options={} as Record<Dimension,string[]>;
-    for(const d of dimensions)options[d]=[...new Set(candidates.flatMap(c=>byId.get(c.id)?.tags[d]??[]))].sort();
+    for(const d of dimensions){
+      const values=candidates.flatMap(c=>{
+        const e=byId.get(c.id);
+        if(!e)return [];
+        return d==="knowledge"?e.knowledgeGroups:e.tags[d];
+      });
+      options[d]=[...new Set(values)].sort();
+    }
     const matchingEvents=[...events.values()].filter(matchesTags);
     const records=matchingEvents.filter(e=>inRange(e.date));
     const sourceIds=new Set(matchingEvents.map(e=>e.id)),documents=new Set<string>();
@@ -155,9 +166,10 @@ export class MistakeAnalysis {
       const b=bucket(e.date,e.tags.stage[0]);
       if(e.verdict==="wrong"){
         analysis.wrong++;b.wrong++;documents.add(e.document);
-        const key=e.tags.knowledge[0];
-        const v=focus.get(key)??{wrong:0,docs:new Set<string>(),latest:"",ids:new Set<string>()};
-        v.wrong++;v.docs.add(e.document);v.ids.add(e.id);if(v.latest<e.date)v.latest=e.date;focus.set(key,v);
+        for(const key of e.knowledgeGroups){
+          const v=focus.get(key)??{wrong:0,docs:new Set<string>(),latest:"",ids:new Set<string>()};
+          v.wrong++;v.docs.add(e.document);v.ids.add(e.id);if(v.latest<e.date)v.latest=e.date;focus.set(key,v);
+        }
       }
       if(!e.full){analysis.partial++;b.partial++;}
       if(["correct","wrong"].includes(e.verdict)){analysis.known++;b.known++;}else analysis.unknown++;

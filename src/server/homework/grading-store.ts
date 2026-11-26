@@ -300,8 +300,11 @@ export class GradingStore {
   mistakes(subject: string | null, offset = 0, limit = 30, sort: MistakeSort = "newest"): { total: number; items: MistakeView[] } {
     const where = "status='verified'" + (subject ? " AND subject=?" : ""); const args = subject ? [subject] : [];
     const total = (this.store.db.prepare(`SELECT COUNT(*) AS n FROM grading_mistakes WHERE ${where}`).get(...args) as { n: number }).n;
-    const ordering = sort === "frequent" ? "occurrences DESC, last_date DESC" : sort === "oldest" ? "last_date ASC" : "last_date DESC";
-    const rows = this.store.db.prepare(`SELECT *, (SELECT COUNT(*) FROM grading_occurrences WHERE mistake_id=grading_mistakes.id) AS occurrences FROM grading_mistakes WHERE ${where} ORDER BY ${ordering},id ASC LIMIT ? OFFSET ?`).all(...args, limit, offset) as { id: string; first_date: string; last_date: string; subject: string; title: string; page_id: string; payload: string; occurrences: number }[];
+    const ordering: Record<MistakeSort,string> = {
+      newest: "last_date DESC", oldest: "(last_date = '') ASC, last_date ASC",
+      frequent: "occurrences DESC, last_date DESC", leastFrequent: "occurrences ASC, last_date DESC",
+    };
+    const rows = this.store.db.prepare(`SELECT *, (SELECT COUNT(*) FROM grading_occurrences WHERE mistake_id=grading_mistakes.id) AS occurrences FROM grading_mistakes WHERE ${where} ORDER BY ${ordering[sort]},id ASC LIMIT ? OFFSET ?`).all(...args, limit, offset) as { id: string; first_date: string; last_date: string; subject: string; title: string; page_id: string; payload: string; occurrences: number }[];
     return { total, items: rows.map(r => ({ id: r.id, date: r.first_date, lastDate: r.last_date, subject: r.subject, title: r.title, pageId: r.page_id, occurrences: r.occurrences, question: JSON.parse(r.payload) })) };
   }
 }

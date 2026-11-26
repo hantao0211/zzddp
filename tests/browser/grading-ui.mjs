@@ -233,7 +233,15 @@ try {
     await page.setViewportSize({width, height: 670});
     const boxes=await Promise.all((await toolbar.getByRole("combobox").all()).map(el=>el.boundingBox()));
     assert.equal(boxes.length,3);
+    const chips=await toolbar.locator(".mistake-filter-chip > span").evaluateAll(spans=>spans.map(span=>{
+      const {width,height,right}=span.getBoundingClientRect();
+      return {width,height,right,viewport:innerWidth};
+    }));
+    assert.equal(chips.length,3);
+    assert.ok(chips.every(chip=>chip.height<=32 && chip.width<=100 && chip.right<=chip.viewport));
     assert.ok(boxes.every(b=>b.height>=44 && Math.abs(b.y-boxes[0].y)<2));
+    const directionBox=await toolbar.getByRole("button").boundingBox();
+    assert.ok(directionBox.height>=44 && Math.abs(directionBox.y-boxes[0].y)<2 && directionBox.x+directionBox.width<=width);
     const layout = await stem.evaluate(element => ({
       overflow: document.documentElement.scrollWidth > innerWidth,
       fits: element.getBoundingClientRect().right < innerWidth,
@@ -250,15 +258,22 @@ try {
   await mistakeDetail.getByRole("button",{name:"上一条"}).click();
   await mistakeDetail.getByRole("heading",{name:"第3题",exact:true}).waitFor();
   await mistakeDetail.getByRole("button",{name:"返回列表"}).click();
-  await sort.selectOption("oldest");
+  const direction=toolbar.getByRole("button",{name:/切换为/});
+  await direction.click();
   await toggle(302).waitFor();
   await book.getByRole("button",{name:"下一页",exact:true}).click();
   await toggle(292).click();
   await page.keyboard.press("Escape");
   await mistakeDetail.waitFor({state:"hidden"});
-  assert.equal(await sort.inputValue(),"oldest");
+  assert.equal(await direction.getAttribute("aria-label"),"升序，切换为降序");
   await book.getByText("第2／31页").waitFor();
-  await sort.selectOption("newest");
+  const leastRequest=page.waitForRequest(req=>new URL(req.url()).searchParams.get("sort")==="leastFrequent");
+  await sort.selectOption("occurrences");
+  await leastRequest;
+  const frequentRequest=page.waitForRequest(req=>new URL(req.url()).searchParams.get("sort")==="frequent");
+  await direction.click();
+  await frequentRequest;
+  await sort.selectOption("date");
   await toggle(2).waitFor();
   await book.getByRole("button", { name: "下一页", exact: true }).click();
   await toggle(12).waitFor();

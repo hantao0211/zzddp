@@ -14,7 +14,7 @@ import { useEffect, useRef, useState } from "react";
 import { homeworkPost, homeworkRequest } from "@/services/homework-gateway";
 import type { GradedQuestion, GradingReading, GradingBatchView, GradingSummary, MistakeView } from "@/domain/grading";
 import { Image, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, MessageCircle, PencilLine, Lightbulb, X } from "lucide-react";
-import { MistakeSortSchema, mistakeSortLabels, type MistakeSort } from "@/domain/mistake-sort";
+import { mistakeOrders, type MistakeSort } from "@/domain/mistake-sort";
 import { isSignatureRecord } from "@/domain/grading-signature";
 import { GradingFilters, filterLabels, type GradingFilter } from "./grading-filters";
 import { StatusIndicator } from "./status-indicator";
@@ -381,19 +381,38 @@ export function MistakeBook({ canManage = false }: { canManage?: boolean }) {
 
   const index = data?.items.findIndex(item => item.id === openId) ?? -1;
   const selected = data?.items[index];
+  const sortField = filters.sort === "oldest" || filters.sort === "newest" ? "date" : "occurrences";
+  const ascending = filters.sort === mistakeOrders[sortField].ascending;
   const pageCount = Math.ceil((data?.total ?? 0) / MISTAKE_PAGE_SIZE);
   return <section className="card grade-panel mistake-book" aria-label="错题本">
     <h2 ref={heading} tabIndex={-1}>我的错题本{data ? ` · ${data.total}题` : ""}</h2>
     <div className="mistake-toolbar" role="group" aria-label="错题筛选与排序">
-      <label>科目<select value={filters.subject} onChange={e => changeFilters({...filters,subject:e.target.value ? PracticeSubjectSchema.parse(e.target.value) : ""})}>
-        <option value="">全部科目</option>{PracticeSubjectSchema.options.map(s => <option key={s} value={s}>{s}</option>)}
-      </select></label>
-      <label>归属<select value={filters.scope} onChange={e => changeFilters({...filters,scope:e.target.value ? LearningScopeSchema.parse(e.target.value) : ""})}>
-        <option value="">全部归属</option>{LearningScopeSchema.options.map(s => <option key={s} value={s}>{scopeLabels[s]}</option>)}
-      </select></label>
-      <label>排序<select value={filters.sort} onChange={e => changeFilters({...filters,sort:MistakeSortSchema.parse(e.target.value)})}>
-        {MistakeSortSchema.options.map(s => <option key={s} value={s}>{mistakeSortLabels[s]}</option>)}
-      </select></label>
+      <label className="mistake-filter-chip" data-active={!!filters.subject}>
+        <span aria-hidden="true">{filters.subject || "科目"}<ChevronDown size={12} /></span>
+        <select aria-label="科目" value={filters.subject} onChange={e => changeFilters({...filters,subject:e.target.value ? PracticeSubjectSchema.parse(e.target.value) : ""})}>
+          <option value="">全部科目</option>{PracticeSubjectSchema.options.map(s => <option key={s} value={s}>{s}</option>)}
+        </select>
+      </label>
+      <label className="mistake-filter-chip" data-active={!!filters.scope}>
+        <span aria-hidden="true">{filters.scope ? scopeLabels[filters.scope] : "归属"}<ChevronDown size={12} /></span>
+        <select aria-label="归属" value={filters.scope} onChange={e => changeFilters({...filters,scope:e.target.value ? LearningScopeSchema.parse(e.target.value) : ""})}>
+          <option value="">全部归属</option>{LearningScopeSchema.options.map(s => <option key={s} value={s}>{scopeLabels[s]}</option>)}
+        </select>
+      </label>
+      <label className="mistake-filter-chip" data-active={sortField === "occurrences"}>
+        <span aria-hidden="true">{sortField === "date" ? "日期" : "次数"}<ChevronDown size={12} /></span>
+        <select aria-label="排序依据" value={sortField} onChange={e => {
+          const field = e.target.value === "date" ? "date" : "occurrences";
+          changeFilters({...filters, sort: mistakeOrders[field][ascending ? "ascending" : "descending"]});
+        }}>
+          <option value="date">收录日期</option><option value="occurrences">收录次数</option>
+        </select>
+      </label>
+      <button type="button" className="mistake-sort-direction"
+        aria-label={ascending ? "升序，切换为降序" : "降序，切换为升序"}
+        onClick={() => changeFilters({...filters, sort: mistakeOrders[sortField][ascending ? "descending" : "ascending"]})}>
+        <span>{ascending ? "↑ 升序" : "↓ 降序"}</span>
+      </button>
     </div>
     {data?.options&&data.analysis&&<MistakeInsights options={data.options} analysis={data.analysis} filters={filters.more??{}} change={more=>changeFilters({...filters,more})} indexing={data.indexing}/>}
     {error && <div className="form-error" role="alert">{error} <button type="button" className="text-button" onClick={() => {
@@ -412,7 +431,7 @@ export function MistakeBook({ canManage = false }: { canManage?: boolean }) {
           <span className="mistake-summary">
             <strong>{summary.title}</strong>
             {summary.preview && <span className="mistake-stem-preview">{summary.preview}</span>}
-            <small>{item.lastDate || "日期待补充"} · {item.subject}{filters.sort === "frequent" && ` · 收录${item.occurrences}次`}{item.tags?.form[0]&&item.tags.form[0]!=="待分类"?" · "+item.tags.form[0]:""}</small>
+            <small>{item.lastDate || "日期待补充"} · {item.subject}{sortField === "occurrences" && ` · 收录${item.occurrences}次`}{item.tags?.form[0]&&item.tags.form[0]!=="待分类"?" · "+item.tags.form[0]:""}</small>
           </span>
           <ChevronRight size={18} aria-hidden="true" />
         </button>
