@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 export const GradeReviewSchema = z.object({
-  verdict: z.enum(["wrong", "correct"]),
+  verdict: z.enum(["wrong", "correct", "record"]),
   original: z.string().trim().max(600),
   expected: z.string().trim().max(600),
   correction: z.string().trim().max(600),

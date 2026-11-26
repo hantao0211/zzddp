@@ -14,6 +14,7 @@ import { useEffect, useRef, useState } from "react";
 import { homeworkPost, homeworkRequest } from "@/services/homework-gateway";
 import type { GradedQuestion, GradingReading, GradingBatchView, GradingSummary, MistakeView } from "@/domain/grading";
 import { Image, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, MessageCircle, PencilLine, Lightbulb, X } from "lucide-react";
+import { isSignatureRecord } from "@/domain/grading-signature";
 import { GradingFilters, filterLabels, type GradingFilter } from "./grading-filters";
 import { StatusIndicator } from "./status-indicator";
 const verdicts = { passedWithNote: "通过但存疑", correct: "正确", wrong: "错误 · 已入错题本", blank: "未作答", uncertain: "AI尚未确认", feedback: "主观题点评" };
@@ -39,11 +40,12 @@ function Explanation({detailMode,label,children}: {detailMode:boolean;label:stri
 }
 function QuestionCard({ question, date, subject, title, pageId, imageUrl, displayLabel, preview, runId, version, canConfirm = false, detailMode = false, readings = [] }: { detailMode?: boolean; runId?: string; version?: string; preview?: GradePreview; canConfirm?: boolean; readings?: GradingReading[]; question: GradedQuestion; date: string; subject: string; title?: string; pageId: string; imageUrl?: string; displayLabel?: string }) {
   const q = gradingDisplayQuestion(question);
-  const takeaway = gradingTakeaway(q, readings);
+  const signature = isSignatureRecord(q);
+  const takeaway = signature ? "" : gradingTakeaway(q, readings);
   const [tab,setTab] = useState<"result"|"photo"|"review">("result");
   const chat = <button className="text-button" onClick={() => window.dispatchEvent(new CustomEvent("xiaobu:ask-homework", { detail: { date, gradingTopic: { pageId, questionId: question.id, label: `${subject} · ${displayLabel || q.label}`.slice(0,400), stem: q.question.slice(0,600) } } }))}><MessageCircle size={17} aria-hidden="true" />和小步聊这题</button>;
   return <article className={`grade-question grade-verdict-${q.verdict}`}>
-    <div className="grade-question-heading"><h3>{displayLabel || q.label}</h3><StatusIndicator kind={q.verdict === "passedWithNote" ? "correct" : q.verdict} className="grade-verdict-badge">{verdicts[q.verdict]}</StatusIndicator></div>
+    <div className="grade-question-heading"><h3>{displayLabel || q.label}</h3><StatusIndicator kind={q.verdict === "passedWithNote" ? "correct" : q.verdict} className="grade-verdict-badge">{signature ? "签名记录" : verdicts[q.verdict]}</StatusIndicator></div>
     {takeaway && <p className="grade-takeaway">{q.verdict === "passedWithNote" && "疑点 · "}{takeaway}</p>}
     {q.familyReview && <p className="grade-source">家长已核对{q.familyReview.correction && ` · 已订正为「${q.familyReview.correction}」`}</p>}
     {detailMode && <div className="grade-detail-tabs" role="group" aria-label="本题内容">
@@ -56,7 +58,7 @@ function QuestionCard({ question, date, subject, title, pageId, imageUrl, displa
       {!detailMode && <p className="grade-source">{date} · {subject}{title && ` · ${title}`}</p>}
       <p className="grade-stem">{q.question}</p>
       <dl className="grade-answers">
-        <div><dt><PencilLine aria-hidden="true" />{q.verdict === "uncertain" ? "AI 读到的作答" : "识别到的作答"}</dt><dd>{q.studentAnswer || "未填写或未识别清楚"}</dd></div>
+        <div><dt><PencilLine aria-hidden="true" />{signature ? "签名及日期" : q.verdict === "uncertain" ? "AI 读到的作答" : "识别到的作答"}</dt><dd>{q.studentAnswer || "未填写或未识别清楚"}</dd></div>
         {q.expectedAnswer && q.verdict !== "uncertain" && q.verdict !== "passedWithNote" && <div><dt><Lightbulb aria-hidden="true" />{q.verdict === "feedback" ? "参考思路" : "参考答案"}</dt><dd>{q.expectedAnswer}</dd></div>}
       </dl>
       {readings.map(r => <div key={r.stage} className="grade-reading"><strong>{{ verification: "独立核对", focusOne: "复查一", focusTwo: "复查二" }[r.stage]}</strong>
@@ -69,7 +71,7 @@ function QuestionCard({ question, date, subject, title, pageId, imageUrl, displa
     </Explanation>}
     {detailMode ? <>{tab === "photo" && <Photo id={pageId} url={imageUrl} alwaysOpen />}{tab === "result" && chat}</> :
       <div className="grade-question-actions"><Photo id={pageId} url={imageUrl} />{chat}</div>}
-    {canConfirm && version && runId && <div hidden={detailMode && tab !== "review"}><FamilyGradeReview initiallyOpen={detailMode && !preview} key={version + (preview?.id || "")} runId={runId} questionId={question.id} version={version} initial={{original:q.studentAnswer,expected:q.expectedAnswer,correction:q.familyReview?.correction || ""}} /></div>}
+    {canConfirm && version && runId && <div hidden={detailMode && tab !== "review"}><FamilyGradeReview signature={signature} initiallyOpen={detailMode && !preview} key={version + (preview?.id || "")} runId={runId} questionId={question.id} version={version} initial={{original:q.studentAnswer,expected:q.expectedAnswer,correction:q.familyReview?.correction || ""}} /></div>}
   </article>;
 }
 function pageStatus(batch: GradingBatchView) {
@@ -134,7 +136,7 @@ export function GradingPanel({ date, canManage = true, focusFailures = false }: 
     if (filter === "ungraded" || batch.status !== "done") continue;
     if (filter === "all" && batch.result?.scopeComplete && !batch.result.questions.length) rows.push({batch});
     for (const q of batch.result?.questions || []) {
-      if (filter === "all" || filter === q.verdict || (filter === "attention" && (batch.previews?.[q.id] || (q.verdict !== "correct" && q.verdict !== "passedWithNote")))) {
+      if (filter === "all" || filter === q.verdict || (filter === "attention" && (batch.previews?.[q.id] || (!isSignatureRecord(q) && q.verdict !== "correct" && q.verdict !== "passedWithNote")))) {
         rows.push({batch,question:q});
         shownCount++;
       }
@@ -168,8 +170,8 @@ export function GradingPanel({ date, canManage = true, focusFailures = false }: 
       {!!batches.length && !rows.length && <p className="grade-filter-empty">{filter === "ungraded" ? "暂无未批改的页面。" : filter === "feedback" ? "暂无点评。" : isCategory ? `暂无${filterLabels[filter]}的题目。` : "当前没有需要留意的题。"}</p>}
       {visible.map(({batch,question},i) => {
         const q = question && gradingDisplayQuestion(question);
-        const status = q ? filterLabels[q.verdict] : pageStatus(batch);
-        const hint = q ? (q.familyReview?.correction ? `已订正为「${q.familyReview.correction}」` : gradingTakeaway(q,batch.readings?.[q.id]) || q.question) : batch.failure?.reason || batch.note;
+        const status = q && isSignatureRecord(q) ? "签名记录" : q ? filterLabels[q.verdict] : pageStatus(batch);
+        const hint = q && isSignatureRecord(q) ? q.studentAnswer : q ? (q.familyReview?.correction ? `已订正为「${q.familyReview.correction}」` : gradingTakeaway(q,batch.readings?.[q.id]) || q.question) : batch.failure?.reason || batch.note;
         return <div key={JSON.stringify([batch.id,q?.id])}>
           {(i === 0 || visible[i-1].batch.id !== batch.id) && <h4 className="grade-list-group">{batch.subject} · {batch.title}</h4>}
           <button type="button" className="grade-result-row" onClick={e => openRow({batch,question}, e.currentTarget)}>

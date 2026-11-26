@@ -222,3 +222,34 @@ test("题卡复核原答与另行订正，关窗后家长可以确认并同步�
     assert.equal(f.store.db.prepare("SELECT COUNT(*) n FROM grading_reviews").get()?.n,2);
   } finally { f.close(); }
 });
+
+test("signature transcription is a record across automatic grading, family confirmation and historical mistakes", () => {
+  const f = fixture();
+  try {
+    const run = f.store.grading.claim()!;
+    const signature = {...question(f.page), id:"sig", verification:"agreed" as const, label:"家长签名", question:"请家长/签字人在本页签名。"};
+    const dictation = {...signature, id:"word", label:"听写第6题", question:"听写词语“家长签名”。"};
+    const result = {version:"grading-v2" as const,scopeComplete:true,note:"",questions:[signature,dictation]};
+    f.store.grading.save(run,result);
+    assert.equal(f.store.grading.mistakes(null).total,1);
+    const review = {verdict:"wrong" as const,original:"模拟签名及日期",expected:"签名",correction:"补签",evidence:"页尾有签名及日期"};
+    const version=f.store.grading.results(date).batches[0].reviewVersions!.sig;
+    const preview=f.store.grading.proposeReview(run.id,"sig",version,review);
+    assert.equal(preview.verdict,"record");
+    assert.equal(f.store.grading.confirmReview(preview.id,"parent").verdict,"record");
+    assert.ok(f.store.grading.confirmReview(preview.id,"parent").applied);
+    const updated=f.store.grading.results(date).batches[0].result!.questions[0];
+    assert.equal(updated.verdict,"feedback"); assert.equal(updated.studentAnswer,review.original);
+    assert.equal(updated.familyReview?.correction,""); assert.equal(f.store.grading.summary(date).wrong,1);
+    // Simulate the prior release storing an OCR correction as a verified learner error.
+    f.store.db.prepare("UPDATE grading_runs SET result=? WHERE id=?").run(JSON.stringify(result),run.id);
+    f.store.db.prepare("INSERT INTO grading_mistakes(id,first_date,last_date,subject,title,page_id,payload) VALUES(?,?,?,?,?,?,?)").run("old-sig",date,date,"语文","模拟作业",f.page,JSON.stringify(signature));
+    f.store.close();
+    const reopened = new HomeworkStore(f.directory,Date.now,null,false,true);
+    try {
+      assert.equal(reopened.grading.mistakes(null).total,1);
+      assert.equal(reopened.grading.results(date).batches[0].result!.questions[0].verdict,"feedback");
+      assert.equal(reopened.grading.summary(date).wrong,1);
+    } finally { reopened.close(); }
+  } finally { rmSync(f.directory,{recursive:true,force:true}); }
+});

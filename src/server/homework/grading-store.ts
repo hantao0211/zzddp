@@ -1,3 +1,4 @@
+import { isSignatureRecord, signatureRecord, signatureReview } from "../../domain/grading-signature";
 import type { HomeworkRule } from "../../domain/memory";
 import { LearnedMemories } from "./memory";
 import { reviewReadings } from "./grading-readings";
@@ -29,6 +30,13 @@ export class GradingStore {
       CREATE TABLE IF NOT EXISTS grading_mistakes(id TEXT PRIMARY KEY,first_date TEXT NOT NULL,last_date TEXT NOT NULL,subject TEXT NOT NULL,title TEXT NOT NULL,page_id TEXT NOT NULL,payload TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'verified');
       CREATE TABLE IF NOT EXISTS grading_occurrences(mistake_id TEXT NOT NULL REFERENCES grading_mistakes(id),run_id TEXT NOT NULL REFERENCES grading_runs(id),question_id TEXT NOT NULL,PRIMARY KEY(mistake_id,run_id,question_id));`);
     store.db.exec("UPDATE grading_runs SET status='queued' WHERE status='running'");
+    // Retain the original audit trail. Practice and the mistake book both select verified entries.
+    const withdraw = store.db.prepare("UPDATE grading_mistakes SET status='withdrawn' WHERE id=?");
+    store.transaction(() => {
+      for (const row of store.db.prepare("SELECT id,payload FROM grading_mistakes WHERE status IN ('verified','needs_review')").all() as {id:string;payload:string}[]) {
+        if (isSignatureRecord(JSON.parse(row.payload))) withdraw.run(row.id);
+      }
+    });
     for (const row of store.db.prepare("SELECT DISTINCT date FROM grading_runs WHERE active=1").all() as { date: string }[]) this.deduplicate(row.date);
   }
   private pageKey(page: GradingSource["pages"][number]): string {
@@ -173,6 +181,7 @@ export class GradingStore {
       const source = JSON.parse(run.source) as GradingSource;
       const reviews = reviewReadings(this.store.db, run.id, result);
       if (reviews) result = { ...result, questions: result.questions.map(q => settleReviewedQuestion(q, reviews[q.id] || [])) };
+      result = {...result, questions:result.questions.map(q => isSignatureRecord(q) ? signatureRecord(q) : q)};
       const active = this.store.db.prepare("SELECT active FROM grading_runs WHERE id=?").get(run.id) as { active: number };
       this.store.db.prepare("UPDATE grading_runs SET status='done',result=?,note='',updated_at=? WHERE id=?").run(JSON.stringify(GradingResultSchema.parse(result)), new Date(this.store.now()).toISOString(), run.id);
       if (!active.active) return;
@@ -180,6 +189,7 @@ export class GradingStore {
     });
   }
   private syncMistake(run: GradingRun, source: GradingSource, question: GradingResult["questions"][number]) {
+    if (isSignatureRecord(question)) return;
     const primaryEvidence = question.evidence.find(e => e.fileId === source.primaryPageId)!;
     const page = this.store.page(primaryEvidence.fileId)!, file = this.store.file(page.file_id)!;
     const id = digest({ file: file.sha256, page: page.number, subject: source.subject, label: question.label.normalize("NFKC").replace(/\s/g, "") });
@@ -193,6 +203,8 @@ export class GradingStore {
     const run = this.store.db.prepare("SELECT result FROM grading_runs WHERE id=? AND active=1 AND status='done'").get(runId) as {result:string} | undefined;
     const current = run && GradingResultSchema.parse(JSON.parse(run.result)).questions.find(q => q.id === questionId);
     if (!current || digest(current) !== base) throw new HomeworkError(409,"这题的批改已更新，请打开最新题卡。");
+    if (isSignatureRecord(current)) review = signatureReview(review);
+    else if (review.verdict === "record") throw new HomeworkError(400,"请按孩子实际写下的答案核对本题。");
     const id = randomUUID();
     this.store.db.prepare("INSERT INTO grading_previews(id,run_id,question_id,base,payload) VALUES(?,?,?,?,?) ON CONFLICT(run_id,question_id) DO UPDATE SET id=excluded.id,base=excluded.base,payload=excluded.payload,applied=0").run(id,runId,questionId,base,JSON.stringify(review));
     return { ...review, id, label: current.label, applied:false };
@@ -205,12 +217,15 @@ export class GradingStore {
       const result = run?.result && GradingResultSchema.parse(JSON.parse(run.result));
       const q = result && result.questions.find(item => item.id === row.question_id);
       if (!run || !result || !q || digest(q) !== row.base) throw new HomeworkError(409,"本题记录已更新，请重新核对。");
-      const review: GradeReview = JSON.parse(row.payload);
+      const signature = isSignatureRecord(q);
+      const stored: GradeReview = JSON.parse(row.payload);
+      const review = signature ? signatureReview(stored) : stored;
       const receipt = {...review,id,label:q.label,applied:true};
       if (row.applied) return receipt;
       const time = new Date(this.store.now()).toISOString();
       this.store.db.prepare("INSERT INTO grading_reviews(id,run_id,question_id,previous_question,reason,created_at) VALUES(?,?,?,?,?,?)").run(id,run.id,q.id,JSON.stringify(q),JSON.stringify({actor,review}),time);
       Object.assign(q,{ studentAnswer:review.original,expectedAnswer:review.expected,explanation:review.evidence,verdict:review.verdict,verification:"agreed",confidence:"high",familyReview:{correction:review.correction,evidence:review.evidence},cause:"原因待确认",causeExplanation:"",nextStep:"" });
+      if (signature) Object.assign(q,signatureRecord(q));
       this.store.db.prepare("UPDATE grading_runs SET result=?,updated_at=? WHERE id=?").run(JSON.stringify(result),time,run.id);
       this.syncMistake(run,JSON.parse(run.source),q);
       this.store.db.prepare("UPDATE grading_previews SET applied=1,base=? WHERE id=?").run(digest(GradingResultSchema.parse(result).questions.find(item => item.id === q.id)),id);
@@ -238,7 +253,7 @@ export class GradingStore {
     for (const run of this.store.db.prepare("SELECT * FROM grading_runs WHERE date=? AND active=1 ORDER BY rowid").all(date) as (GradingRun & { active: number })[]) {
       const source = JSON.parse(run.source) as GradingSource; summary.pages++;
       const counts = emptyCounts(); let pending = 0, failed = 0, incomplete = 0;
-      if (run.status === "done" && run.result) { summary.finished++; const result = GradingResultSchema.parse(JSON.parse(run.result)); for (const q of result.questions) counts[q.verdict]++; incomplete = result.scopeComplete ? 0 : 1; }
+      if (run.status === "done" && run.result) { summary.finished++; const result = GradingResultSchema.parse(JSON.parse(run.result)); for (const q of result.questions) counts[isSignatureRecord(q) ? "feedback" : q.verdict]++; incomplete = result.scopeComplete ? 0 : 1; }
       else if (run.status === "failed") failed++; else pending++;
       for (const key of Object.keys(counts) as (keyof typeof counts)[]) summary[key] = (summary[key] ?? 0) + counts[key];
       summary.pending += pending; summary.failed += failed; summary.incomplete += incomplete;
@@ -256,6 +271,11 @@ export class GradingStore {
       const readings = reviewReadings(this.store.db, run.id, result);
       const reviewVersions = Object.fromEntries((result?.questions || []).map(q => [q.id,digest(q)]));
       for (const question of result?.questions || []) {
+        if (isSignatureRecord(question)) {
+          Object.assign(question, signatureRecord(question));
+          if (readings) delete readings[question.id];
+          continue;
+        }
         const observations = readings?.[question.id];
         if (readings && observations && singleCalculation(question.question) && observations.some(mixedCalculationReading)) {
           readings[question.id] = observations.filter(r => !mixedCalculationReading(r));
@@ -268,7 +288,7 @@ export class GradingStore {
       const previews: Record<string, GradePreview> = {};
       for (const row of this.store.db.prepare("SELECT id,question_id,base,payload FROM grading_previews WHERE run_id=? AND applied=0").all(run.id) as {id:string;question_id:string;base:string;payload:string}[]) {
         const q = result?.questions.find(item => item.id === row.question_id);
-        if (q && reviewVersions[q.id] === row.base) previews[q.id] = {...JSON.parse(row.payload),id:row.id,label:q.label,applied:false};
+        if (q && reviewVersions[q.id] === row.base) previews[q.id] = {...(isSignatureRecord(q) ? signatureReview(JSON.parse(row.payload)) : JSON.parse(row.payload)),id:row.id,label:q.label,applied:false};
       }
       return { reviewVersions, previews, readings, attempts: run.attempts, retryAllowed: run.status === "failed" && run.attempts < 6, failure: run.status === "done" ? null : this.failure(run.id), id: run.id, subject: source.subject, title: source.title, status: run.status, note: run.note, primaryPageId: run.primary_page_id, result }; }) };
   }

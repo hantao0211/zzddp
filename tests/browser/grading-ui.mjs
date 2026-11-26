@@ -28,7 +28,7 @@ try {
   const fullAssignment = "模拟课外拓展习题（单词和课文默写之外的部分）";
   let selectedDate = "", blankVisible = true, extraWrong = false, many = false;
   const currentQuestions = () => [...questions.filter(q => blankVisible || q.verdict !== "blank"), ...(extraWrong ? [q("wrong", 6)] : []), ...(many ? Array.from({length:15},(_,i)=>q("correct",i+20)) : [])];
-  let reviewPreview;
+  let reviewPreview, signatureCase = false;
   await page.route("**/assistant-api/**", async route => {
     const url = new URL(route.request().url()), path = url.pathname;
     const json = data => route.fulfill({ contentType: "application/json", body: JSON.stringify(data) });
@@ -40,6 +40,11 @@ try {
     if (path.endsWith("/learning/state")) {
       const date = url.searchParams.get("date"); selectedDate = date;
       return json({ date, status: "processed", pending: false, note: "模拟资料", dates: [date], quota: { calls: 1, limit: 60 }, grading: summary(), writtenCompletionEnabled: true, uploads: [{ id: "synthetic-upload", date, kind: "memo", status: "processed", createdAt: "", subjects: ["数学"], note: "", aiMs: 0, issues: [], files: [{ id: "synthetic-file", name: "synthetic.png", size: 1, stored: true, pages: [] }] }], report: { date, memoId: "synthetic-upload", updatedAt: "", familyNotes: [], unclassified: [], unassigned: [], uncertainties: [], tasks: [{ id: "synthetic-task", title: "数学练习", subject: "数学", requirement: "完成模拟练习第12页", format: "written", memoEvidence: [], evidence: [], coverage: "complete", missing: [], reviewActivity: null, writtenCompletion: { version: "written-v2", status: "done", reason: "均有模拟作答", parts: [] } }] } });
+    }
+    if (signatureCase && path.endsWith("/learning/grading")) {
+      const signature = {...q("feedback",8),label:"家长签名",question:"请家长在本页签名。",studentAnswer:"模拟签名",expectedAnswer:"",explanation:"",knowledgePoints:[]};
+      return json({summary:{...summary(),feedback:1,wrong:0},batches:[{id:"signature-run",title:"模拟作业",subject:"语文",status:"done",primaryPageId:"synthetic-page",
+        reviewVersions:{[signature.id]:"c".repeat(64)},result:{version:"grading-v2",scopeComplete:true,note:"",questions:[signature]}}]});
     }
     if (path.endsWith("/learning/grading")) return json({ summary: summary(), batches: [{ id: "synthetic-run", title: "数学练习", subject: "数学", attempts: failed ? 3 : 1, retryAllowed: failed, failure: failed ? { code: "INVALID_ENVELOPE", stage: "verification", failedAt: "2026-11-21T14:58:51.833Z", source: "runtime", reason: "AI返回的内容未能正常解析，没能读到可用的批改回复。", nextStep: "原件已保存，不用重新上传。可以请家长重试。" } : null, status: pending ? "queued" : failed ? "failed" : "done", note: pending && quotaPaused ? "今天的AI额度已用完，批改会在明天继续，原件已保存。" : failed ? "批改未完成，原件保留。" : "", primaryPageId: "synthetic-page", reviewVersions: {"synthetic-question-4":"b".repeat(64)}, readings: { "synthetic-question-4": ["verification","focusOne","focusTwo"].map((stage,i)=>({stage,studentAnswer:i===0?"甲":"乙",expectedAnswer:"乙",confidence:i===1?"medium":"high",verdict:"correct",explanation:"模拟观察记录"})) }, result: pending || failed ? null : { version: "grading-v1", scopeComplete: !partial, note: "", questions: currentQuestions() } }, { id: "synthetic-english", title: "英语练习", subject: "英语", status: "done", note: "", primaryPageId: "synthetic-english-page", result: { version: "grading-v1", scopeComplete: true, note: "", questions: [q("correct", 7)] } }] });
     if (path.endsWith("/learning/mistakes")) {
@@ -61,7 +66,8 @@ try {
     }
     if (path.endsWith("/learning/grading/review")) {
       const payload = route.request().postDataJSON();
-      assert.equal(payload.questionId,"synthetic-question-4");
+      assert.equal(payload.questionId,signatureCase ? "synthetic-question-8" : "synthetic-question-4");
+      if (signatureCase) { assert.equal(payload.review.verdict,"record"); assert.equal(payload.review.correction,""); }
       assert.equal(payload.review.evidence,"模拟核对依据");
       reviewPreview={...payload.review,id:"synthetic-review",label:"第4题",applied:false};
       return json(reviewPreview);
@@ -326,6 +332,20 @@ try {
   await rows.first().click();
   assert.equal(await failures.getByRole("button",{name:"重试当天失败页"}).count(),0);
   await failures.getByText("请家长处理重试，已有结果仍可查看。").waitFor();
+  child=false; failed=false; signatureCase=true;
+  await page.goto(base,{waitUntil:"networkidle"});
+  await page.getByRole("button",{name:"查看批改",exact:true}).click();
+  await all.click();
+  await rows.getByText("签名记录",{exact:true}).click();
+  await detail.getByRole("button",{name:"家长核对",exact:true}).click();
+  assert.equal(await detail.getByRole("radio").count(),0);
+  await detail.getByLabel("卷面签名及日期").fill("新签名，模拟日期");
+  await detail.getByLabel("核对依据").fill("模拟核对依据");
+  await detail.getByRole("button",{name:"预览更正"}).click();
+  await detail.getByText("确认后更新签名记录。").waitFor();
+  await detail.getByRole("button",{name:"确认更正签名"}).click();
+  await detail.getByText("签名记录已更新。").waitFor();
+  assert.doesNotMatch(await detail.innerText(),/入错题本|原答错误/);
   assert.deepEqual(errors, []);
   console.log("GRADING_UI_OK=true daily-progress,category-buttons,zero-category,poll-preserves-filter,keyboard,date-reset,failed-reason-home-entry,per-page-cause-attempt-stage,ungraded-filter-and-reset,child-no-retry,all-verdicts,wrong-book,compact-one-line-source,scope-badge-edit,full-title-in-editor,cause,next-step,subject-filter,lazy-private-photo,assistant-prefill,retry,mobile-and-desktop");
 } finally { await browser.close(); }

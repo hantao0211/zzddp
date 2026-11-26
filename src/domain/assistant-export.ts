@@ -16,7 +16,7 @@ export function exportAssistantConversation(input: { date: string; messages: Cha
     for (const notice of message.memoryNotices || []) lines.push(`记忆提示：${notice}`);
     if (message.gradePreview) {
       const review = message.gradePreview;
-      lines.push(review.label + (review.applied ? " · 已确认更正" : " · 待家长确认"), "原答判定：" + (review.verdict === "wrong" ? "错误" : "正确"), review.evidence);
+      lines.push(review.label + (review.applied ? " · 已确认更正" : " · 待家长确认"), review.verdict === "record" ? "签名记录：" + review.original : "原答判定：" + (review.verdict === "wrong" ? "错误" : "正确"), review.evidence);
       if (review.correction) lines.push("卷面订正：" + review.correction);
     }
     if (message.proposal) {

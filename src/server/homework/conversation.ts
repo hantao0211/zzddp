@@ -1,3 +1,4 @@
+import { isSignatureRecord } from "../../domain/grading-signature";
 import { MEMO_ASSIGNMENT_POLICY } from "../../domain/memo-assignment";
 import { SELECTED_SUBMISSION_POLICY } from "../../domain/submission-policy";
 import { randomUUID } from "node:crypto";
@@ -103,7 +104,7 @@ export class HomeworkConversation {
     const gradingContext = { ...(topic ? { selectedQuestion: { label: target?.label || topic.label, stem: target?.question || topic.stem, recordedVerdict:target?.verdict, linkedCorrection:correction, readings: batch?.readings?.[topic.questionId] },
       guidance: "孩子正在讨论指定题。按孩子自己的话区分反馈识读与求讲解。反馈时检查所附该页的印刷题干、各空手写、批注和订正；没有读到图就说明。区分原答、老师批注、另行订正和掌握程度。依据逐轮记录指出具体分歧，不推测后台为何未确认。定位到原答红叉且订正清楚，即使原错字形未辨清，也可提议原答错误，原文字段只填看清的部分或说明未辨清。若用户反馈识读问题且原图证据足以更正，填写 gradeReview，分别给原答 original、参考答案 expected、卷面订正 correction（未见就留空）、指明位置的 evidence。求讲解、只问状态、原图缺失或证据不足时 gradeReview 为 null，直接回答或只问具体缺哪条线索。不要声称已保存、已入本或承诺修改清单。" } : {}), enabled: this.store.autoGradingEnabled, summary: grading.summary, batches: grading.batches.slice(0, 30).map(b => ({ title: b.title, subject: b.subject, status: b.status, note: b.note, scopeComplete: b.result?.scopeComplete })), questions: gradingQuestions.map(({ title, subject, question: q }) => ({ title, subject, ...q, question: q.question.slice(0, 2000), studentAnswer: q.studentAnswer.slice(0, 1000), expectedAnswer: q.expectedAnswer.slice(0, 1000), explanation: q.explanation.slice(0, 800), causeExplanation: q.causeExplanation.slice(0, 500), nextStep: q.nextStep.slice(0, 500) })) };
     if (target && batch && /^(?:那|那么)?(?:这道题|这题|第.{1,6}题)?(?:的)?(?:状态现在|现在的状态|当前状态|现在|状态)(?:的状态|状态)?(?:是)?(?:什么|啥|怎么样)[呢啊吗？?。]*$/.test(input.question.trim())) {
-      const label = {wrong:"原答错误，已收入错题本",correct:"原答正确",uncertain:"待核对",passedWithNote:"通过但存疑",blank:"未作答",feedback:"主观题点评"}[target.verdict];
+      const label = isSignatureRecord(target) ? "签名记录" : {wrong:"原答错误，已收入错题本",correct:"原答正确",uncertain:"待核对",passedWithNote:"通过但存疑",blank:"未作答",feedback:"主观题点评"}[target.verdict];
       const gradePreview = batch.previews?.[target.id];
       const answer = [target.label + "的批改记录是「" + label + "」。",target.familyReview?.correction ? "卷面已订正为「" + target.familyReview.correction + "」。" : correction?.verdict === "correct" ? "同题另有一条订正记录，已判正确。" : "",gradePreview ? "本题已有更正建议，等家长确认。" : ""].join("");
       return {answer,spokenAnswer:answer,sourceMaterialIds:[],hint:null,followUpQuestion:null,studyDate:context.date,gradePreview,proposal:undefined,changeStatus:"none" as const,photoReview:{requested:false,providedPages:0,totalAvailablePages:0,unavailablePages:0},memoriesSaved:[],memoryNotices:[],activeMemories:undefined};
@@ -139,7 +140,7 @@ export class HomeworkConversation {
       reply.followUpQuestion = null;
     }
     if (gradePreview) {
-      reply.answer = "我找到了本题的批改依据，已把更正建议放在下面。";
+      reply.answer = gradePreview.verdict === "record" ? "签名识读的更正已准备好，请核对下方文字。" : "我找到了本题的批改依据，已把更正建议放在下面。";
       reply.spokenAnswer = reply.answer;
       reply.followUpQuestion = null;
     }

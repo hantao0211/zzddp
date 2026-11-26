@@ -20,7 +20,7 @@ export function GradeReviewPreview({preview, canConfirm, onSaved}: {preview: Gra
     finally { setBusy(false); }
   }
   const facts = [
-    ["原答", preview.original],
+    [preview.verdict === "record" ? "签名及日期" : "原答", preview.original],
     ["参考答案", preview.expected],
     ["卷面订正", preview.correction],
     ["核对依据", preview.evidence],
@@ -31,17 +31,17 @@ export function GradeReviewPreview({preview, canConfirm, onSaved}: {preview: Gra
       <strong>{preview.label}</strong>
       <span className={styles.status}>{applied ? "已更正" : "待家长确认"}</span>
     </header>
-    <p className={styles.outcome}>{preview.verdict === "wrong" ? (applied ? "原答错误，已收入错题本。" : "原答错误，确认后收入错题本。") : (applied ? "原答正确，错题本已同步。" : "原答正确，确认后同步错题本。")}</p>
+    <p className={styles.outcome}>{preview.verdict === "record" ? (applied ? "签名记录已更新。" : "确认后更新签名记录。") : preview.verdict === "wrong" ? (applied ? "原答错误，已收入错题本。" : "原答错误，确认后收入错题本。") : (applied ? "原答正确，错题本已同步。" : "原答正确，确认后同步错题本。")}</p>
     <dl className={styles.facts}>
       {facts.filter(([, value]) => value).map(([label, value]) =>
         <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}
     </dl>
-    {!applied && (canConfirm ? <div className={styles.actions}><button type="button" className="button primary compact" disabled={busy} onClick={() => void confirm()}>{busy ? "正在保存…" : "确认更正这道题"}</button></div> : <p className={styles.help}>建议已保存，家长可以在这道题上确认。</p>)}
+    {!applied && (canConfirm ? <div className={styles.actions}><button type="button" className="button primary compact" disabled={busy} onClick={() => void confirm()}>{busy ? "正在保存…" : preview.verdict === "record" ? "确认更正签名" : "确认更正这道题"}</button></div> : <p className={styles.help}>建议已保存，家长可以在这道题上确认。</p>)}
     {error && <p role="alert" className="form-error">{error}</p>}
   </section>;
 }
 
-export function FamilyGradeReview({runId,questionId,version,initial,initiallyOpen = false}: {initiallyOpen?:boolean;runId:string;questionId:string;version:string;initial:{original:string;expected:string;correction:string}}) {
+export function FamilyGradeReview({runId,questionId,version,initial,initiallyOpen = false,signature = false}: {signature?:boolean;initiallyOpen?:boolean;runId:string;questionId:string;version:string;initial:{original:string;expected:string;correction:string}}) {
   const [open,setOpen] = useState(initiallyOpen);
   const [error,setError] = useState("");
   const [busy,setBusy] = useState(false);
@@ -58,23 +58,23 @@ export function FamilyGradeReview({runId,questionId,version,initial,initiallyOpe
     finally { setBusy(false); }
   }}>
     <header className={styles.heading}><ClipboardCheck size={18} aria-hidden="true" /><strong>家长核对</strong></header>
-    <fieldset className={styles.verdict}>
+    {signature ? <><input type="hidden" name="verdict" value="record" /><input type="hidden" name="expected" value="" /><input type="hidden" name="correction" value="" /><label className={styles.field}>卷面签名及日期<input name="original" defaultValue={initial.original} maxLength={600} /></label></> : <fieldset className={styles.verdict}>
       <legend>孩子的原答</legend>
       <div className={styles.choices}>
         <label><input type="radio" name="verdict" value="correct" required /><span><Check size={16} aria-hidden="true" />正确</span></label>
         <label><input type="radio" name="verdict" value="wrong" required /><span><X size={16} aria-hidden="true" />错误</span></label>
       </div>
-    </fieldset>
+    </fieldset>}
     <label className={styles.field}>核对依据
-      <textarea name="evidence" required rows={2} maxLength={600} placeholder="例如：原答旁有红叉，下方另写了订正。" />
+      <textarea name="evidence" required rows={2} maxLength={600} placeholder={signature ? "例如：页末可以看到签名和日期。" : "例如：原答旁有红叉，下方另写了订正。"} />
     </label>
-    <details className={styles.extra}><summary>补充答案与订正<span>选填</span><ChevronDown size={16} aria-hidden="true" /></summary>
+    {!signature && <details className={styles.extra}><summary>补充答案与订正<span>选填</span><ChevronDown size={16} aria-hidden="true" /></summary>
       <div className={styles.fields}>
         <label className={styles.field}>原答<input name="original" defaultValue={initial.original.slice(0,600)} maxLength={600} /></label>
         <label className={styles.field}>参考答案<input name="expected" defaultValue={initial.expected.slice(0,600)} maxLength={600} /></label>
         <label className={styles.field}>卷面订正<input name="correction" defaultValue={initial.correction.slice(0,600)} maxLength={600} /></label>
       </div>
-    </details>
+    </details>}
     <div className={styles.actions}>
       <button type="button" className="text-button" disabled={busy} onClick={() => setOpen(false)}>取消</button>
       <button type="submit" className="button primary compact" disabled={busy}><ScanEye size={16} aria-hidden="true" />{busy ? "正在生成…" : "预览更正"}</button>
