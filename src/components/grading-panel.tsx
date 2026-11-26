@@ -13,11 +13,11 @@ import { gradingProgressText } from "@/domain/grading-progress";
 import { useEffect, useRef, useState } from "react";
 import { homeworkPost, homeworkRequest } from "@/services/homework-gateway";
 import type { GradedQuestion, GradingReading, GradingBatchView, GradingSummary, MistakeView } from "@/domain/grading";
-import { Image, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, MessageCircle, PencilLine, Lightbulb, CircleCheck, Check, CircleAlert, X } from "lucide-react";
+import { Image, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, MessageCircle, PencilLine, Lightbulb, CircleCheck, CircleAlert, X } from "lucide-react";
 import { StatusIndicator } from "./status-indicator";
 const verdicts = { passedWithNote: "通过但存疑", correct: "正确", wrong: "错误 · 已入错题本", blank: "未作答", uncertain: "AI尚未确认", feedback: "主观题点评" };
 const filterLabels = { correct: "正确", passedWithNote: "通过但存疑", wrong: "错误", blank: "未作答", uncertain: "未确认", feedback: "点评" };
-type GradingFilter = "attention" | "all" | GradedQuestion["verdict"];
+type GradingFilter = "attention" | "all" | "ungraded" | GradedQuestion["verdict"];
 function Photo({ id, url }: { id: string; url?: string }) {
   const [open, setOpen] = useState(false);
   const alt = url ? "这道题所在的原卷" : "这道题所在的作业原图";
@@ -66,32 +66,53 @@ function QuestionCard({ question, date, subject, title, pageId, imageUrl, displa
 export function GradingPanel({ date, canManage = true, focusFailures = false }: { date: string; canManage?: boolean; focusFailures?: boolean }) {
   const failureRegion = useRef<HTMLElement>(null);
   const [data, setData] = useState<{ summary: GradingSummary; batches: GradingBatchView[] } | null>(null), [error, setError] = useState("");
-  const [filter, setFilter] = useState<GradingFilter>("attention"), [retrying, setRetrying] = useState(false);
+  const [filter, setFilter] = useState<GradingFilter>(focusFailures ? "ungraded" : "attention"), [retrying, setRetrying] = useState(false);
   useEffect(() => {
-    let live = true; setData(null); setError(""); setFilter("attention");
+    let live = true; setData(null); setError("");
     const load = async () => { try { const next = await homeworkRequest<{ summary: GradingSummary; batches: GradingBatchView[] }>(`/grading?date=${date}`); if (live) { setData(next); setError(""); } } catch (e) { if (live) setError(e instanceof Error ? e.message : "批改记录暂未读取成功"); } };
     void load(); const timer = setInterval(() => { if (!document.hidden) void load(); }, 4000); return () => { live = false; clearInterval(timer); };
   }, [date]);
+  useEffect(() => { setFilter(focusFailures ? "ungraded" : "attention"); }, [date, focusFailures]);
+  const toggleFilter = (next: GradingFilter) => setFilter(current => current === next ? "all" : next);
   const failures = data?.batches.filter(batch => batch.status === "failed") || [];
   const hasFailures = failures.length > 0;
   useEffect(() => { if (focusFailures && hasFailures) { failureRegion.current?.focus({ preventScroll: true }); failureRegion.current?.scrollIntoView({ block: "start", behavior: "instant" }); } }, [date, focusFailures, hasFailures]);
   const canRetry = failures.some(batch => batch.retryAllowed !== false);
-  const isCategory = filter !== "all" && filter !== "attention";
+  const isCategory = filter !== "all" && filter !== "attention" && filter !== "ungraded";
+  const ungradedPages = data?.batches.filter(batch => batch.status !== "done" || !batch.result?.scopeComplete) ?? [];
   const matches = (q: GradedQuestion) => filter === "all" || (filter === "attention" ? q.verdict !== "correct" && q.verdict !== "passedWithNote" : q.verdict === filter);
   const shownCount = data?.batches.reduce((count, batch) => count + (batch.result?.questions.filter(matches).length ?? 0), 0) ?? 0;
   const progressText = data ? gradingProgressText(data.batches, data.summary.pending) : null;
   return <section className="card grade-panel" aria-label="批改结果"><h2>批改结果</h2><p className="grade-source">{date.replaceAll("-", "/")} · AI逐题检查，错题自动归档</p>
     {error && <p role="alert" className="form-error">{error}</p>}
     {!data ? <p>正在读取批改记录…</p> : !data.summary.enabled ? <p>自动批改尚未启用。</p> : <>
-      <div className="grade-counts" role="group" aria-label="按批改结果筛选">{(Object.keys(filterLabels) as GradedQuestion["verdict"][]).map(kind => <button type="button" key={kind} className="grade-stat-filter" aria-pressed={filter === kind} aria-label={`${filterLabels[kind]} ${data.summary[kind] ?? 0}题`} onClick={() => setFilter(kind)}><StatusIndicator kind={kind === "passedWithNote" ? "correct" : kind} className="grade-stat"><span>{filterLabels[kind]}<strong>{data.summary[kind] ?? 0}</strong></span></StatusIndicator>{filter === kind && <Check className="grade-filter-check" size={16} aria-hidden="true" />}</button>)}</div>
-      {progressText && <p className="grade-progress" role="status"><StatusIndicator kind="pending">{progressText}</StatusIndicator></p>}
-      {!!data.summary.incomplete && <p>部分题目还没完整识别，下面只展示已经检查的题。</p>}
-      {!!data.summary.failed && <section ref={failureRegion} tabIndex={-1} className="grade-progress grade-failures" aria-label="批改未完成原因"><h3><CircleAlert size={21} aria-hidden="true" />{data.summary.failed}页批改未完成</h3>{failures.map(batch => <article className="grade-failure" key={batch.id}><h4>{batch.subject} · {batch.title}</h4><p>{batch.failure?.reason || "这份旧批改记录没有保存具体原因，原件已保留。"}</p><p className="grade-source">{batch.failure?.nextStep || "不用重新上传，家长可以重试批改。"}</p>{batch.attempts !== undefined && <small>已尝试{batch.attempts}次{batch.failure && ` · ${GRADING_STAGE_LABELS[batch.failure.stage]}`}</small>}{batch.retryAllowed === false && <p className="grade-source">这页已达到重试上限，请让家长联系维护人员检查。</p>}<Photo id={batch.primaryPageId} /></article>)}{canManage && <button className="button primary compact" disabled={retrying || !canRetry} onClick={async () => { setRetrying(true); try { await homeworkPost("/grading/retry", { date }); setError(""); } catch (e) { setError(e instanceof Error ? e.message : "暂时不能重试"); } finally { setRetrying(false); } }}>重试批改</button>}<small>{!canManage && "请家长处理重试，已有结果仍可查看。"}</small></section>}
-      <div className="tabs grade-filters"><button aria-pressed={filter === "attention"} className={filter === "attention" ? "selected" : ""} onClick={() => setFilter("attention")}>先看需要留意的题</button><button aria-pressed={filter === "all"} className={filter === "all" ? "selected" : ""} onClick={() => setFilter("all")}>全部题目</button></div>
+      <div className="grade-filter-bar" role="group" aria-label="按批改结果筛选">
+        <button type="button" aria-label="全部题目" aria-pressed={filter === "all"} onClick={() => setFilter("all")}>全部</button>
+        <div className="grade-filter-options">
+          <button type="button" aria-pressed={filter === "ungraded"} onClick={() => toggleFilter("ungraded")}>未批改 <span>{ungradedPages.length}页</span></button>
+          <button type="button" aria-label="先看需要留意的题" aria-pressed={filter === "attention"} onClick={() => toggleFilter("attention")}>需留意</button>
+          {(Object.keys(filterLabels) as GradedQuestion["verdict"][]).map(kind =>
+            <button type="button" key={kind} className="grade-stat-filter" aria-pressed={filter === kind} aria-label={`${filterLabels[kind]} ${data.summary[kind] ?? 0}题`} onClick={() => toggleFilter(kind)}>
+              {filterLabels[kind]} <span>{data.summary[kind] ?? 0}</span>
+            </button>)}
+        </div>
+      </div>
+      {!isCategory && progressText && <p className="grade-progress" role="status"><StatusIndicator kind="pending">{progressText}</StatusIndicator></p>}
+      {!isCategory && filter !== "ungraded" && !!data.summary.incomplete && <p>部分题目还没完整识别，下面只展示已经检查的题。</p>}
+      {!isCategory && !!data.summary.failed && <section ref={failureRegion} tabIndex={-1} className="grade-progress grade-failures" aria-label="批改未完成原因"><h3><CircleAlert size={21} aria-hidden="true" />{data.summary.failed}页批改未完成</h3>{failures.map(batch => <article className="grade-failure" key={batch.id}><h4>{batch.subject} · {batch.title}</h4><p>{batch.failure?.reason || "这份旧批改记录没有保存具体原因，原件已保留。"}</p><p className="grade-source">{batch.failure?.nextStep || "不用重新上传，家长可以重试批改。"}</p>{batch.attempts !== undefined && <small>已尝试{batch.attempts}次{batch.failure && ` · ${GRADING_STAGE_LABELS[batch.failure.stage]}`}</small>}{batch.retryAllowed === false && <p className="grade-source">这页已达到重试上限，请让家长联系维护人员检查。</p>}<Photo id={batch.primaryPageId} /></article>)}{canManage && <button className="button primary compact" disabled={retrying || !canRetry} onClick={async () => { setRetrying(true); try { await homeworkPost("/grading/retry", { date }); setError(""); } catch (e) { setError(e instanceof Error ? e.message : "暂时不能重试"); } finally { setRetrying(false); } }}>重试批改</button>}<small>{!canManage && "请家长处理重试，已有结果仍可查看。"}</small></section>}
+      {filter === "ungraded" && <>
+        {ungradedPages.length === 0 && <p className="grade-filter-empty" role="status">暂无未批改的页面。</p>}
+        {ungradedPages.filter(batch => batch.status !== "failed").map(batch =>
+          <section className="grade-batch" key={batch.id}>
+            <h3>{batch.subject} · {batch.title}</h3>
+            <p>{batch.status === "done" ? "本页部分题目尚未批改。" : batch.note || (batch.status === "running" ? "正在批改" : "等待批改")}</p>
+            <Photo id={batch.primaryPageId} />
+          </section>)}
+      </>}
       {!data.batches.length && <div><p>还没有批改记录。新上传的书面作业会自动处理；已上传的作业可以直接开始，无需重新上传。</p>{canManage && <button className="button primary" disabled={retrying} onClick={async () => { setRetrying(true); try { await homeworkPost("/grading/start", { date }); setError(""); } catch (e) { setError(e instanceof Error ? e.message : "暂时无法开始批改"); } finally { setRetrying(false); } }}>批改这一天的作业</button>}</div>}
-      {!!data.batches.length && <p className="grade-filter-summary" role="status">{isCategory ? `只看${filterLabels[filter]} · ${shownCount}题` : filter === "all" ? `全部题目 · ${shownCount}题` : `需要留意 · ${shownCount}题`}</p>}
+      {filter !== "ungraded" && !!data.batches.length && <p className="grade-filter-summary" role="status">{isCategory ? `只看${filterLabels[filter]} · ${shownCount}题` : filter === "all" ? `全部题目 · ${shownCount}题` : `需要留意 · ${shownCount}题`}</p>}
       {isCategory && shownCount === 0 && <p className="grade-filter-empty">{filter === "feedback" ? "暂无点评。" : `暂无${filterLabels[filter]}的题目。`}{data.summary.pending > 0 ? "新结果会自动更新。" : ""}</p>}
-      {data.batches.filter(batch => batch.status !== "failed" && (!isCategory || batch.result?.questions.some(matches))).map(batch => <section key={batch.id} className="grade-batch"><h3>{batch.subject} · {batch.title}</h3>{(batch.note || batch.result?.note) && <details className="grade-batch-note" open={batch.status === "failed"}><summary>查看批改说明</summary>{batch.note && <p>{batch.note}</p>}{batch.result?.note && <p>{batch.result.note}</p>}</details>}{batch.result?.questions.filter(matches).map(q => <QuestionCard key={q.id} question={q} preview={batch.previews?.[q.id]} runId={batch.id} version={batch.reviewVersions?.[q.id]} canConfirm={canManage} readings={batch.readings?.[q.id]} date={date} subject={batch.subject} title={batch.title} pageId={batch.primaryPageId} />)}{filter === "attention" && batch.result?.questions.some(q => q.verdict === "passedWithNote") && <button type="button" className="text-button" onClick={() => setFilter("passedWithNote")}>已通过，查看疑点</button>}{batch.status === "done" && batch.result && !batch.result.questions.length && <p>这页未发现需要逐题批改的作答。</p>}{batch.status === "done" && batch.result?.questions.length && batch.result.questions.every(q => q.verdict === "correct") && filter === "attention" ? <p className="grade-all-correct"><CircleCheck size={22} aria-hidden="true" />已检查的{batch.result.questions.length}题均正确，可切换“全部题目”查看。</p> : null}</section>)}
+      {filter !== "ungraded" && data.batches.filter(batch => batch.status !== "failed" && (!isCategory || batch.result?.questions.some(matches))).map(batch => <section key={batch.id} className="grade-batch"><h3>{batch.subject} · {batch.title}</h3>{(batch.note || batch.result?.note) && <details className="grade-batch-note" open={batch.status === "failed"}><summary>查看批改说明</summary>{batch.note && <p>{batch.note}</p>}{batch.result?.note && <p>{batch.result.note}</p>}</details>}{batch.result?.questions.filter(matches).map(q => <QuestionCard key={q.id} question={q} preview={batch.previews?.[q.id]} runId={batch.id} version={batch.reviewVersions?.[q.id]} canConfirm={canManage} readings={batch.readings?.[q.id]} date={date} subject={batch.subject} title={batch.title} pageId={batch.primaryPageId} />)}{filter === "attention" && batch.result?.questions.some(q => q.verdict === "passedWithNote") && <button type="button" className="text-button" onClick={() => setFilter("passedWithNote")}>已通过，查看疑点</button>}{batch.status === "done" && batch.result && !batch.result.questions.length && <p>这页未发现需要逐题批改的作答。</p>}{batch.status === "done" && batch.result?.questions.length && batch.result.questions.every(q => q.verdict === "correct") && filter === "attention" ? <p className="grade-all-correct"><CircleCheck size={22} aria-hidden="true" />已检查的{batch.result.questions.length}题均正确，可切换“全部题目”查看。</p> : null}</section>)}
       <p className="grade-source">错题经过两次识别与解答核验后自动入本；有分歧的题不直接判错。错因是根据作答提出的分析，主观题给出点评。</p>
     </>}
   </section>;

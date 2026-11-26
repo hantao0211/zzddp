@@ -9,9 +9,9 @@ const engine = process.env.SMOKE_BROWSER === "webkit" ? webkit : chromium;
 const browser = await engine.launch({ headless: true, args: engine === chromium ? ["--no-sandbox"] : [] });
 try {
   const page = await browser.newPage({ colorScheme:process.env.SMOKE_COLOR_SCHEME || 'light', viewport: { width: 390, height: 670 }, isMobile: true, hasTouch: true, ignoreHTTPSErrors: true });
-  let pending = false, failed = false, photos = 0, child = false, quotaPaused = false; const errors = []; page.on("pageerror", e => errors.push(e.message));
+  let pending = false, failed = false, photos = 0, child = false, quotaPaused = false, partial = false; const errors = []; page.on("pageerror", e => errors.push(e.message));
   const counts = { passedWithNote: 1, correct: 2, wrong: 1, blank: 1, uncertain: 1, feedback: 1 };
-  const summary = () => ({ ...counts, enabled: true, pages: 1, finished: pending || failed ? 0 : 1, pending: pending ? 1 : 0, failed: failed ? 1 : 0, incomplete: 0, tasks: { "synthetic-task": { ...counts, pending: pending ? 1 : 0, failed: failed ? 1 : 0, incomplete: 0 } } });
+  const summary = () => ({ ...counts, enabled: true, pages: 1, finished: pending || failed ? 0 : 1, pending: pending ? 1 : 0, failed: failed ? 1 : 0, incomplete: partial ? 1 : 0, tasks: { "synthetic-task": { ...counts, pending: pending ? 1 : 0, failed: failed ? 1 : 0, incomplete: 0 } } });
   const q = (verdict, i) => ({ id: "synthetic-question-" + i, label: `第${i}题`, sourcePartLabels: [], kind: verdict === "feedback" ? "subjective" : "objective", question: i === 2 ? "2+3等于多少？" : "一道人造的模拟练习题", studentAnswer: i === 2 ? "6" : "模拟作答", expectedAnswer: i === 2 ? "5" : "模拟参考答案", verdict, confidence: verdict === "uncertain" ? "low" : "high", explanation: verdict === "uncertain" ? "两次解答没有取得一致，未直接判错。" : "先算2加2等于4，再加1得到5。", knowledgePoints: ["整数加法"], cause: "计算错误", causeExplanation: "从这次作答看，可能在相加时多算了1，不能据此断定是粗心。", nextStep: "用小棒分两步相加，再检查总数。", evidence: [{ fileId: "synthetic-page", page: 1, excerpt: "模拟作答" }], verification: verdict === "uncertain" ? "uncertain" : verdict === "feedback" ? "subjective" : "agreed" });
   const questions = ["correct", "wrong", "blank", "uncertain", "feedback"].map((s, i) => q(s, i + 1));
   questions.push({ ...q("passedWithNote", 7), explanation: "两次核对的内容分别是整词和单字。" });
@@ -40,7 +40,7 @@ try {
       const date = url.searchParams.get("date"); selectedDate = date;
       return json({ date, status: "processed", pending: false, note: "模拟资料", dates: [date], quota: { calls: 1, limit: 60 }, grading: summary(), writtenCompletionEnabled: true, uploads: [{ id: "synthetic-upload", date, kind: "memo", status: "processed", createdAt: "", subjects: ["数学"], note: "", aiMs: 0, issues: [], files: [{ id: "synthetic-file", name: "synthetic.png", size: 1, stored: true, pages: [] }] }], report: { date, memoId: "synthetic-upload", updatedAt: "", familyNotes: [], unclassified: [], unassigned: [], uncertainties: [], tasks: [{ id: "synthetic-task", title: "数学练习", subject: "数学", requirement: "完成模拟练习第12页", format: "written", memoEvidence: [], evidence: [], coverage: "complete", missing: [], reviewActivity: null, writtenCompletion: { version: "written-v2", status: "done", reason: "均有模拟作答", parts: [] } }] } });
     }
-    if (path.endsWith("/learning/grading")) return json({ summary: summary(), batches: [{ id: "synthetic-run", title: "数学练习", subject: "数学", attempts: failed ? 3 : 1, retryAllowed: failed, failure: failed ? { code: "INVALID_ENVELOPE", stage: "verification", failedAt: "2026-11-21T14:58:51.833Z", source: "runtime", reason: "AI返回的内容未能正常解析，没能读到可用的批改回复。", nextStep: "原件已保存，不用重新上传。可以请家长重试。" } : null, status: pending ? "queued" : failed ? "failed" : "done", note: pending && quotaPaused ? "今天的AI额度已用完，批改会在明天继续，原件已保存。" : failed ? "批改未完成，原件保留。" : "", primaryPageId: "synthetic-page", readings: { "synthetic-question-4": ["verification","focusOne","focusTwo"].map((stage,i)=>({stage,studentAnswer:i===0?"甲":"乙",expectedAnswer:"乙",confidence:i===1?"medium":"high",verdict:"correct",explanation:"模拟观察记录"})) }, result: pending || failed ? null : { version: "grading-v1", scopeComplete: true, note: "", questions: currentQuestions() } }, { id: "synthetic-english", title: "英语练习", subject: "英语", status: "done", note: "", primaryPageId: "synthetic-english-page", result: { version: "grading-v1", scopeComplete: true, note: "", questions: [q("correct", 7)] } }] });
+    if (path.endsWith("/learning/grading")) return json({ summary: summary(), batches: [{ id: "synthetic-run", title: "数学练习", subject: "数学", attempts: failed ? 3 : 1, retryAllowed: failed, failure: failed ? { code: "INVALID_ENVELOPE", stage: "verification", failedAt: "2026-11-21T14:58:51.833Z", source: "runtime", reason: "AI返回的内容未能正常解析，没能读到可用的批改回复。", nextStep: "原件已保存，不用重新上传。可以请家长重试。" } : null, status: pending ? "queued" : failed ? "failed" : "done", note: pending && quotaPaused ? "今天的AI额度已用完，批改会在明天继续，原件已保存。" : failed ? "批改未完成，原件保留。" : "", primaryPageId: "synthetic-page", readings: { "synthetic-question-4": ["verification","focusOne","focusTwo"].map((stage,i)=>({stage,studentAnswer:i===0?"甲":"乙",expectedAnswer:"乙",confidence:i===1?"medium":"high",verdict:"correct",explanation:"模拟观察记录"})) }, result: pending || failed ? null : { version: "grading-v1", scopeComplete: !partial, note: "", questions: currentQuestions() } }, { id: "synthetic-english", title: "英语练习", subject: "英语", status: "done", note: "", primaryPageId: "synthetic-english-page", result: { version: "grading-v1", scopeComplete: true, note: "", questions: [q("correct", 7)] } }] });
     if (path.endsWith("/learning/mistakes")) {
       const subject = url.searchParams.get("subject");
       const offset = Number(url.searchParams.get("offset"));
@@ -108,6 +108,16 @@ try {
     assert.equal(await panel.locator(".grade-batch").count(), verdict === "correct" ? 2 : 1, "Hide unrelated subject headings");
     assert.equal(await panel.locator('.grade-stat-filter[aria-pressed="true"]').count(), 1);
   }
+  await categoryButton("点评").click();
+  assert.equal(await panel.getByRole("button",{name:"全部题目",pressed:true}).count(),1);
+  await panel.getByRole("button",{name:"未批改 0页"}).click();
+  await panel.getByText("暂无未批改的页面。").waitFor();
+  partial = true;
+  await panel.getByText("本页部分题目尚未批改。").waitFor();
+  assert.equal(await panel.locator(".grade-question").count(),0);
+  await panel.getByRole("button",{name:"全部题目"}).click();
+  assert.equal(await panel.locator(".grade-question").count(),7);
+  partial = false;
   // Zero results remain selectable, and polling keeps the chosen category.
   blankVisible = false; counts.blank = 0;
   await categoryButton("未作答").click();
@@ -237,10 +247,19 @@ try {
   await failures.getByText("AI返回的内容未能正常解析，没能读到可用的批改回复。", { exact: true }).waitFor();
   assert.match(await failures.innerText(), /已尝试3次.*独立复核/);
   assert.equal(await failures.evaluate(element => document.activeElement === element), true, "The home shortcut takes focus directly to the failure reasons");
-  await categoryButton("正确").click(); assert.equal(await failures.isVisible(), true, "Verdict filters never hide failures");
+  const ungraded = panel.getByRole("button",{name:"未批改 1页"});
+  assert.equal(await ungraded.getAttribute("aria-pressed"),"true");
+  assert.equal(await panel.locator(".grade-question").count(),0);
+  await categoryButton("正确").click(); assert.equal(await failures.isVisible(), false, "A verdict filter shows only matching questions");
   assert.equal(await panel.locator(".grade-batch").count(), 1, "Failure cards are not duplicated in the question list");
+  await ungraded.click();
+  await ungraded.click();
+  assert.equal(await panel.getByRole("button",{name:"全部题目",pressed:true}).count(),1);
+  await ungraded.click();
   for (const width of [320, 390, 768, 1280]) {
-    await page.setViewportSize({ width, height: 900 }); assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+    await page.setViewportSize({ width, height: 900 });
+    const bar = panel.getByRole("group",{name:"按批改结果筛选"});
+    assert.ok((await bar.boundingBox()).height <= 62,"Filters occupy a single row"); assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
     await page.screenshot({ path: output + `/grading-failure-${width}.png`, fullPage: true });
   }
   assert.equal(await failures.locator("img").count(), 0, "Failed-page originals stay collapsed until requested");
@@ -260,5 +279,5 @@ try {
   assert.equal(await failures.getByRole("button", { name: "重试批改", exact: true }).count(), 0);
   await failures.getByText("请家长处理重试，已有结果仍可查看。", { exact: true }).waitFor();
   assert.deepEqual(errors, []);
-  console.log("GRADING_UI_OK=true daily-progress,category-buttons,zero-category,poll-preserves-filter,keyboard,date-reset,failed-reason-home-entry,per-page-cause-attempt-stage,failures-visible-under-category-filter,child-no-retry,all-verdicts,wrong-book,compact-one-line-source,scope-badge-edit,full-title-in-editor,cause,next-step,subject-filter,lazy-private-photo,assistant-prefill,retry,mobile-and-desktop");
+  console.log("GRADING_UI_OK=true daily-progress,category-buttons,zero-category,poll-preserves-filter,keyboard,date-reset,failed-reason-home-entry,per-page-cause-attempt-stage,ungraded-filter-and-reset,child-no-retry,all-verdicts,wrong-book,compact-one-line-source,scope-badge-edit,full-title-in-editor,cause,next-step,subject-filter,lazy-private-photo,assistant-prefill,retry,mobile-and-desktop");
 } finally { await browser.close(); }
