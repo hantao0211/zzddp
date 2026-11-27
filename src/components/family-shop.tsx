@@ -63,7 +63,6 @@ function Exchange({reward:r,data,refresh,close}:Props&{reward:Reward;close:()=>v
   return ()=>{viewport.removeEventListener("resize",resize);viewport.removeEventListener("scroll",resize);};
  },[shopping]);
  const terms=<>
-   {r.description&&<p className="reward-description-full">{r.description}</p>}
    {!!r.valueCents&&<p>单次金额上限 {money(r.valueCents)} 元</p>}
    {r.changeReason&&<p className="reading-parent-note">家长更正说明：{r.changeReason}。已兑换的奖励仍按原约定兑现。</p>}
    {limits(r)&&<p>{limits(r)}</p>}
@@ -78,7 +77,7 @@ function Exchange({reward:r,data,refresh,close}:Props&{reward:Reward;close:()=>v
   <form className={shopping?"shopping-exchange-form":"reading-dialog-body"} onSubmit={submit}>
    {shopping&&<label className="exchange-amount-field">本次实际购物金额（元）<input type="number" inputMode="decimal" min="0.01" step="0.01" max={budget/100} value={amount} required disabled={busy||!!restriction} onChange={e=>setAmount(e.target.value)}/></label>}
    <div className={shopping?"reading-dialog-body shopping-exchange-content":undefined}>
-    {!shopping&&terms}
+    {!shopping&&<>{r.description&&<p className="reward-description-full">{r.description}</p>}{terms}</>}
 
     {shopping&&<p>每个小脚步对应 {money(r.rateCents||200)} 元；本月还可购物 {money(r.usage?.remainingCents??r.monthlyBudgetCents??0)} 元。</p>}
     {shopping?<div className="exchange-totals">
@@ -90,9 +89,12 @@ function Exchange({reward:r,data,refresh,close}:Props&{reward:Reward;close:()=>v
      <LockKeyhole size={16} aria-hidden="true"/>
      <span>{unavailable}</span>
     </p>}
-    {shopping&&<details className="shopping-exchange-terms"><summary>查看本期兑换说明</summary>{terms}
+    {shopping&&<div className="shopping-contract">
+     {r.monthlyBudgetCents!=null&&<p>每月累计上限 {money(r.monthlyBudgetCents)} 元</p>}
+     {terms}
+     {r.description&&<p className="reward-description-full">{r.description}</p>}
      <p className="reading-muted">按本月同一期累计金额计算，不因分多次购买多扣小脚步。取消时也会重算累计金额。</p>
-    </details>}
+    </div>}
    </div>
     <div className="exchange-actions">
      <button type="submit" className="button primary" disabled={busy||!!unavailable} aria-describedby={!busy&&unavailable?"exchange-blocked-reason":undefined}>

@@ -48,7 +48,7 @@
 .exchange-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; }
 .exchange-actions > button { min-height: 44px; }
 .shopping-exchange[open] {
-  --exchange-height: min(25rem, calc(var(--exchange-visible-height, 100dvh) - 16px));
+  --exchange-height: min(38rem, calc(var(--exchange-visible-height, 100dvh) - 16px));
   position: fixed;
   inset: calc(var(--exchange-visible-top, 0px) + (var(--exchange-visible-height, 100dvh) - var(--exchange-height)) / 2) 0 auto;
   margin: 0 auto;
@@ -67,7 +67,8 @@
 .exchange-totals { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; margin-block: 8px; font-variant-numeric: tabular-nums; }
 .exchange-totals > div { display: grid; gap: 2px; color: var(--muted); font-size: 14px; }
 .exchange-totals strong { min-height: 1.6em; font-size: 16px; }
-.shopping-exchange-terms { margin-block-start: 10px; }
+.shopping-contract { display: grid; gap: 4px; margin-block-start: 10px; padding-block-start: 8px; border-top: 1px solid var(--border); font-size: 14px; }
+.shopping-contract > p { margin: 0; }
 
 
 .activity-management-header,.activity-rule-row { display:flex; justify-content:space-between; align-items:center; gap:10px; }

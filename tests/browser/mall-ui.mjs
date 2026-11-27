@@ -16,6 +16,10 @@ try{const[pc,parent]=await context('qa-admin');assert.equal((await api(parent,'r
  assert.equal(await shoppingPrice.textContent(),'每2元×1');
  await grid.getByRole('button',{name:'查看日常购物卡详情'}).tap();
  const shoppingDialog=child.getByRole('dialog',{name:'兑换 · 日常购物卡'});
+ const currentTerms=shoppingDialog.locator('.shopping-contract');
+ for(const text of [/本期可申请至/,/天内使用/,/每月累计上限/,/分多次购买/]){
+   assert.ok(await currentTerms.getByText(text).first().isVisible());
+ }
  const amountField=shoppingDialog.getByRole('spinbutton');
  const apply=shoppingDialog.getByRole('button',{name:'确认申请兑换'});
  await amountField.fill('9');
