@@ -174,7 +174,8 @@ export function RedemptionHistory({data,refresh,manage=false}:Props&{manage?:boo
    })}
    {!data.redemptions.length&&<p className="reading-muted">还没有兑换申请。</p>}
  </>;
- return manage?<section className="card"><h2>兑换审批与兑现</h2><p className="reading-muted">先同意，再实际兑现。使用期从同意当天开始；过期未使用会自动结算返还，已兑现的奖励保留历史。</p>{rows}</section>:<details className="card reading-redemption-history"><summary><Gift size={18}/>兑换记录 · {data.redemptions.filter(r=>r.status==="pending").length}项待确认</summary>{rows}</details>;
+ const pendingCount=data.redemptions.filter(r=>r.status==="pending").length;
+ return manage?<section className="card"><h2>兑换审批与兑现</h2><p className="reading-muted">先同意，再实际兑现。使用期从同意当天开始；过期未使用会自动结算返还，已兑现的奖励保留历史。</p>{rows}</section>:<details className="card reading-redemption-history"><summary><Gift size={18}/>兑换记录 · {data.redemptions.length ? `共 ${data.redemptions.length} 笔` : "暂无记录"}{pendingCount>0 && `，${pendingCount} 笔待确认`}</summary>{rows}</details>;
 }
 type Draft={icon:RewardIconId;correcting:boolean;changeReason:string;id:string;revision?:string;requestId:string;title:string;description:string;cost:number;kind:"fixed"|"shopping";offerDays:number;useDays:number;expiresOn:string;value:string;rate:string;budget:string;monthLimit:string;yearLimit:string};
 const fresh=(today:string):Draft=>({icon:"gift",correcting:false,changeReason:"",id:"",requestId:crypto.randomUUID(),title:"",description:"",cost:10,kind:"fixed",offerDays:45,useDays:45,expiresOn:addDays(today,44),value:"",rate:"2",budget:"100",monthLimit:"",yearLimit:""});
