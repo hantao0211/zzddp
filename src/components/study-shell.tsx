@@ -18,19 +18,37 @@ export function StudyShell({viewer,page,children,className="",name,roleLabel,dat
  useEffect(()=>{
    const bar=nav.current, viewport=window.visualViewport;
    if(!bar || !viewport)return;
-   // Fixed positioning uses the layout viewport. On phones the part actually
-   // visible can be both shorter and narrower, including after editing a form.
+   // A restored iOS page can briefly report the previous keyboard height.
+   // Let the browser anchor the bar unless an editor or pinch zoom needs the visual viewport.
    const sync=()=>{
+     const editing=document.activeElement?.matches("textarea, input:not([type]), input:is([type=text],[type=search],[type=email],[type=password],[type=url],[type=tel],[type=number]), [contenteditable=true]");
+     if(viewport.scale===1 && !editing){
+       bar.removeAttribute("data-visual-anchor");
+       return;
+     }
+     bar.setAttribute("data-visual-anchor","");
      bar.style.setProperty("--nav-visible-bottom",Math.max(0,viewport.offsetTop+viewport.height)+"px");
      bar.style.setProperty("--nav-visible-left",Math.max(0,viewport.offsetLeft)+"px");
      bar.style.setProperty("--nav-visible-width",viewport.width+"px");
    };
+   let focusFrame=0;
+   const focusChanged=()=>{
+     cancelAnimationFrame(focusFrame);
+     focusFrame=requestAnimationFrame(sync);
+   };
+   document.addEventListener("focusin",focusChanged);
+   document.addEventListener("focusout",focusChanged);
+   document.addEventListener("visibilitychange",sync);
    sync();
    viewport.addEventListener("scroll",sync);
    viewport.addEventListener("resize",sync);
    window.addEventListener("resize",sync);
    window.addEventListener("pageshow",sync);
    return ()=>{
+     cancelAnimationFrame(focusFrame);
+     document.removeEventListener("focusin",focusChanged);
+     document.removeEventListener("focusout",focusChanged);
+     document.removeEventListener("visibilitychange",sync);
      viewport.removeEventListener("scroll",sync);
      viewport.removeEventListener("resize",sync);
      window.removeEventListener("resize",sync);
