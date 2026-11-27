@@ -626,3 +626,26 @@
 .recap-page details { margin-top: 12px; color: var(--muted); font-size: 13px; }
 
 .reading-dialog .book-barcode-scan { display: inline-flex; align-items: center; gap: 6px; margin-bottom: 8px; }
+
+@media (min-width: 601px) {
+  .growth-recap .reading-checkin-dialog[open] {
+    inset: 0;
+    margin: 0;
+    width: 100%;
+    max-width: none;
+    height: 100dvh;
+    border: 0;
+    border-radius: 0;
+  }
+  .growth-recap .reading-checkin-dialog > header {
+    padding-inline: max(24px, calc((100% - 1120px) / 2));
+  }
+  .growth-recap .reading-dialog-body { flex: 1; padding: 24px; }
+  .recap-page { max-width: 1120px; margin-inline: auto; }
+}
+
+@media (min-width: 900px) {
+  .album-report { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+  .album-overview, .album-steps { grid-column: 1 / -1; }
+  .album-block { padding: 20px; }
+}
