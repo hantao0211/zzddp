@@ -2,6 +2,7 @@
 import { CollectionViewSwitch, useCollectionView } from "./collection-view";
 import {useEffect,useRef,useState} from "react";
 import {Gift,ShoppingBag,Pencil,Plus,X,Footprints,ChevronRight,History,LockKeyhole,Trash2} from "lucide-react";
+import {offerDate, rewardFrequency, RewardTerms, TermRow} from "./reward-terms";
 import {RewardIcon} from "./reward-icon";
 import {REWARD_ICONS,defaultRewardIcon,type RewardIconId} from "@/domain/reward-icons";
 import {accountRequest} from "./account-login";
@@ -12,7 +13,6 @@ import {addDays,money,shoppingCost,type RewardContract} from "@/domain/growth-ec
 type Props={data:ReadingState;refresh:(message:string)=>Promise<void>};
 const call=(path:string,value?:unknown,method="POST")=>accountRequest("reading/"+path,value,method);
 const message=(e:unknown)=>e instanceof Error?e.message:"没有保存，请稍后重试。";
-function limits(r:Reward){return [r.monthLimit?`每月${r.monthLimit}次 · 已用${r.usage?.monthCount||0}次`:null,r.yearLimit?`每年${r.yearLimit}次 · 已用${r.usage?.yearCount||0}次`:null].filter(Boolean).join("；");}
 function blocked(r:Reward,data:ReadingState){return rewardExpired(r,data.today)?"本期已到期":r.monthLimit&&(r.usage?.monthCount||0)>=r.monthLimit?"本月名额已用完":r.yearLimit&&(r.usage?.yearCount||0)>=r.yearLimit?"今年名额已用完":r.kind==="shopping"&&r.usage?.remainingCents===0?"本月额度已用完":"";}
 function Exchange({reward:r,data,refresh,close}:Props&{reward:Reward;close:()=>void}){
  const ref=useRef<HTMLDialogElement>(null),[amount,setAmount]=useState(""),[busy,setBusy]=useState(false),[error,setError]=useState("");
@@ -62,13 +62,6 @@ function Exchange({reward:r,data,refresh,close}:Props&{reward:Reward;close:()=>v
   viewport.addEventListener("scroll",resize);
   return ()=>{viewport.removeEventListener("resize",resize);viewport.removeEventListener("scroll",resize);};
  },[shopping]);
- const terms=<>
-   {!!r.valueCents&&<p>单次金额上限 {money(r.valueCents)} 元</p>}
-   {r.changeReason&&<p className="reading-parent-note">家长更正说明：{r.changeReason}。已兑换的奖励仍按原约定兑现。</p>}
-   {limits(r)&&<p>{limits(r)}</p>}
-   <p>本期可申请至 {r.expiresOn||"长期有效"}{r.version?` · 第${r.version}版`:""}</p>
-   {!r.legacy&&r.version&&<p>家长同意后 {r.useDays} 天内使用，已兑换奖励保留这份约定。</p>}
- </>;
  return <dialog ref={ref} className={shopping?"reading-dialog shopping-exchange":"reading-dialog"} aria-labelledby="exchange-title" onCancel={e=>{e.preventDefault();if(!busy)close();}}>
   <header>
    <h2 id="exchange-title">兑换 · {r.title}</h2>
@@ -77,24 +70,21 @@ function Exchange({reward:r,data,refresh,close}:Props&{reward:Reward;close:()=>v
   <form className={shopping?"shopping-exchange-form":"reading-dialog-body"} onSubmit={submit}>
    {shopping&&<label className="exchange-amount-field">本次实际购物金额（元）<input type="number" inputMode="decimal" min="0.01" step="0.01" max={budget/100} value={amount} required disabled={busy||!!restriction} onChange={e=>setAmount(e.target.value)}/></label>}
    <div className={shopping?"reading-dialog-body shopping-exchange-content":undefined}>
-    {!shopping&&<>{r.description&&<p className="reward-description-full">{r.description}</p>}{terms}</>}
-
     {shopping&&<p>每个小脚步对应 {money(r.rateCents||200)} 元；本月还可购物 {money(r.usage?.remainingCents??r.monthlyBudgetCents??0)} 元。</p>}
-    {shopping?<div className="exchange-totals">
+    <div className="exchange-totals">
      <div>本次暂扣<strong>{needsAmount?"—":<StepAmount value={cost}/>}</strong></div>
      <div>当前余额<strong><StepAmount value={data.growth.balance}/></strong></div>
-    </div>:<p>本次暂扣 <StepAmount value={cost}/>，当前余额 <StepAmount value={data.growth.balance}/>。</p>}
+    </div>
     {error&&<p role="alert" className="form-error">{error}</p>}
     {!busy&&unavailable&&<p id="exchange-blocked-reason" className="exchange-unavailable" role="status">
      <LockKeyhole size={16} aria-hidden="true"/>
      <span>{unavailable}</span>
     </p>}
-    {shopping&&<div className="shopping-contract">
-     {r.monthlyBudgetCents!=null&&<p>每月累计上限 {money(r.monthlyBudgetCents)} 元</p>}
-     {terms}
-     {r.description&&<p className="reward-description-full">{r.description}</p>}
-     <p className="reading-muted">按本月同一期累计金额计算，不因分多次购买多扣小脚步。取消时也会重算累计金额。</p>
-    </div>}
+    <div className="exchange-contract">
+     <RewardTerms reward={r}/>
+     {shopping&&<p className="reading-muted">同一期内按本月累计金额扣小脚步，分次购买不多扣。取消时按累计金额重新计算。</p>}
+     {!!r.version&&<small className="reading-muted">已兑换的奖励按申请时的约定兑现。</small>}
+    </div>
    </div>
     <div className="exchange-actions">
      <button type="submit" className="button primary" disabled={busy||!!unavailable} aria-describedby={!busy&&unavailable?"exchange-blocked-reason":undefined}>
@@ -130,16 +120,14 @@ export function FamilyRewardShop({data,refresh}:Props) {
     <span className="visually-hidden" id={`mall-price-${r.id}`}>{priceLabel}{r.kind==="shopping" && "消耗"}{priceSteps}个小脚步</span>
     <span className="mall-terms" id={`mall-terms-${r.id}`}>
      <span className="mall-frequency">
-      {r.monthLimit && <span>每月限{r.monthLimit}次</span>}
-      {r.yearLimit && <span>每年限{r.yearLimit}次</span>}
-      {!r.monthLimit && !r.yearLimit && "不限次数"}
+      {rewardFrequency(r)}
      </span>
      {amount && <small className="journal-tile-note">{amount}</small>}
      {r.description && <span className="reward-description-preview">{r.description}</span>}
      {status && <small className="mall-availability">{status}</small>}
     </span>
     <span className="mall-item-footer"><span id={`mall-date-${r.id}`}>{r.expiresOn
-     ? <>截止 <time dateTime={r.expiresOn}>{r.expiresOn.split("-").map(Number).join("/")}</time></>
+     ? <>申请截止 <time dateTime={r.expiresOn}>{offerDate(r.expiresOn)}</time></>
      : "长期有效"}</span><ChevronRight size={15} aria-hidden="true"/></span>
    </button></article>;
   })}</div>
@@ -150,7 +138,7 @@ export function FamilyRewardShop({data,refresh}:Props) {
 
 const statusText={pending:"等家长确认",approved:"已同意，待使用",fulfilled:"已兑现",rejected:"已取消",expired:"已过使用期"};
 export function RedemptionHistory({data,refresh,manage=false}:Props&{manage?:boolean}){const[busy,setBusy]=useState(false),[error,setError]=useState("");async function change(r:Redemption,status:string){if(status!=="approved"&&!confirm(status==="fulfilled"?"确认这份奖励已实际兑现？":"取消后按原约定重算并返还小脚步，确定吗？"))return;setBusy(true);setError("");try{await call("redemptions/"+r.id,{status},"PATCH");await refresh("兑换记录已更新。");}catch(e){setError(message(e));}finally{setBusy(false);}}
- const rows=<>{error&&<p className="form-error" role="alert">{error}</p>}{data.redemptions.map(r=><article className="economy-row" key={r.id}><div><strong>{r.rewardTitle}</strong><p><StepAmount value={r.cost}/> · {statusText[r.status]}{r.version?` · 第${r.version}版`:""}</p>{r.description&&<p>{r.description}</p>}{r.kind==="shopping"&&<p>实际购物 {money(r.amountCents||0)} 元</p>}{r.valueCents&&<p>金额上限 {money(r.valueCents)} 元</p>}{r.useUntil?<p>使用截至 {r.useUntil}（含当天）</p>:r.useDays&&r.status==="pending"?<p>同意后 {r.useDays} 天内使用</p>:null}{typeof r.refundedPoints==="number"&&<p>已返还 {r.refundedPoints} 个小脚步{r.kind==="shopping"?"，按当月累计购物金额重算。":"。"}</p>}<small>{r.createdAt.slice(0,10)}</small></div>{manage&&<div className="economy-actions">{r.status==="pending"&&<button className="button primary" disabled={busy} onClick={()=>void change(r,"approved")}>同意兑换</button>}{r.status==="approved"&&<button className="button primary" disabled={busy} onClick={()=>void change(r,"fulfilled")}>标记已兑现</button>}{["approved","pending"].includes(r.status)&&<button className="button primary plum-action" disabled={busy} onClick={()=>void change(r,"rejected")}>取消并结算返还</button>}</div>}</article>)}{!data.redemptions.length&&<p className="reading-muted">还没有兑换申请。</p>}</>;
+ const rows=<>{error&&<p className="form-error" role="alert">{error}</p>}{data.redemptions.map(r=><article className="economy-row" key={r.id}><div><strong>{r.rewardTitle}</strong><p><StepAmount value={r.cost}/> · {statusText[r.status]}{r.version?` · 第${r.version}版`:""}</p>{r.description&&<p>{r.description}</p>}{r.kind==="shopping"&&<p>实际购物 {money(r.amountCents||0)} 元</p>}{r.valueCents&&<p>金额上限 {money(r.valueCents)} 元</p>}{r.useUntil?<dl className="reward-facts compact"><TermRow label="使用截止">{offerDate(r.useUntil)}（含当天）</TermRow></dl>:r.useDays&&r.status==="pending"?<dl className="reward-facts compact"><TermRow label="使用期限">家长同意后 {r.useDays} 天内使用</TermRow></dl>:null}{typeof r.refundedPoints==="number"&&<p>已返还 {r.refundedPoints} 个小脚步{r.kind==="shopping"?"，按当月累计购物金额重算。":"。"}</p>}<small>{offerDate(r.createdAt.slice(0,10))}</small></div>{manage&&<div className="economy-actions">{r.status==="pending"&&<button className="button primary" disabled={busy} onClick={()=>void change(r,"approved")}>同意兑换</button>}{r.status==="approved"&&<button className="button primary" disabled={busy} onClick={()=>void change(r,"fulfilled")}>标记已兑现</button>}{["approved","pending"].includes(r.status)&&<button className="button primary plum-action" disabled={busy} onClick={()=>void change(r,"rejected")}>取消并结算返还</button>}</div>}</article>)}{!data.redemptions.length&&<p className="reading-muted">还没有兑换申请。</p>}</>;
  return manage?<section className="card"><h2>兑换审批与兑现</h2><p className="reading-muted">先同意，再实际兑现。使用期从同意当天开始；过期未使用会自动结算返还，已兑现的奖励保留历史。</p>{rows}</section>:<details className="card reading-redemption-history"><summary><Gift size={18}/>兑换记录 · {data.redemptions.filter(r=>r.status==="pending").length}项待确认</summary>{rows}</details>;
 }
 type Draft={icon:RewardIconId;correcting:boolean;changeReason:string;id:string;revision?:string;requestId:string;title:string;description:string;cost:number;kind:"fixed"|"shopping";offerDays:number;useDays:number;expiresOn:string;value:string;rate:string;budget:string;monthLimit:string;yearLimit:string};
@@ -162,7 +150,7 @@ export function FamilyShopManagement({data,refresh}:Props){const[deletingReward,
    <article className="economy-row shop-management-row" key={r.id}>
     <div>
      <strong>{r.title} · {r.kind==="shopping" ? `每小脚步${money(r.rateCents||200)}元` : <StepAmount value={r.cost}/>}</strong>
-     <p>{r.expiresOn ? `${rewardExpired(r,data.today)?"已到期":"截止"} ${r.expiresOn.split("-").map(Number).join("/")}` : "长期有效"}{r.version ? ` · 第${r.version}版` : ""}</p>
+     <dl className="reward-facts compact"><TermRow label="兑换频率">{rewardFrequency(r)}</TermRow><TermRow label="申请截止">{offerDate(r.expiresOn)}{rewardExpired(r,data.today)?" · 已到期":""}{r.version?` · 第${r.version}版`:""}</TermRow></dl>
     </div>
     <div className="economy-actions">
      <button className="button primary plum-action" aria-label={`更换${r.title}图标`} onClick={()=>setIconReward(r)}><RewardIcon icon={r.icon} title={r.title} size={16}/>换图标</button>
@@ -176,9 +164,9 @@ export function FamilyShopManagement({data,refresh}:Props){const[deletingReward,
   )}
   <details ref={editor} open={!!draft.id}><summary><Plus size={18}/>{draft.correcting?"更正本期约定":draft.id?"设置新一期约定":"上架新商品"}</summary><form onSubmit={async e=>{e.preventDefault();setBusy(true);setError("");try{const cents=(v:string)=>Math.round(Number(v)*100);await call("rewards"+(draft.id?"/"+draft.id:""),{title:draft.title,icon:draft.icon,description:draft.description,cost:draft.kind==="shopping"?1:draft.cost,active:true,offerDays:draft.offerDays,useDays:draft.useDays,expiresOn:draft.expiresOn,kind:draft.kind,valueCents:draft.value?cents(draft.value):null,rateCents:cents(draft.rate),monthlyBudgetCents:draft.kind==="shopping"?cents(draft.budget):null,monthLimit:draft.monthLimit?Number(draft.monthLimit):null,yearLimit:draft.yearLimit?Number(draft.yearLimit):null,requestId:draft.requestId,...(draft.changeReason.trim()?{changeReason:draft.changeReason.trim()}:{}),...(draft.revision?{revision:draft.revision}:{})},draft.id?"PATCH":"POST");setDraft(fresh(data.today));await refresh("约定已保存，孩子可查看当前版本，旧兑换按原约定兑现。");}catch(e){setError(message(e));}finally{setBusy(false);}}}><label>商品名称<input value={draft.title} maxLength={80} required onChange={e=>setDraft({...draft,title:e.target.value})}/></label>
    <label>奖励说明（选填）<textarea value={draft.description} rows={2} maxLength={500} placeholder="例如：Switch 游戏只能在非上学日玩。" onChange={e=>setDraft({...draft,description:e.target.value})}/></label>
-   <IconChoices value={draft.icon} change={icon=>setDraft({...draft,icon})}/><div className="reading-fields"><label>兑换方式<select value={draft.kind} onChange={e=>setDraft({...draft,kind:e.target.value as Draft["kind"]})}><option value="fixed">固定小脚步商品</option><option value="shopping">按购物金额扣小脚步</option></select></label>{draft.kind==="fixed"?<label>所需小脚步<input type="number" min={1} max={100000} required value={draft.cost} onChange={e=>setDraft({...draft,cost:Number(e.target.value)})}/></label>:field("rate","每小脚步对应金额（元）",true)}</div><div className="reading-fields">{draft.kind==="shopping"?field("budget","每月购物额度（元）",true):field("value","单次金额上限（元，选填）")}{field("monthLimit","每月最多次数（选填）")}{field("yearLimit","每年最多次数（选填）")}</div><div className="reading-fields"><label>本期上架天数<input type="number" min={1} max={366} required value={draft.offerDays} onChange={e=>setDraft({...draft,offerDays:Number(e.target.value),expiresOn:addDays(data.today,Math.max(0,Number(e.target.value)-1))})}/></label><label>本期申请截至<input type="date" min={data.today} required value={draft.expiresOn} onChange={e=>{const day=e.target.value;if(day)setDraft({...draft,expiresOn:day,offerDays:Math.max(1,Math.round((Date.parse(day)-Date.parse(data.today))/86400000)+1)});}}/></label><label>同意兑换后使用天数<input type="number" min={1} max={366} required value={draft.useDays} onChange={e=>setDraft({...draft,useDays:Number(e.target.value)})}/></label></div>{draft.id&&<label>更正原因{draft.correcting?"（必填）":"（选填）"}<textarea required={draft.correcting} maxLength={500} value={draft.changeReason} onChange={e=>setDraft({...draft,changeReason:e.target.value})} placeholder="例如：原来把所需小脚步填错了，已和孩子说明。"/></label>}<p className="reading-muted">两种期限默认45天。次数限制可留空，大餐不要求每月兑换；填写的是上限。保存后仅影响之后的新申请，已兑换的价格和使用期不变；旧申请若需调整，可先取消返还再按新约定申请。月／年已用名额不会清零。</p><div className="economy-actions"><button className="button primary" disabled={busy}>{draft.correcting?"发布更正版本":"确认约定并上架"}</button>{draft.id&&<button type="button" className="text-button" onClick={()=>setDraft(fresh(data.today))}>取消编辑</button>}</div></form></details>{error&&<p role="alert" className="form-error">{error}</p>}</section>{history&&<OfferHistory title={history.title} items={history.items} close={()=>setHistory(null)}/>}<RedemptionHistory data={data} refresh={refresh} manage/></>;
+   <IconChoices value={draft.icon} change={icon=>setDraft({...draft,icon})}/><div className="reading-fields"><label>兑换方式<select value={draft.kind} onChange={e=>setDraft({...draft,kind:e.target.value as Draft["kind"]})}><option value="fixed">固定小脚步商品</option><option value="shopping">按购物金额扣小脚步</option></select></label>{draft.kind==="fixed"?<label>所需小脚步<input type="number" min={1} max={100000} required value={draft.cost} onChange={e=>setDraft({...draft,cost:Number(e.target.value)})}/></label>:field("rate","每小脚步对应金额（元）",true)}</div><div className="reading-fields">{draft.kind==="shopping"?field("budget","每月购物额度（元）",true):field("value","单次金额上限（元，选填）")}{field("monthLimit","每月最多次数（选填）")}{field("yearLimit","每年最多次数（选填）")}</div><div className="reading-fields"><label>本期上架天数<input type="number" min={1} max={366} required value={draft.offerDays} onChange={e=>setDraft({...draft,offerDays:Number(e.target.value),expiresOn:addDays(data.today,Math.max(0,Number(e.target.value)-1))})}/></label><label>申请截止<input type="date" min={data.today} required value={draft.expiresOn} onChange={e=>{const day=e.target.value;if(day)setDraft({...draft,expiresOn:day,offerDays:Math.max(1,Math.round((Date.parse(day)-Date.parse(data.today))/86400000)+1)});}}/></label><label>使用期限（天，家长同意后起算）<input type="number" min={1} max={366} required value={draft.useDays} onChange={e=>setDraft({...draft,useDays:Number(e.target.value)})}/></label></div>{draft.id&&<label>更正原因{draft.correcting?"（必填）":"（选填）"}<textarea required={draft.correcting} maxLength={500} value={draft.changeReason} onChange={e=>setDraft({...draft,changeReason:e.target.value})} placeholder="例如：原来把所需小脚步填错了，已和孩子说明。"/></label>}<p className="reading-muted">两种期限默认45天。次数限制可留空，大餐不要求每月兑换；填写的是上限。保存后仅影响之后的新申请，已兑换的价格和使用期不变；旧申请若需调整，可先取消返还再按新约定申请。月／年已用名额不会清零。</p><div className="economy-actions"><button className="button primary" disabled={busy}>{draft.correcting?"发布更正版本":"确认约定并上架"}</button>{draft.id&&<button type="button" className="text-button" onClick={()=>setDraft(fresh(data.today))}>取消编辑</button>}</div></form></details>{error&&<p role="alert" className="form-error">{error}</p>}</section>{history&&<OfferHistory title={history.title} items={history.items} close={()=>setHistory(null)}/>}<RedemptionHistory data={data} refresh={refresh} manage/></>;
 }
-function OfferHistory({title,items,close}:{title:string;items:RewardContract[];close:()=>void}){const ref=useRef<HTMLDialogElement>(null);useEffect(()=>{ref.current?.showModal();return()=>ref.current?.close();},[]);return <dialog ref={ref} className="reading-dialog" aria-label={`${title} · 历期约定`} onCancel={e=>{e.preventDefault();e.stopPropagation();close();}}><header><h2>{title} · 历期约定</h2><button className="icon-button" aria-label="关闭历期约定" onClick={close}><X/></button></header><div className="reading-dialog-body">{items.map(v=><article className="economy-row" key={v.version}><div><strong>第{v.version}期 · {v.kind==="shopping"?`每小脚步${money(v.rateCents)}元`:`${v.cost}个小脚步`}</strong><p>{v.startsOn} 至 {v.expiresOn}</p><p>{v.description}</p>{v.changeReason&&<p>更正说明：{v.changeReason}</p>}<p>同意后 {v.useDays} 天内使用；{v.monthLimit?`每月${v.monthLimit}次`:"无每月次数限制"}{v.yearLimit?`，每年${v.yearLimit}次`:""}</p></div></article>)}</div></dialog>;}
+function OfferHistory({title,items,close}:{title:string;items:RewardContract[];close:()=>void}){const ref=useRef<HTMLDialogElement>(null);useEffect(()=>{ref.current?.showModal();return()=>ref.current?.close();},[]);return <dialog ref={ref} className="reading-dialog" aria-label={`${title} · 历期约定`} onCancel={e=>{e.preventDefault();e.stopPropagation();close();}}><header><h2>{title} · 历期约定</h2><button className="icon-button" aria-label="关闭历期约定" onClick={close}><X/></button></header><div className="reading-dialog-body">{items.map(v=><article className="economy-row" key={v.version}><div><strong>第{v.version}版 · {v.kind==="shopping"?`每小脚步${money(v.rateCents)}元`:`${v.cost}个小脚步`}</strong><RewardTerms reward={v} history/></div></article>)}</div></dialog>;}
 
 function IconChoices({value,change,disabled=false}:{value:RewardIconId;change:(id:RewardIconId)=>void;disabled?:boolean}){return <fieldset className="reward-icon-choices"><legend>商品图标</legend>{REWARD_ICONS.map(v=><button key={v.id} type="button" aria-label={v.label} aria-pressed={value===v.id} disabled={disabled} onClick={()=>change(v.id)}><RewardIcon icon={v.id}/><span>{v.label}</span></button>)}</fieldset>;}
 function RewardIconPicker({reward,close,saved}:{reward:Reward;close:()=>void;saved:()=>Promise<void>}){const ref=useRef<HTMLDialogElement>(null),[icon,setIcon]=useState(reward.icon||defaultRewardIcon(reward.title)),[busy,setBusy]=useState(false),[error,setError]=useState("");useEffect(()=>{ref.current?.showModal();return()=>ref.current?.close();},[]);return <dialog ref={ref} className="reading-dialog" aria-label={`更换${reward.title}图标`} onCancel={e=>{e.preventDefault();e.stopPropagation();if(!busy)close();}}><header><h2>给“{reward.title}”选图标</h2><button className="icon-button" aria-label="关闭图标选择" disabled={busy} onClick={close}><X/></button></header><div className="reading-dialog-body"><IconChoices value={icon} change={setIcon} disabled={busy}/>{error&&<p role="alert" className="form-error">{error}</p>}<button className="button primary" disabled={busy} onClick={async()=>{setBusy(true);setError("");try{await call(`rewards/${reward.id}/icon`,{icon},"PATCH");await saved();}catch(e){setError(message(e));}finally{setBusy(false);}}}>{busy?"正在保存…":"保存图标"}</button></div></dialog>;}
@@ -187,5 +175,5 @@ function RewardDeleteDialog({reward,close,deleted}:{reward:Reward;close:()=>void
  const ref=useRef<HTMLDialogElement>(null),lock=useRef(false),alive=useRef(true),[busy,setBusy]=useState(false),[error,setError]=useState("");
  useEffect(()=>{alive.current=true;ref.current?.showModal();return()=>{alive.current=false;ref.current?.close();};},[]);
  async function remove(){if(lock.current)return;lock.current=true;setBusy(true);setError("");try{await call("rewards/"+reward.id,{revision:reward.revision},"DELETE");if(alive.current)deleted(reward.id);}catch(e){if(alive.current)setError(message(e));}finally{lock.current=false;if(alive.current)setBusy(false);}}
- return <dialog ref={ref} className="reading-dialog" aria-labelledby="reward-delete-title" onCancel={e=>{e.preventDefault();e.stopPropagation();if(!lock.current)close();}}><header><h2 id="reward-delete-title"><Trash2 size={22} aria-hidden="true"/>删除这个商品？</h2><button className="icon-button" disabled={busy} aria-label="关闭商品删除确认" onClick={close}><X/></button></header><div className="reading-dialog-body"><h3>{reward.title}</h3><p>{reward.kind==="shopping"?`每个小脚步对应${money(reward.rateCents)}元`:<StepAmount value={reward.cost}/>}</p>{reward.description&&<p>{reward.description}</p>}<p>{reward.expiresOn?`本期申请截至 ${reward.expiresOn}`:"原长期约定"}{reward.version?` · 第${reward.version}版`:""}</p><p>删除后，商品将从商城和家长商品列表中移除，不能再申请兑换。</p><p>已有兑换记录、小脚步和履约约定保留，已申请的奖励仍可继续确认、兑现或取消。</p>{error&&<p className="form-error" role="alert">{error}</p>}<div className="reading-record-actions"><button className="button secondary" disabled={busy} onClick={close}>保留商品</button><button className="button primary danger" disabled={busy} onClick={()=>void remove()}>{busy?"正在删除…":"确认删除"}</button></div></div></dialog>;
+ return <dialog ref={ref} className="reading-dialog" aria-labelledby="reward-delete-title" onCancel={e=>{e.preventDefault();e.stopPropagation();if(!lock.current)close();}}><header><h2 id="reward-delete-title"><Trash2 size={22} aria-hidden="true"/>删除这个商品？</h2><button className="icon-button" disabled={busy} aria-label="关闭商品删除确认" onClick={close}><X/></button></header><div className="reading-dialog-body"><h3>{reward.title}</h3><p>{reward.kind==="shopping"?`每个小脚步对应${money(reward.rateCents)}元`:<StepAmount value={reward.cost}/>}</p>{reward.description&&<p>{reward.description}</p>}<dl className="reward-facts compact"><TermRow label="申请截止">{offerDate(reward.expiresOn)}</TermRow></dl><p>删除后，商品将从商城和家长商品列表中移除，不能再申请兑换。</p><p>已有兑换记录、小脚步和履约约定保留，已申请的奖励仍可继续确认、兑现或取消。</p>{error&&<p className="form-error" role="alert">{error}</p>}<div className="reading-record-actions"><button className="button secondary" disabled={busy} onClick={close}>保留商品</button><button className="button primary danger" disabled={busy} onClick={()=>void remove()}>{busy?"正在删除…":"确认删除"}</button></div></div></dialog>;
 }
