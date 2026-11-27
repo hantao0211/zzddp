@@ -138,7 +138,42 @@ export function FamilyRewardShop({data,refresh}:Props) {
 
 const statusText={pending:"等家长确认",approved:"已同意，待使用",fulfilled:"已兑现",rejected:"已取消",expired:"已过使用期"};
 export function RedemptionHistory({data,refresh,manage=false}:Props&{manage?:boolean}){const[busy,setBusy]=useState(false),[error,setError]=useState("");async function change(r:Redemption,status:string){if(status!=="approved"&&!confirm(status==="fulfilled"?"确认这份奖励已实际兑现？":"取消后按原约定重算并返还小脚步，确定吗？"))return;setBusy(true);setError("");try{await call("redemptions/"+r.id,{status},"PATCH");await refresh("兑换记录已更新。");}catch(e){setError(message(e));}finally{setBusy(false);}}
- const rows=<>{error&&<p className="form-error" role="alert">{error}</p>}{data.redemptions.map(r=><article className="economy-row" key={r.id}><div><strong>{r.rewardTitle}</strong><p><StepAmount value={r.cost}/> · {statusText[r.status]}{r.version?` · 第${r.version}版`:""}</p>{r.description&&<p>{r.description}</p>}{r.kind==="shopping"&&<p>实际购物 {money(r.amountCents||0)} 元</p>}{r.valueCents&&<p>金额上限 {money(r.valueCents)} 元</p>}{r.useUntil?<dl className="reward-facts compact"><TermRow label="使用截止">{offerDate(r.useUntil)}（含当天）</TermRow></dl>:r.useDays&&r.status==="pending"?<dl className="reward-facts compact"><TermRow label="使用期限">家长同意后 {r.useDays} 天内使用</TermRow></dl>:null}{typeof r.refundedPoints==="number"&&<p>已返还 {r.refundedPoints} 个小脚步{r.kind==="shopping"?"，按当月累计购物金额重算。":"。"}</p>}<small>{offerDate(r.createdAt.slice(0,10))}</small></div>{manage&&<div className="economy-actions">{r.status==="pending"&&<button className="button primary" disabled={busy} onClick={()=>void change(r,"approved")}>同意兑换</button>}{r.status==="approved"&&<button className="button primary" disabled={busy} onClick={()=>void change(r,"fulfilled")}>标记已兑现</button>}{["approved","pending"].includes(r.status)&&<button className="button primary plum-action" disabled={busy} onClick={()=>void change(r,"rejected")}>取消并结算返还</button>}</div>}</article>)}{!data.redemptions.length&&<p className="reading-muted">还没有兑换申请。</p>}</>;
+ const rows=<>
+   {error&&<p className="form-error" role="alert">{error}</p>}
+   {data.redemptions.map(r=>{
+     const applied=offerDate(r.createdAt.slice(0,10));
+     const activeDeadline=r.status==="approved" && r.useUntil;
+     return <article className="redemption-record" key={r.id}>
+       <details>
+         <summary className="redemption-summary">
+           <strong>{r.rewardTitle}</strong>
+           <span className="redemption-status">{statusText[r.status]}</span>
+           <span className="redemption-meta">
+             <StepAmount value={r.cost}/>
+             <span>{activeDeadline ? "使用截止 "+offerDate(activeDeadline) : "申请于 "+applied}</span>
+           </span>
+           <ChevronRight className="redemption-chevron" size={16} aria-hidden="true"/>
+         </summary>
+         <dl className="reward-facts compact redemption-facts">
+           <TermRow label="申请日期">{applied}</TermRow>
+           {!!r.version&&<TermRow label="兑换约定">第{r.version}版</TermRow>}
+           {r.kind==="shopping"&&<TermRow label="实际购物">{money(r.amountCents||0)} 元</TermRow>}
+           {!!r.valueCents&&<TermRow label="单次上限">{money(r.valueCents)} 元</TermRow>}
+           {r.useUntil ? <TermRow label="使用截止">{offerDate(r.useUntil)}（含当天）</TermRow>
+             : !!r.useDays&&r.status==="pending"&&<TermRow label="使用期限">家长同意后 {r.useDays} 天内使用</TermRow>}
+           {typeof r.refundedPoints==="number"&&<TermRow label="已返还">{r.refundedPoints} 个小脚步{r.kind==="shopping"&&"，按当月累计购物金额重算。"}</TermRow>}
+           {r.description&&<TermRow label="约定说明">{r.description}</TermRow>}
+         </dl>
+       </details>
+       {manage&&["approved","pending"].includes(r.status)&&<div className="economy-actions">
+         {r.status==="pending"&&<button className="button primary" disabled={busy} onClick={()=>void change(r,"approved")}>同意兑换</button>}
+         {r.status==="approved"&&<button className="button primary" disabled={busy} onClick={()=>void change(r,"fulfilled")}>标记已兑现</button>}
+         <button className="button primary plum-action" disabled={busy} onClick={()=>void change(r,"rejected")}>取消并结算返还</button>
+       </div>}
+     </article>;
+   })}
+   {!data.redemptions.length&&<p className="reading-muted">还没有兑换申请。</p>}
+ </>;
  return manage?<section className="card"><h2>兑换审批与兑现</h2><p className="reading-muted">先同意，再实际兑现。使用期从同意当天开始；过期未使用会自动结算返还，已兑现的奖励保留历史。</p>{rows}</section>:<details className="card reading-redemption-history"><summary><Gift size={18}/>兑换记录 · {data.redemptions.filter(r=>r.status==="pending").length}项待确认</summary>{rows}</details>;
 }
 type Draft={icon:RewardIconId;correcting:boolean;changeReason:string;id:string;revision?:string;requestId:string;title:string;description:string;cost:number;kind:"fixed"|"shopping";offerDays:number;useDays:number;expiresOn:string;value:string;rate:string;budget:string;monthLimit:string;yearLimit:string};
