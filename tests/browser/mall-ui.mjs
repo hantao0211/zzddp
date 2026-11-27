@@ -14,6 +14,17 @@ try{const[pc,parent]=await context('qa-admin');assert.equal((await api(parent,'r
  assert.equal(await moviePrice.textContent(),'消耗×10');
  const shoppingPrice=grid.getByRole('button',{name:'查看日常购物卡详情'}).locator('.mall-price');
  assert.equal(await shoppingPrice.textContent(),'每2元×1');
+ await grid.getByRole('button',{name:'查看日常购物卡详情'}).tap();
+ const shoppingDialog=child.getByRole('dialog',{name:'兑换 · 日常购物卡'});
+ const amountField=shoppingDialog.getByRole('spinbutton');
+ const apply=shoppingDialog.getByRole('button',{name:'确认申请兑换'});
+ await amountField.fill('9');
+ const before=await apply.boundingBox();
+ for(const value of ['99','101','','9']){
+   await amountField.fill(value);
+   assert.deepEqual(await apply.boundingBox(),before);
+ }
+ await shoppingDialog.getByRole('button',{name:'关闭兑换'}).tap();
  for(const scheme of ['light','dark']){await child.emulateMedia({colorScheme:scheme});for(const width of [320,390,768,1280]){await child.setViewportSize({width,height:900});assert.ok(await child.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));const cards=await grid.locator('article').evaluateAll(nodes=>nodes.slice(0,2).map(n=>({x:n.getBoundingClientRect().x,y:n.getBoundingClientRect().y,w:n.getBoundingClientRect().width})));assert.ok(Math.abs(cards[0].y-cards[1].y)<2,'two products share a mobile row');assert.ok(cards[1].x>cards[0].x);await child.screenshot({path:output+`/mall-${scheme}-${width}.png`,fullPage:true});}}
  await child.setViewportSize({width:390,height:844});await child.getByRole('button',{name:'商城使用教程',exact:true}).tap();let help=child.locator('.study-tutorial');await help.locator('img').evaluate(i=>i.decode());await help.getByRole('button',{name:'下一页',exact:true}).tap();await help.locator('img').evaluate(i=>i.decode());await child.keyboard.press('Escape');
  await child.getByRole('button',{name:'查看一起看电影详情',exact:true}).tap();let detail=child.getByRole('dialog',{name:'兑换 · 一起看电影',exact:true});await detail.getByText(/每月1次/).waitFor();await detail.getByRole('button',{name:'确认申请兑换',exact:true}).tap();await detail.waitFor({state:'hidden'});let state=(await api(child,'reading/state')).data;const request=state.redemptions.find(r=>r.rewardTitle==='一起看电影'),old=state.rewards.find(r=>r.title==='一起看电影');assert.equal(request.cost,10);

@@ -50,30 +50,50 @@ function Exchange({reward:r,data,refresh,close}:Props&{reward:Reward;close:()=>v
    close();
   }catch(e){setError(message(e));}finally{setBusy(false);}
  }
- return <dialog ref={ref} className="reading-dialog" aria-labelledby="exchange-title" onCancel={e=>{e.preventDefault();if(!busy)close();}}>
-  <header>
-   <h2 id="exchange-title">兑换 · {r.title}</h2>
-   <button type="button" className="icon-button" aria-label="关闭兑换" disabled={busy} onClick={close}><X aria-hidden="true"/></button>
-  </header>
-  <div className="reading-dialog-body">
+ useEffect(()=>{
+  const dialog=ref.current,viewport=window.visualViewport;
+  if(!shopping||!dialog||!viewport)return;
+  const resize=()=>{
+   dialog.style.setProperty("--exchange-visible-height",viewport.height+"px");
+   dialog.style.setProperty("--exchange-visible-top",viewport.offsetTop+"px");
+  };
+  resize();
+  viewport.addEventListener("resize",resize);
+  viewport.addEventListener("scroll",resize);
+  return ()=>{viewport.removeEventListener("resize",resize);viewport.removeEventListener("scroll",resize);};
+ },[shopping]);
+ const terms=<>
    {r.description&&<p className="reward-description-full">{r.description}</p>}
    {!!r.valueCents&&<p>单次金额上限 {money(r.valueCents)} 元</p>}
    {r.changeReason&&<p className="reading-parent-note">家长更正说明：{r.changeReason}。已兑换的奖励仍按原约定兑现。</p>}
    {limits(r)&&<p>{limits(r)}</p>}
    <p>本期可申请至 {r.expiresOn||"长期有效"}{r.version?` · 第${r.version}版`:""}</p>
    {!r.legacy&&r.version&&<p>家长同意后 {r.useDays} 天内使用，已兑换奖励保留这份约定。</p>}
-   <form onSubmit={submit}>
-    {shopping&&<>
-     <label>本次实际购物金额（元）<input type="number" inputMode="decimal" min="0.01" step="0.01" max={budget/100} value={amount} required disabled={busy||!!restriction} onChange={e=>setAmount(e.target.value)}/></label>
-     <p>每个小脚步对应 {money(r.rateCents||200)} 元；本月还可购物 {money(r.usage?.remainingCents??r.monthlyBudgetCents??0)} 元。</p>
-     <p className="reading-muted">按本月同一期累计金额计算，不因分多次购买多扣小脚步。取消时也会重算累计金额。</p>
-    </>}
-    <p>{needsAmount ? "填写金额后显示本次消耗" : <>本次暂扣 <StepAmount value={cost}/></>}，当前余额 <StepAmount value={data.growth.balance}/>。</p>
+ </>;
+ return <dialog ref={ref} className={shopping?"reading-dialog shopping-exchange":"reading-dialog"} aria-labelledby="exchange-title" onCancel={e=>{e.preventDefault();if(!busy)close();}}>
+  <header>
+   <h2 id="exchange-title">兑换 · {r.title}</h2>
+   <button type="button" className="icon-button" aria-label="关闭兑换" disabled={busy} onClick={close}><X aria-hidden="true"/></button>
+  </header>
+  <form className={shopping?"shopping-exchange-form":"reading-dialog-body"} onSubmit={submit}>
+   {shopping&&<label className="exchange-amount-field">本次实际购物金额（元）<input type="number" inputMode="decimal" min="0.01" step="0.01" max={budget/100} value={amount} required disabled={busy||!!restriction} onChange={e=>setAmount(e.target.value)}/></label>}
+   <div className={shopping?"reading-dialog-body shopping-exchange-content":undefined}>
+    {!shopping&&terms}
+
+    {shopping&&<p>每个小脚步对应 {money(r.rateCents||200)} 元；本月还可购物 {money(r.usage?.remainingCents??r.monthlyBudgetCents??0)} 元。</p>}
+    {shopping?<div className="exchange-totals">
+     <div>本次暂扣<strong>{needsAmount?"—":<StepAmount value={cost}/>}</strong></div>
+     <div>当前余额<strong><StepAmount value={data.growth.balance}/></strong></div>
+    </div>:<p>本次暂扣 <StepAmount value={cost}/>，当前余额 <StepAmount value={data.growth.balance}/>。</p>}
     {error&&<p role="alert" className="form-error">{error}</p>}
     {!busy&&unavailable&&<p id="exchange-blocked-reason" className="exchange-unavailable" role="status">
      <LockKeyhole size={16} aria-hidden="true"/>
      <span>{unavailable}</span>
     </p>}
+    {shopping&&<details className="shopping-exchange-terms"><summary>查看本期兑换说明</summary>{terms}
+     <p className="reading-muted">按本月同一期累计金额计算，不因分多次购买多扣小脚步。取消时也会重算累计金额。</p>
+    </details>}
+   </div>
     <div className="exchange-actions">
      <button type="submit" className="button primary" disabled={busy||!!unavailable} aria-describedby={!busy&&unavailable?"exchange-blocked-reason":undefined}>
       {busy?"正在申请…":"确认申请兑换"}
@@ -82,8 +102,7 @@ function Exchange({reward:r,data,refresh,close}:Props&{reward:Reward;close:()=>v
       <History size={17} aria-hidden="true"/>{loadingHistory?"正在读取记录…":"查看约定与更正记录"}
      </button>}
     </div>
-   </form>
-  </div>
+  </form>
   {history&&<OfferHistory title={r.title} items={history} close={()=>setHistory(null)}/>}
  </dialog>;
 }

@@ -47,6 +47,28 @@
 .exchange-unavailable > svg { flex: none; align-self: flex-start; margin-top: 3px; }
 .exchange-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; }
 .exchange-actions > button { min-height: 44px; }
+.shopping-exchange[open] {
+  --exchange-height: min(25rem, calc(var(--exchange-visible-height, 100dvh) - 16px));
+  position: fixed;
+  inset: calc(var(--exchange-visible-top, 0px) + (var(--exchange-visible-height, 100dvh) - var(--exchange-height)) / 2) 0 auto;
+  margin: 0 auto;
+  box-sizing: border-box;
+  height: var(--exchange-height);
+  max-height: none;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+}
+.shopping-exchange-form { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; min-height: 0; }
+.shopping-exchange .exchange-amount-field { margin: 0; padding: 10px 15px 0; }
+.shopping-exchange .exchange-amount-field input { font-size: 16px; }
+.shopping-exchange .shopping-exchange-content { padding: 8px 15px; overflow-y: auto; min-height: 0; overscroll-behavior: contain; }
+.shopping-exchange .exchange-actions { margin: 0; padding: 8px 15px; border-top: 1px solid var(--border); }
+.exchange-totals { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; margin-block: 8px; font-variant-numeric: tabular-nums; }
+.exchange-totals > div { display: grid; gap: 2px; color: var(--muted); font-size: 14px; }
+.exchange-totals strong { min-height: 1.6em; font-size: 16px; }
+.shopping-exchange-terms { margin-block-start: 10px; }
+
 
 .activity-management-header,.activity-rule-row { display:flex; justify-content:space-between; align-items:center; gap:10px; }
 .activity-management-header h2,.activity-rule-row p { margin:0; }
